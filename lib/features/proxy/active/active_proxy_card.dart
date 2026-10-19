@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
+import 'package:hiddify/features/proxy/active/balance_strategy_presentation.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -11,12 +12,23 @@ class ActiveProxyFooter extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final running = ref.watch(serviceRunningProvider);
+    if (!running) return const SizedBox.shrink();
+    final mode = ref.watch(activeRoutingModeProvider);
+    final strategy = mode == 'balance' ? ref.watch(siliconBalanceStrategyProvider) : null;
+    if (strategy != null) {
+      return ConnectedConfigurationButton(
+        name: strategy,
+        protocol: '',
+        mode: mode,
+        onPressed: () => context.goNamed('proxies'),
+      );
+    }
     final active = ref.watch(activeProxyNotifierProvider).value;
-    if (!running || active == null) return const SizedBox.shrink();
+    if (active == null) return const SizedBox.shrink();
     return ConnectedConfigurationButton(
       name: active.tagDisplay,
       protocol: active.type,
-      mode: ref.watch(activeRoutingModeProvider),
+      mode: mode,
       onPressed: () => context.goNamed('proxies'),
     );
   }
