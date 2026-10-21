@@ -14,7 +14,7 @@ class ActiveProxyFooter extends ConsumerWidget {
     final running = ref.watch(serviceRunningProvider);
     if (!running) return const SizedBox.shrink();
     final mode = ref.watch(activeRoutingModeProvider);
-    final strategy = mode == 'balance' ? ref.watch(siliconBalanceStrategyProvider) : null;
+    final strategy = mode == 'balance' ? ref.watch(balanceStrategyLabelProvider) : null;
     if (strategy != null) {
       return ConnectedConfigurationButton(
         name: strategy,

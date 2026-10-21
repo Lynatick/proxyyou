@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ffi';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,7 +25,7 @@ OutboundGroup selection(String tag) => OutboundGroup(
 );
 
 void main() {
-  test('strategy labels follow saved preferences on Silicon only', () async {
+  test('strategy labels follow saved preferences on every platform', () async {
     for (final entry in {
       'round-robin': 'Поочерёдно',
       'consistent-hashing': 'Согласованное хеширование',
@@ -39,7 +38,7 @@ void main() {
       );
       addTearDown(container.dispose);
       await container.read(sharedPreferencesProvider.future);
-      expect(container.read(siliconBalanceStrategyProvider), Abi.current() == Abi.macosArm64 ? entry.value : null);
+      expect(container.read(balanceStrategyLabelProvider), entry.value);
     }
   });
 
@@ -61,7 +60,7 @@ void main() {
         overrides: [
           serviceRunningProvider.overrideWith((ref) => true),
           activeProxyGroupsProvider.overrideWith((ref) => groups.stream),
-          siliconBalanceStrategyProvider.overrideWith((ref) => 'Поочерёдно'),
+          balanceStrategyLabelProvider.overrideWith((ref) => 'Поочерёдно'),
           activeProxyNotifierProvider.overrideWith(() => throw StateError('balance must not watch a changing leaf')),
         ],
         child: MaterialApp.router(routerConfig: router),
@@ -87,15 +86,15 @@ void main() {
     expect(find.text('Список конфигураций'), findsOneWidget);
   });
 
-  testWidgets('lowest, manual selection and other platforms retain the server and protocol', (tester) async {
-    for (final mode in ['lowest', 'b', 'balance']) {
+  testWidgets('lowest and manual selection retain the server and protocol', (tester) async {
+    for (final mode in ['lowest', 'b']) {
       await tester.pumpWidget(
         ProviderScope(
           key: ValueKey(mode),
           overrides: [
             serviceRunningProvider.overrideWith((ref) => true),
             activeRoutingModeProvider.overrideWith((ref) => mode == 'b' ? null : mode),
-            siliconBalanceStrategyProvider.overrideWith((ref) => mode == 'balance' ? null : 'Поочерёдно'),
+            balanceStrategyLabelProvider.overrideWith((ref) => 'Поочерёдно'),
             activeProxyNotifierProvider.overrideWith(TestLeaf.new),
           ],
           child: const MaterialApp(home: Scaffold(body: ActiveProxyFooter())),
