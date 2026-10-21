@@ -1,5 +1,5 @@
 ﻿#ifndef AppVersion
-  #define AppVersion "4.1.23"
+  #define AppVersion "4.1.24"
 #endif
 #ifndef BuildRoot
   #define BuildRoot "..\..\build\windows\x64\runner\Release"
