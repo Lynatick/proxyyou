@@ -50,7 +50,7 @@ class ProxyTile extends HookConsumerWidget with PresLogger {
         children: [
           if (proxy.urlTestDelay != 0)
             Text(
-              ConnectionConst.isValidDelay(proxy.urlTestDelay) ? proxy.urlTestDelay.toString() : "×",
+              ConnectionConst.isValidDelay(proxy.urlTestDelay) ? proxy.urlTestDelay.toString() : 'Недоступна',
               style: TextStyle(color: delayColor(context, proxy.urlTestDelay)),
             ),
 

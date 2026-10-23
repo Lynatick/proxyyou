@@ -2,12 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+
 import 'package:ffi/ffi.dart';
 import 'package:grpc/grpc.dart';
 import 'package:hiddify/gen/hiddify_core_generated_bindings.dart';
+import 'package:hiddify/hiddifycore/core_interface/responsive_core_client.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcommon/common.pb.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
-import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 
 Future<int> freePort() async {
   final s = await ServerSocket.bind('127.0.0.1', 0);
@@ -98,7 +99,7 @@ Future<void> main(List<String> arguments) async {
     port: grpcPort,
     options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
   );
-  final core = CoreClient(channel, options: CallOptions(timeout: const Duration(seconds: 20)));
+  final core = ResponsiveCoreClient(channel, options: CallOptions(timeout: const Duration(seconds: 20)));
   try {
     if (generatedGroups) {
       final settings = await core.changeHiddifySettings(
@@ -156,6 +157,31 @@ Future<void> main(List<String> arguments) async {
       ),
     );
     if (started.messageType != MessageType.EMPTY) throw StateError('start ${started.messageType}');
+    if (arguments.contains('--availability')) {
+      final response = await core.checkAvailability('test-0');
+      final report = jsonDecode(response.message) as Map<String, dynamic>;
+      final checks = (report['checks'] as List).cast<Map<String, dynamic>>();
+      if (report['tag'] != 'test-0' ||
+          report['reachable'] != false ||
+          checks.length != 2 ||
+          checks.any((check) => check['outcome'] == 'reachable')) {
+        throw StateError('A rejected SOCKS route was reported as available');
+      }
+      final groups = await core.outboundsInfo(Empty()).first;
+      final checked = groups.items.expand((group) => group.items).where((item) => item.tag == 'test-0');
+      if (checked.isEmpty || checked.any((item) => item.urlTestDelay != 65535)) {
+        throw StateError('Availability failure did not reach the native outbound snapshot');
+      }
+      try {
+        await core.checkAvailability('select');
+        throw StateError('A group was accepted as a concrete availability route');
+      } on GrpcError catch (error) {
+        if (error.code != StatusCode.failedPrecondition) rethrow;
+      }
+      stdout.writeln(
+        'PASS: compiled core availability RPC pins a server, reports errors and exports unavailable state',
+      );
+    }
     if (generatedGroups) {
       final files = await base
           .list(recursive: true)
@@ -191,12 +217,11 @@ Future<void> main(List<String> arguments) async {
       await core.urlTest(UrlTestRequest(tag: 'select'));
       await twenty.future.timeout(const Duration(seconds: 15));
       await Future<void>.delayed(const Duration(seconds: 2));
-      if (peak != 20 || hosts.length != 1 || hosts.single != 'www.youtube.com') {
+      final expectedHosts = {'www.youtube.com', if (arguments.contains('--availability')) 'i.ytimg.com'};
+      if (peak != 20 || hosts.length != expectedHosts.length || !hosts.containsAll(expectedHosts)) {
         throw StateError('Unexpected concurrency or destinations: peak=$peak hosts=$hosts');
       }
-      stdout.writeln(
-        'PASS: peak concurrent SOCKS connections=$peak; attempts=$count; only destination=${hosts.single}:443',
-      );
+      stdout.writeln('PASS: peak concurrent SOCKS connections=$peak; attempts=$count; destinations=$hosts:443');
     }
     await core.stop(Empty());
   } finally {

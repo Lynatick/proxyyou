@@ -16,7 +16,7 @@
  }
  
  func NewLoadBalance(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.BalancerOutboundOptions) (adapter.Outbound, error) {
-@@ -92,14 +94,8 @@
+@@ -92,14 +94,11 @@
  		outbounds = append(outbounds, detour)
  	}
  	switch s.options.Strategy {
@@ -30,10 +30,13 @@
 -		s.strategyFn = NewLowestDelay(outbounds, s.options)
 +	case StrategyRoundRobin, StrategyConsistentHashing, StrategyStickySessions, StrategyLowestDelay:
 +		s.strategyFn = newHealthyStrategy(outbounds, s.options)
++		if s.monitor != nil {
++			s.strategyFn.(*healthyStrategy).available = func(tag string) bool { return !s.monitor.AvailabilityFailed(tag) }
++		}
  	default:
  		return E.New("unknown load balance strategy: ", s.options.Strategy)
  	}
-@@ -120,6 +116,7 @@
+@@ -120,6 +119,7 @@
  		return
  	}
  	defer s.monitor.UnsubscribeGroup(s.Tag(), observer)
@@ -41,7 +44,7 @@
  
  	for {
  		select {
-@@ -151,7 +148,20 @@
+@@ -151,7 +151,20 @@
  	if s.strategyFn == nil {
  		return ""
  	}
@@ -63,7 +66,7 @@
  }
  
  func (s *Balancer) All() []string {
-@@ -163,22 +173,16 @@
+@@ -163,22 +176,16 @@
  	if metadata == nil {
  		metadata = &adapter.InboundContext{}
  	}
@@ -96,7 +99,7 @@
  }
  
  func (s *Balancer) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
-@@ -186,47 +190,26 @@
+@@ -186,47 +193,26 @@
  	if metadata == nil {
  		metadata = &adapter.InboundContext{}
  	}
@@ -156,7 +159,7 @@
  }
  
  func (s *Balancer) NewDirectRouteConnection(metadata adapter.InboundContext, routeContext tun.DirectRouteContext, timeout time.Duration) (tun.DirectRouteDestination, error) {
-@@ -235,5 +218,9 @@
+@@ -235,5 +221,9 @@
  		return nil, E.New(metadata.Network, " is not supported by outbound: ")
  	}
  	metadata.SetRealOutbound(selected.Tag())
@@ -376,7 +379,7 @@
  
 --- a/hiddify-sing-box/common/monitoring/outbound_monitoring.go
 +++ b/hiddify-sing-box/common/monitoring/outbound_monitoring.go
-@@ -86,8 +86,9 @@
+@@ -86,16 +86,34 @@
  
  	cacheDirty atomic.Bool
  
@@ -387,7 +390,10 @@
  
  	workerWG    sync.WaitGroup
  	schedulerWG sync.WaitGroup
-@@ -96,6 +97,21 @@
+ 	closerOnce  sync.Once
++	probeOnce   sync.Once
++	probeSlots  chan struct{}
+ }
  
  // InterfaceUpdated implements [adapter.InterfaceUpdateListener].
  func (m *OutboundMonitoring) InterfaceUpdated() {
@@ -409,7 +415,17 @@
  	m.startCycleOnce()
  }
  
-@@ -328,9 +344,11 @@
+@@ -140,6 +158,9 @@
+ 	state.mu.Lock()
+ 	his := state.history
+ 	his.IsFromCache = state.from_cache
++	if state.availabilityFailed {
++		his.Delay = TimeoutDelay
++	}
+ 	state.mu.Unlock()
+ 	return &his
+ 
+@@ -328,9 +349,11 @@
  
  	m.pauseCallback = pause.RegisterTicker(m.pause, m.mainTicker, m.mainInterval, nil)
  	m.schedulerWG.Add(1)
@@ -422,7 +438,7 @@
  	if !m.workersRunning.CompareAndSwap(true, false) {
  		return
  	}
-@@ -378,7 +396,7 @@
+@@ -378,7 +401,7 @@
  
  		task := &testTask{
  			outboundTag: outboundTag,
@@ -431,7 +447,7 @@
  			priority:    priority,
  		}
  
-@@ -416,7 +434,7 @@
+@@ -416,7 +439,7 @@
  
  	m.enqueueTask(&testTask{
  		outboundTag: outboundTag,
@@ -440,7 +456,7 @@
  		priority:    true,
  	})
  
-@@ -440,6 +458,7 @@
+@@ -440,6 +463,7 @@
  
  func (m *OutboundMonitoring) Close() error {
  	m.closerOnce.Do(func() {
@@ -448,7 +464,7 @@
  		m.stopTimerWorkers()
  
  		// close(m.priorityQueue)
-@@ -457,10 +476,9 @@
+@@ -457,10 +481,9 @@
  	return nil
  }
  
@@ -460,7 +476,7 @@
  	for {
  		select {
  		case <-m.ctx.Done():
-@@ -540,16 +558,18 @@
+@@ -540,16 +563,18 @@
  		return
  	}
  	done := make(chan struct{})
@@ -484,7 +500,30 @@
  		}
  
  		m.applyResult(outcome)
-@@ -619,7 +639,7 @@
+@@ -575,6 +600,22 @@
+ 	if !ok {
+ 		return adapter.URLTestHistory{Delay: 0}, errors.New("outbound not registered")
+ 	}
++	if m.AvailabilityFailed(tag) {
++		report, err := m.CheckAvailability(parent, tag)
++		his := adapter.URLTestHistory{Time: report.completedAt, Delay: TimeoutDelay}
++		if err == nil && report.Reachable {
++			his.Delay = report.Delay()
++		}
++		if err == nil && !report.Reachable {
++			err = errors.New("availability check failed")
++		}
++		return his, err
++	}
++	release, err := m.acquireProbeSlot(parent)
++	if err != nil {
++		return adapter.URLTestHistory{Time: time.Now(), Delay: TimeoutDelay}, err
++	}
++	defer release()
+ 
+ 	idx := m.currentLinkIndex.Load()
+ 
+@@ -619,7 +660,7 @@
  }
  
  func (m *OutboundMonitoring) runCycle() {
@@ -493,7 +532,7 @@
  	tags := m.collectCycleTargets()
  
  	if len(tags) == 0 {
-@@ -739,11 +759,17 @@
+@@ -739,11 +780,22 @@
  		return nil
  	}
  	state.mu.Lock()
@@ -510,10 +549,15 @@
 +		return nil
 +	}
 +	defer state.mu.Unlock()
++	// A superseded full check returns cancellation. Neither it nor an older
++	// queued ping may overwrite the result of a newer availability check.
++	if errors.Is(outcome.err, context.Canceled) || (!outcome.history.Time.IsZero() && state.history.Time.After(outcome.history.Time)) {
++		return nil
++	}
  	state.invalid = outcome.err != nil
  	state.lastURL = outcome.url
  	if (outcome.history.Delay != state.history.Delay) || state.history.IpInfo == nil || (outcome.history.IpInfo != nil) {
-@@ -793,9 +819,12 @@
+@@ -793,9 +845,12 @@
  			state.mu.Unlock()
  			continue
  		}
@@ -527,7 +571,7 @@
  		}
  		state.mu.Unlock()
  	}
-@@ -828,8 +857,11 @@
+@@ -828,8 +883,11 @@
  	}
  	m.access.Lock()
  	defer m.access.Unlock()
@@ -540,7 +584,7 @@
  		return
  	}
  	m.startTimerWorkers()
-@@ -949,12 +981,13 @@
+@@ -949,12 +1007,13 @@
  }
  
  type testOutcome struct {
@@ -560,6 +604,58 @@
  }
  
  type outboundState struct {
+@@ -966,12 +1025,14 @@
+ 	dependencies        []string
+ 	lastURL             string
+ 
+-	invalid        bool
+-	queued         bool
+-	priorityQueued bool
+-	testing        bool
+-	enqueuedCycle  uint64
+-	from_cache     bool
++	invalid              bool
++	queued               bool
++	priorityQueued       bool
++	testing              bool
++	enqueuedCycle        uint64
++	from_cache           bool
++	availabilityFailed   bool
++	availabilitySequence uint64
+ 
+ 	history adapter.URLTestHistory
+ }
+@@ -994,6 +1055,7 @@
+ 
+ type History struct {
+ 	OutboundData map[string]*adapter.URLTestHistory `json:"outbound_data"`
++	Unavailable  map[string]bool                    `json:"unavailable,omitempty"`
+ }
+ 
+ func (m *OutboundMonitoring) saveHistory() error {
+@@ -1002,10 +1064,14 @@
+ 	}
+ 	history := &History{
+ 		OutboundData: make(map[string]*adapter.URLTestHistory),
++		Unavailable:  make(map[string]bool),
+ 	}
+ 	for tag, state := range m.outbounds {
+ 		state.mu.Lock()
+ 		h := state.history
++		if state.availabilityFailed {
++			history.Unavailable[tag] = true
++		}
+ 		state.mu.Unlock()
+ 		history.OutboundData[tag] = &h
+ 	}
+@@ -1044,6 +1110,7 @@
+ 			}
+ 			state.mu.Lock()
+ 			state.history = *his
++			state.availabilityFailed = history.Unavailable[tag]
+ 			state.from_cache = true
+ 			state.mu.Unlock()
+ 		}
 --- a/v2/config/hiddify_option.go
 +++ b/v2/config/hiddify_option.go
 @@ -125,13 +125,13 @@
@@ -679,7 +775,7 @@
  	}
 --- /dev/null
 +++ b/hiddify-sing-box/protocol/group/balancer/healthy_strategy.go
-@@ -0,0 +1,201 @@
+@@ -0,0 +1,203 @@
 +package balancer
 +
 +import (
@@ -711,6 +807,7 @@
 +	active    []adapter.Outbound
 +	strategy  Strategy
 +	changed   chan struct{}
++	available func(string) bool
 +}
 +
 +func newHealthyStrategy(outbounds []adapter.Outbound, options option.BalancerOutboundOptions) *healthyStrategy {
@@ -795,11 +892,12 @@
 +		return nil
 +	}
 +	selected := s.strategy.Select(metadata, network, touch)
-+	if selected != nil && !tried[selected.Tag()] && common.Contains(selected.Network(), network) {
++	allowed := func(out adapter.Outbound) bool { return s.available == nil || s.available(out.Tag()) }
++	if selected != nil && !tried[selected.Tag()] && common.Contains(selected.Network(), network) && allowed(selected) {
 +		return selected
 +	}
 +	for _, out := range s.active {
-+		if !tried[out.Tag()] && common.Contains(out.Network(), network) {
++		if !tried[out.Tag()] && common.Contains(out.Network(), network) && allowed(out) {
 +			return out
 +		}
 +	}
@@ -883,7 +981,7 @@
 +var _ Strategy = (*healthyStrategy)(nil)
 --- /dev/null
 +++ b/hiddify-sing-box/protocol/group/balancer/healthy_strategy_test.go
-@@ -0,0 +1,174 @@
+@@ -0,0 +1,192 @@
 +package balancer
 +
 +import (
@@ -921,6 +1019,24 @@
 +		outs[i] = testOutbound{tag: tag}
 +	}
 +	return newHealthyStrategy(outs, option.BalancerOutboundOptions{Strategy: strategy, Tolerance: 50})
++}
++
++func TestProxyYouAvailabilityVetoBeforeDebouncedPingUpdate(t *testing.T) {
++	for _, strategy := range []string{StrategyRoundRobin, StrategyLowestDelay} {
++		s := pool(strategy, "a", "b")
++		s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": successful(10), "b": successful(15)})
++		s.available = func(tag string) bool { return tag != "a" }
++		for i := 0; i < 20; i++ {
++			out := s.Select(adapter.InboundContext{}, "tcp", true)
++			if out == nil || out.Tag() != "b" {
++				t.Fatalf("%s selected a quarantined node", strategy)
++			}
++		}
++		s.available = func(string) bool { return false }
++		if s.Select(adapter.InboundContext{}, "udp", true) != nil {
++			t.Fatal("all-unavailable pool routed a new connection")
++		}
++	}
 +}
 +
 +func TestProxyYouOnlyFreshHealthyServers(t *testing.T) {
@@ -1400,3 +1516,587 @@
 +	}
 +	workers.Wait()
 +}
+--- /dev/null
++++ b/hiddify-sing-box/common/monitoring/availability.go
+@@ -0,0 +1,203 @@
++package monitoring
++
++import (
++	"context"
++	"crypto/tls"
++	"crypto/x509"
++	"errors"
++	"fmt"
++	"io"
++	"net"
++	"net/http"
++	"strings"
++	"time"
++
++	"github.com/sagernet/sing-box/adapter"
++	M "github.com/sagernet/sing/common/metadata"
++	"github.com/sagernet/sing/common/ntp"
++)
++
++type AvailabilityResult struct {
++	Label       string `json:"label"`
++	Outcome     string `json:"outcome"`
++	ElapsedMS   int64  `json:"elapsed_ms"`
++	StatusCode  int    `json:"status_code,omitempty"`
++	TLSReason   string `json:"tls_reason,omitempty"`
++	IsThumbnail bool   `json:"is_thumbnail"`
++}
++
++type AvailabilityReport struct {
++	Tag         string               `json:"tag"`
++	Reachable   bool                 `json:"reachable"`
++	Checks      []AvailabilityResult `json:"checks"`
++	completedAt time.Time
++}
++
++func (r AvailabilityReport) Delay() uint16 {
++	if len(r.Checks) == 0 {
++		return TimeoutDelay
++	}
++	delay := r.Checks[0].ElapsedMS
++	if delay < 1 {
++		delay = 1
++	}
++	if delay >= int64(TimeoutDelay) {
++		delay = int64(TimeoutDelay) - 1
++	}
++	return uint16(delay)
++}
++
++// Shared with regular URL tests: at most 20 servers are checked concurrently.
++func (m *OutboundMonitoring) acquireProbeSlot(ctx context.Context) (func(), error) {
++	m.probeOnce.Do(func() { m.probeSlots = make(chan struct{}, defaultWorkerCount) })
++	select {
++	case m.probeSlots <- struct{}{}:
++		return func() { <-m.probeSlots }, nil
++	case <-ctx.Done():
++		return nil, ctx.Err()
++	}
++}
++
++func (m *OutboundMonitoring) AvailabilityFailed(tag string) bool {
++	state := m.outbounds[tag]
++	if state == nil {
++		return false
++	}
++	state.mu.Lock()
++	defer state.mu.Unlock()
++	return state.availabilityFailed
++}
++
++// Pin both requests to one concrete outbound. A group can route each request to
++// another node, so its last-selected label is never accepted as a probe route.
++func (m *OutboundMonitoring) CheckAvailability(parent context.Context, tag string) (AvailabilityReport, error) {
++	report := AvailabilityReport{Tag: tag, Reachable: true}
++	state := m.outbounds[tag]
++	if state == nil {
++		return report, fmt.Errorf("outbound not registered")
++	}
++	if _, group := m.groups[tag]; group {
++		return report, fmt.Errorf("availability requires a concrete outbound")
++	}
++	ctx, cancel := context.WithTimeout(parent, 12*time.Second)
++	defer cancel()
++	stop := context.AfterFunc(m.ctx, cancel)
++	defer stop()
++	epoch := m.networkEpoch.Load()
++	state.mu.Lock()
++	state.availabilitySequence++
++	seq := state.availabilitySequence
++	state.mu.Unlock()
++	release, err := m.acquireProbeSlot(ctx)
++	if err != nil {
++		return report, err
++	}
++	defer release()
++	for _, target := range []struct {
++		label, url string
++		status     int
++		thumbnail  bool
++	}{
++		{"YouTube", "https://www.youtube.com/generate_204", 204, false},
++		{"Миниатюры", "https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg", 200, true},
++	} {
++		result := checkAvailabilityTarget(ctx, m.ctx, state.outbound, target.label, target.url, target.status, target.thumbnail)
++		report.Checks = append(report.Checks, result)
++		if result.Outcome != "reachable" {
++			report.Reachable = false
++		}
++	}
++	// UI disposal, disconnect and network changes do not blacklist a server.
++	if parent.Err() != nil || m.ctx.Err() != nil || epoch != m.networkEpoch.Load() {
++		return report, context.Canceled
++	}
++	state.mu.Lock()
++	if seq != state.availabilitySequence || epoch != m.networkEpoch.Load() || parent.Err() != nil || m.ctx.Err() != nil {
++		state.mu.Unlock()
++		return report, context.Canceled
++	}
++	state.availabilityFailed = !report.Reachable
++	m.cacheDirty.Store(true)
++	report.completedAt = time.Now()
++	state.history.Time = report.completedAt
++	if report.Reachable {
++		state.history.Delay = report.Delay()
++		state.from_cache = false
++	}
++	groups := append([]string(nil), state.groupTags...)
++	state.mu.Unlock()
++	m.emitGroupEvent(groups)
++	return report, nil
++}
++
++func checkAvailabilityTarget(ctx, coreCtx context.Context, out adapter.Outbound, label, address string, expected int, thumbnail bool) (result AvailabilityResult) {
++	start := time.Now()
++	result = AvailabilityResult{Label: label, Outcome: "networkFailure", IsThumbnail: thumbnail}
++	defer func() { result.ElapsedMS = time.Since(start).Milliseconds() }()
++	transport := &http.Transport{
++		Proxy: nil,
++		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
++			return out.DialContext(ctx, network, M.ParseSocksaddr(address))
++		},
++		TLSClientConfig:   &tls.Config{RootCAs: adapter.RootPoolFromContext(coreCtx), Time: ntp.TimeFuncFromContext(coreCtx)},
++		DisableKeepAlives: true,
++	}
++	defer transport.CloseIdleConnections()
++	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
++	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
++	if err != nil {
++		return result
++	}
++	response, err := client.Do(request)
++	if err != nil {
++		var certInvalid x509.CertificateInvalidError
++		var hostname x509.HostnameError
++		var unknownCA x509.UnknownAuthorityError
++		var certVerification *tls.CertificateVerificationError
++		var timeout net.Error
++		switch {
++		case errors.Is(err, context.DeadlineExceeded), errors.As(err, &timeout) && timeout.Timeout():
++			result.Outcome = "timeout"
++		case errors.As(err, &certInvalid):
++			result.Outcome = "tlsFailure"
++			result.TLSReason = "handshake"
++			if certInvalid.Reason == x509.Expired {
++				result.TLSReason = "certificateExpired"
++			}
++		case errors.As(err, &hostname):
++			result.Outcome = "tlsFailure"
++			result.TLSReason = "hostnameMismatch"
++		case errors.As(err, &unknownCA), errors.As(err, &certVerification):
++			result.Outcome = "tlsFailure"
++			result.TLSReason = "untrustedCertificate"
++		default:
++			if strings.Contains(strings.ToLower(err.Error()), "tls") {
++				result.Outcome = "tlsFailure"
++				result.TLSReason = "handshake"
++			}
++		}
++		return result
++	}
++	defer response.Body.Close()
++	result.StatusCode = response.StatusCode
++	if response.StatusCode != expected {
++		result.Outcome = "rejected"
++		return result
++	}
++	body, err := io.ReadAll(io.LimitReader(response.Body, 256*1024+1))
++	if err != nil {
++		if errors.Is(err, context.DeadlineExceeded) {
++			result.Outcome = "timeout"
++		}
++		return result
++	}
++	valid := len(body) == 0
++	if thumbnail {
++		valid = strings.HasPrefix(strings.ToLower(response.Header.Get("Content-Type")), "image/jpeg") && len(body) >= 3 && body[0] == 0xff && body[1] == 0xd8 && body[2] == 0xff
++	}
++	result.Outcome = "unexpectedResponse"
++	if valid && len(body) <= 256*1024 {
++		result.Outcome = "reachable"
++	}
++	return result
++}
+--- /dev/null
++++ b/hiddify-sing-box/common/monitoring/availability_test.go
+@@ -0,0 +1,291 @@
++package monitoring
++
++import (
++	"context"
++	"crypto/ecdsa"
++	"crypto/elliptic"
++	"crypto/rand"
++	"crypto/tls"
++	"crypto/x509"
++	"crypto/x509/pkix"
++	"errors"
++	"math/big"
++	"net"
++	"net/http"
++	"net/http/httptest"
++	"sync"
++	"sync/atomic"
++	"testing"
++	"time"
++
++	"github.com/sagernet/sing-box/adapter"
++	"github.com/sagernet/sing-box/common/urltest"
++	"github.com/sagernet/sing-box/log"
++	M "github.com/sagernet/sing/common/metadata"
++	"github.com/sagernet/sing/service"
++)
++
++type availabilityRoots struct {
++	adapter.CertificateStore
++	pool *x509.CertPool
++}
++
++func (s availabilityRoots) Pool() *x509.CertPool { return s.pool }
++
++type availabilityOutbound struct {
++	adapter.Outbound
++	tag, address string
++	dials        atomic.Int32
++}
++
++func (o *availabilityOutbound) Tag() string { return o.tag }
++func (o *availabilityOutbound) DialContext(ctx context.Context, _ string, dest M.Socksaddr) (net.Conn, error) {
++	if dest.Fqdn != "www.youtube.com" && dest.Fqdn != "i.ytimg.com" {
++		return nil, errors.New("unexpected external target")
++	}
++	o.dials.Add(1)
++	return (&net.Dialer{}).DialContext(ctx, "tcp", o.address)
++}
++
++func availabilityFixture(t *testing.T, handler http.HandlerFunc) (*OutboundMonitoring, *availabilityOutbound) {
++	t.Helper()
++	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
++	cert := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "availability test"}, DNSNames: []string{"www.youtube.com", "i.ytimg.com"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
++	der, err := x509.CreateCertificate(rand.Reader, cert, cert, &key.PublicKey, key)
++	if err != nil {
++		t.Fatal(err)
++	}
++	parsed, _ := x509.ParseCertificate(der)
++	pool := x509.NewCertPool()
++	pool.AddCert(parsed)
++	server := httptest.NewUnstartedServer(handler)
++	server.TLS = &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}}
++	server.StartTLS()
++	t.Cleanup(server.Close)
++	ctx, cancel := context.WithCancel(service.ContextWith[adapter.CertificateStore](context.Background(), availabilityRoots{pool: pool}))
++	t.Cleanup(cancel)
++	out := &availabilityOutbound{tag: "a", address: server.Listener.Addr().String()}
++	m := &OutboundMonitoring{ctx: ctx, outbounds: map[string]*outboundState{"a": {outbound: out, history: adapter.URLTestHistory{Delay: 10, Time: time.Now()}}}, groups: map[string]*groupState{}, history: urltest.NewHistoryStorage(), logger: log.NewNOPFactory().Logger(), urls: []string{defaultURLTest}, urlTestTimeout: time.Second}
++	return m, out
++}
++
++func availabilityReply(w http.ResponseWriter, r *http.Request, thumbnailCode int) {
++	if r.Host == "www.youtube.com" {
++		w.WriteHeader(204)
++		return
++	}
++	w.Header().Set("Content-Type", "image/jpeg")
++	w.WriteHeader(thumbnailCode)
++	if thumbnailCode == 200 {
++		w.Write([]byte{0xff, 0xd8, 0xff, 1})
++	}
++}
++
++func TestProxyYouAvailabilityFailureBeatsPositivePingAndRecovers(t *testing.T) {
++	var thumbnail atomic.Int64
++	thumbnail.Store(404)
++	m, out := availabilityFixture(t, func(w http.ResponseWriter, r *http.Request) { availabilityReply(w, r, int(thumbnail.Load())) })
++	report, err := m.CheckAvailability(context.Background(), "a")
++	if err != nil || report.Reachable || report.Checks[0].Outcome != "reachable" || report.Checks[1].StatusCode != 404 {
++		t.Fatalf("partial success: %+v %v", report, err)
++	}
++	if out.dials.Load() != 2 {
++		t.Fatal("both targets must use the same concrete outbound")
++	}
++	m.applyResult(testOutcome{outboundTag: "a", history: adapter.URLTestHistory{Delay: 7, Time: time.Now()}})
++	if !m.AvailabilityFailed("a") || m.getUrlTest("a").Delay != TimeoutDelay {
++		t.Fatal("positive ping cleared availability failure")
++	}
++	if m.outbounds["a"].history.Delay != 7 {
++		t.Fatal("raw ping was not retained internally")
++	}
++	thumbnail.Store(200)
++	report, err = m.CheckAvailability(context.Background(), "a")
++	if err != nil || !report.Reachable || m.AvailabilityFailed("a") || m.getUrlTest("a").Delay == TimeoutDelay {
++		t.Fatalf("full recovery failed: %+v %v", report, err)
++	}
++}
++
++func TestProxyYouAvailabilityOldSuccessCannotClearNewFailure(t *testing.T) {
++	entered, release := make(chan struct{}), make(chan struct{})
++	var calls atomic.Int32
++	m, _ := availabilityFixture(t, func(w http.ResponseWriter, r *http.Request) {
++		if r.Host == "www.youtube.com" {
++			if calls.Add(1) == 1 {
++				close(entered)
++				<-release
++				w.WriteHeader(204)
++			} else {
++				w.WriteHeader(503)
++			}
++			return
++		}
++		availabilityReply(w, r, 200)
++	})
++	done := make(chan error, 1)
++	go func() { _, err := m.CheckAvailability(context.Background(), "a"); done <- err }()
++	<-entered
++	failed, err := m.CheckAvailability(context.Background(), "a")
++	if err != nil || failed.Reachable {
++		t.Fatal("new request must fail")
++	}
++	close(release)
++	if !errors.Is(<-done, context.Canceled) || !m.AvailabilityFailed("a") {
++		t.Fatal("stale success cleared the new failure")
++	}
++}
++
++func TestProxyYouAvailabilityCancellationDoesNotBlacklist(t *testing.T) {
++	entered := make(chan struct{}, 1)
++	m, _ := availabilityFixture(t, func(w http.ResponseWriter, r *http.Request) { entered <- struct{}{}; <-r.Context().Done() })
++	ctx, cancel := context.WithCancel(context.Background())
++	done := make(chan error, 1)
++	go func() { _, err := m.CheckAvailability(ctx, "a"); done <- err }()
++	<-entered
++	cancel()
++	if !errors.Is(<-done, context.Canceled) || m.AvailabilityFailed("a") {
++		t.Fatal("canceled check blacklisted a server")
++	}
++}
++
++func TestProxyYouAvailabilityOldNetworkDoesNotBlacklist(t *testing.T) {
++	entered, release := make(chan struct{}), make(chan struct{})
++	var once sync.Once
++	m, _ := availabilityFixture(t, func(w http.ResponseWriter, r *http.Request) {
++		once.Do(func() { close(entered); <-release })
++		availabilityReply(w, r, 404)
++	})
++	done := make(chan error, 1)
++	go func() { _, err := m.CheckAvailability(m.ctx, "a"); done <- err }()
++	<-entered
++	m.networkEpoch.Add(1)
++	close(release)
++	if !errors.Is(<-done, context.Canceled) || m.AvailabilityFailed("a") {
++		t.Fatal("a failure from an obsolete network blacklisted a server")
++	}
++}
++
++func TestProxyYouAvailabilityRecoveryCannotBeOverwrittenByOldWorker(t *testing.T) {
++	m, _ := availabilityFixture(t, func(w http.ResponseWriter, r *http.Request) { availabilityReply(w, r, 200) })
++	old := time.Now().Add(-time.Second)
++	report, err := m.CheckAvailability(m.ctx, "a")
++	if err != nil || !report.Reachable {
++		t.Fatal("recovery failed")
++	}
++	m.applyResult(testOutcome{outboundTag: "a", history: adapter.URLTestHistory{Time: old, Delay: TimeoutDelay}})
++	m.applyResult(testOutcome{outboundTag: "a", err: context.Canceled, history: adapter.URLTestHistory{Time: time.Now(), Delay: TimeoutDelay}})
++	if m.getUrlTest("a").Delay == TimeoutDelay {
++		t.Fatal("obsolete worker overwrote a successful recheck")
++	}
++}
++
++func TestProxyYouAvailabilitySharesTwentySlotsWithPing(t *testing.T) {
++	var active, peak atomic.Int32
++	m, out := availabilityFixture(t, func(w http.ResponseWriter, r *http.Request) {
++		n := active.Add(1)
++		defer active.Add(-1)
++		for {
++			old := peak.Load()
++			if n <= old || peak.CompareAndSwap(old, n) {
++				break
++			}
++		}
++		time.Sleep(10 * time.Millisecond)
++		availabilityReply(w, r, 200)
++	})
++	for i := 0; i < 40; i++ {
++		tag := string(rune('a' + i))
++		m.outbounds[tag] = &outboundState{outbound: out}
++	}
++	var wg sync.WaitGroup
++	for i := 0; i < 40; i++ {
++		wg.Add(1)
++		go func(i int) {
++			defer wg.Done()
++			tag := string(rune('a' + i))
++			var err error
++			if i%2 == 0 {
++				_, err = m.CheckAvailability(context.Background(), tag)
++			} else {
++				_, err = m.tester(m.ctx, tag)
++			}
++			if err != nil {
++				t.Error(err)
++			}
++		}(i)
++	}
++	wg.Wait()
++	if peak.Load() > 20 || peak.Load() < 2 {
++		t.Fatalf("unexpected concurrency: %d", peak.Load())
++	}
++}
++
++type availabilityCache struct {
++	adapter.CacheFile
++	saved *adapter.SavedBinary
++}
++
++func (c *availabilityCache) SaveBinary(_ string, saved *adapter.SavedBinary) error {
++	c.saved = saved
++	return nil
++}
++func (c *availabilityCache) LoadBinary(_ string) *adapter.SavedBinary { return c.saved }
++
++func TestProxyYouAvailabilityFailureSurvivesReconnect(t *testing.T) {
++	m, _ := availabilityFixture(t, func(w http.ResponseWriter, r *http.Request) { availabilityReply(w, r, 404) })
++	cache := &availabilityCache{}
++	m.cache = cache
++	if _, err := m.CheckAvailability(m.ctx, "a"); err != nil {
++		t.Fatal(err)
++	}
++	if err := m.saveHistory(); err != nil {
++		t.Fatal(err)
++	}
++	reconnected, _ := availabilityFixture(t, func(w http.ResponseWriter, r *http.Request) { availabilityReply(w, r, 200) })
++	reconnected.cache = cache
++	reconnected.loadHistory()
++	if !reconnected.AvailabilityFailed("a") || reconnected.getUrlTest("a").Delay != TimeoutDelay {
++		t.Fatal("reconnect admitted a server before a successful full recheck")
++	}
++	result, err := reconnected.tester(reconnected.ctx, "a")
++	if err != nil || result.Delay == TimeoutDelay || reconnected.AvailabilityFailed("a") {
++		t.Fatalf("full background recheck failed to recover: %+v %v", result, err)
++	}
++	if err := reconnected.saveHistory(); err != nil {
++		t.Fatal(err)
++	}
++	m.loadHistory()
++	if m.AvailabilityFailed("a") {
++		t.Fatal("recovery was not persisted")
++	}
++}
++
++func TestProxyYouAvailabilityRejectsBadResponses(t *testing.T) {
++	for _, code := range []int{302, 403, 429, 500} {
++		t.Run(http.StatusText(code), func(t *testing.T) {
++			m, _ := availabilityFixture(t, func(w http.ResponseWriter, r *http.Request) {
++				if r.Host == "www.youtube.com" {
++					w.WriteHeader(code)
++					return
++				}
++				availabilityReply(w, r, 200)
++			})
++			report, err := m.CheckAvailability(m.ctx, "a")
++			if err != nil || report.Reachable || !m.AvailabilityFailed("a") {
++				t.Fatalf("bad status accepted: %+v %v", report, err)
++			}
++		})
++	}
++	m, _ := availabilityFixture(t, func(w http.ResponseWriter, r *http.Request) {
++		if r.Host == "www.youtube.com" {
++			w.WriteHeader(204)
++			return
++		}
++		w.Header().Set("Content-Type", "text/html")
++		w.Write([]byte("login page"))
++	})
++	report, err := m.CheckAvailability(m.ctx, "a")
++	if err != nil || report.Reachable || report.Checks[1].Outcome != "unexpectedResponse" || !m.AvailabilityFailed("a") {
++		t.Fatalf("HTML accepted as thumbnail: %+v %v", report, err)
++	}
++}
+--- /dev/null
++++ b/v2/hcore/availability.go
+@@ -0,0 +1,63 @@
++package hcore
++
++import (
++	"context"
++	"encoding/json"
++
++	"github.com/hiddify/hiddify-core/v2/hcommon"
++	"github.com/sagernet/sing-box/common/monitoring"
++	"google.golang.org/grpc"
++	"google.golang.org/grpc/codes"
++	"google.golang.org/grpc/status"
++)
++
++type availabilityServer interface {
++	Check(context.Context, *UrlTestRequest) (*hcommon.Response, error)
++}
++type availabilityService struct{}
++
++func (*availabilityService) Check(ctx context.Context, in *UrlTestRequest) (*hcommon.Response, error) {
++	static.lock.Lock()
++	instanceCtx := static.Context()
++	var monitor *monitoring.OutboundMonitoring
++	if instanceCtx != nil {
++		monitor = monitoring.Get(instanceCtx)
++	}
++	static.lock.Unlock()
++	if monitor == nil {
++		return nil, status.Error(codes.FailedPrecondition, "core is not running")
++	}
++	report, err := monitor.CheckAvailability(ctx, in.Tag)
++	if err != nil {
++		if ctx.Err() != nil || instanceCtx.Err() != nil {
++			return nil, status.Error(codes.Canceled, "availability check canceled")
++		}
++		return nil, status.Error(codes.FailedPrecondition, err.Error())
++	}
++	encoded, err := json.Marshal(report)
++	if err != nil {
++		return nil, status.Error(codes.Internal, "availability result encoding failed")
++	}
++	return &hcommon.Response{Code: hcommon.ResponseCode_OK, Message: string(encoded)}, nil
++}
++
++// This extension reuses the existing tag request / response wire messages, so
++// upstream generated Core clients and mobile bindings need no regeneration.
++func registerAvailabilityServer(server *grpc.Server) {
++	server.RegisterService(&grpc.ServiceDesc{
++		ServiceName: "proxyyou.Availability", HandlerType: (*availabilityServer)(nil),
++		Methods: []grpc.MethodDesc{{MethodName: "Check", Handler: func(srv interface{}, ctx context.Context, decode func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
++			request := new(UrlTestRequest)
++			if err := decode(request); err != nil {
++				return nil, err
++			}
++			handler := func(ctx context.Context, req interface{}) (interface{}, error) {
++				return srv.(availabilityServer).Check(ctx, req.(*UrlTestRequest))
++			}
++			if interceptor == nil {
++				return handler(ctx, request)
++			}
++			return interceptor(ctx, request, &grpc.UnaryServerInfo{Server: srv, FullMethod: "/proxyyou.Availability/Check"}, handler)
++		}}},
++	}, &availabilityService{})
++}
+--- a/v2/hcore/grpc_server.go
++++ b/v2/hcore/grpc_server.go
+@@ -140,6 +140,7 @@
+ 	if service == "core" {
+ 		// Setup("./tmp/", "./tmp", "./tmp", 11111, false)
+ 		RegisterCoreServer(s, &CoreService{})
++	registerAvailabilityServer(s)
+ 		// pb.RegisterExtensionHostServiceServer(s, &extension.ExtensionHostService{})
+ 	} else if service == "hello" {
+ 		// RegisterHelloServer(s, &hello.HelloService{})
+@@ -239,6 +240,7 @@
+ 	}
+ 	// Register your gRPC service here
+ 	RegisterCoreServer(grpcServer[mode], &CoreService{})
++	registerAvailabilityServer(grpcServer[mode])
+ 	hello.RegisterHelloServer(grpcServer[mode], &hello.HelloService{})
+ 	// Listen on the provided address
+ 	lis, err := net.Listen("tcp", listenAddressG)

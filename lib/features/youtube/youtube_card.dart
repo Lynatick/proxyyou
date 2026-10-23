@@ -30,9 +30,7 @@ class YoutubeCard extends ConsumerWidget {
                 Expanded(child: Text('Доступность YouTube', style: theme.textTheme.titleMedium)),
                 IconButton(
                   tooltip: 'Проверить ещё раз',
-                  onPressed: running && enabled && !report.isLoading
-                      ? () => ref.invalidate(youtubeReportProvider)
-                      : null,
+                  onPressed: running && !report.isLoading ? () => ref.invalidate(youtubeReportProvider) : null,
                   icon: const Icon(Icons.refresh),
                 ),
               ],
@@ -40,8 +38,6 @@ class YoutubeCard extends ConsumerWidget {
             const SizedBox(height: 8),
             if (!running)
               const Text('Подключитесь к прокси для проверки.')
-            else if (!enabled)
-              const Text('Включите смешанный порт в настройках входящих соединений и переподключитесь.')
             else
               report.when(
                 loading: () => const Row(
@@ -57,6 +53,8 @@ class YoutubeCard extends ConsumerWidget {
                     : Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          if (!value.reachable)
+                            Text('Конфигурация недоступна', style: TextStyle(color: theme.colorScheme.error)),
                           Text(
                             value.reachable
                                 ? 'Предварительная проверка сети пройдена'
