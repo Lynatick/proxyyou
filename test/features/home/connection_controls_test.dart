@@ -33,8 +33,10 @@ class TestProfile extends ActiveProfile {
 }
 
 class TestActiveProxy extends ActiveProxyNotifier {
+  TestActiveProxy([this.delay = 123]);
+  final int delay;
   @override
-  Stream<OutboundInfo> build() => Stream.value(OutboundInfo(tag: 'selected-server', urlTestDelay: 123));
+  Stream<OutboundInfo> build() => Stream.value(OutboundInfo(tag: 'selected-server', urlTestDelay: delay));
 }
 
 class TestGroup extends ProxiesOverviewNotifier {
@@ -118,6 +120,7 @@ void main() {
     bool isTv = false,
     double width = 640,
     double textScale = 1,
+    int delay = 123,
   }) async {
     await tester.binding.setSurfaceSize(Size(width, 400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -129,7 +132,7 @@ void main() {
           ),
           televisionProvider.overrideWith((ref) => Future.value(isTv)),
           activeProfileProvider.overrideWith(TestProfile.new),
-          activeProxyNotifierProvider.overrideWith(TestActiveProxy.new),
+          activeProxyNotifierProvider.overrideWith(() => TestActiveProxy(delay)),
           proxiesOverviewNotifierProvider.overrideWith(TestGroup.new),
           proxyRepositoryProvider.overrideWithValue(repository),
         ],
@@ -197,6 +200,16 @@ void main() {
     final button = tester.widget<FilledButton>(find.byWidgetPredicate((widget) => widget is FilledButton));
     expect(button.style!.backgroundColor!.resolve({}), const Color(0xFF16803C));
     expect(button.style!.foregroundColor!.resolve({}), Colors.white);
+  });
+
+  testWidgets('unavailable active server is red but disconnect and recheck remain enabled', (tester) async {
+    await render(tester, TestRepository(), delay: 65535);
+    expect(find.text('Недоступна'), findsOneWidget);
+    final button = tester.widget<FilledButton>(find.byType(FilledButton));
+    expect(button.style!.backgroundColor!.resolve({}), const Color(0xFFBA1A1A));
+    expect(button.onPressed, isNotNull);
+    expect(tester.widget<OutlinedButton>(find.byType(OutlinedButton)).onPressed, isNotNull);
+    expect(find.text('Отключить'), findsOneWidget);
   });
 
   testWidgets('failed connection is red while ordinary disconnect is neutral', (tester) async {

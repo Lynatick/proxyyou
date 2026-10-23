@@ -1,0 +1,11 @@
+syntax = "proto3";
+package proxyyou;
+import "v2/hcore/hcore.proto";
+import "v2/hcommon/common.proto";
+
+// Implemented by availability.go / ResponsiveCoreClient without modifying the
+// generated upstream Core service. tag must identify a concrete outbound.
+// Response.message is the JSON AvailabilityReport, including individual checks.
+service Availability {
+  rpc Check(hcore.UrlTestRequest) returns (hcommon.Response);
+}

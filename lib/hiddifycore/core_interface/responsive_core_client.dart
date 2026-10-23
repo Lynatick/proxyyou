@@ -1,7 +1,7 @@
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:grpc/grpc.dart';
+import 'package:grpc/grpc.dart' hide Response;
 import 'package:hiddify/hiddifycore/generated/v2/hcommon/common.pb.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore_service.pbgrpc.dart';
@@ -44,6 +44,18 @@ class ResponsiveCoreClient extends CoreClient {
   }
 
   ResponseStream<Uint8List> rawOutbounds() => $createStreamingCall(_rawOutbounds, Stream.value(Empty()));
+
+  static final _availability = ClientMethod<UrlTestRequest, Response>(
+    '/proxyyou.Availability/Check',
+    (request) => request.writeToBuffer(),
+    Response.fromBuffer,
+  );
+
+  ResponseFuture<Response> checkAvailability(String tag) => $createUnaryCall(
+    _availability,
+    UrlTestRequest(tag: tag),
+    options: CallOptions(timeout: const Duration(seconds: 16)),
+  );
 }
 
 Future<ParseResponse> decodeValidationResponse(Uint8List bytes) => Isolate.run(() {

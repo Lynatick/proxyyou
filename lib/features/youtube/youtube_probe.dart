@@ -44,7 +44,10 @@ class ProbeResult {
 }
 
 class YoutubeReport {
-  YoutubeReport(List<ProbeResult> checks) : checks = List.unmodifiable(checks), checkedAt = DateTime.now();
+  YoutubeReport(List<ProbeResult> checks, {this.configurationTag})
+    : checks = List.unmodifiable(checks),
+      checkedAt = DateTime.now();
+  final String? configurationTag;
   final List<ProbeResult> checks;
   final DateTime checkedAt;
   bool get reachable => checks.isNotEmpty && checks.every((check) => check.reachable);
@@ -149,7 +152,7 @@ class YoutubeProbe {
   /// Cancels sockets when the connection, profile or outbound changes.
   void close() {
     _closed = true;
-    for (final client in _clients) {
+    for (final client in _clients.toList()) {
       client.close(force: true);
     }
     _clients.clear();

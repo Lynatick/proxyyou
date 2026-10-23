@@ -54,7 +54,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
-  testWidgets('missing thumbnail is distinguished from a failed network check', (tester) async {
+  testWidgets('missing thumbnail marks the configuration unavailable despite a positive YouTube result', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
     final report = YoutubeReport([
@@ -89,6 +91,7 @@ void main() {
     expect(find.text('Тестовая миниатюра недоступна'), findsOneWidget);
     expect(find.text('Миниатюры: тестовая миниатюра не найдена (HTTP 404)'), findsOneWidget);
     expect(find.text('YouTube: 50 мс'), findsOneWidget);
+    expect(find.text('Конфигурация недоступна'), findsOneWidget);
     expect(find.text('Предварительная проверка сети не пройдена'), findsNothing);
     expect(find.textContaining('Воспроизведение подтверждено'), findsNothing);
   });

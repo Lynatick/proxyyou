@@ -48,23 +48,24 @@ class _ConnectionControlsState extends ConsumerState<ConnectionControls> {
           _ => false,
         };
     final running = connection.value?.isConnected ?? false;
+    final active = ref.watch(activeProxyNotifierProvider).value;
+    final delay = active?.urlTestDelay ?? 0;
+    final unavailable = running && delay != 0 && !ConnectionConst.isValidDelay(delay);
     final busy = connection.isLoading || (connection.value?.isSwitching ?? false);
     final buttonColor = busy
         ? null
-        : failed
+        : failed || unavailable
         ? const Color(0xFFBA1A1A)
         : running
         ? const Color(0xFF16803C)
         : null;
-    final active = ref.watch(activeProxyNotifierProvider).value;
-    final delay = active?.urlTestDelay ?? 0;
     final ping = !running
         ? 'Пинг'
         : delay == 0
         ? '— мс'
         : ConnectionConst.isValidDelay(delay)
         ? '$delay мс'
-        : 'Нет ответа';
+        : 'Недоступна';
 
     return Card(
       child: Padding(
