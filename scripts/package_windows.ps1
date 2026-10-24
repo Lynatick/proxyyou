@@ -1,4 +1,4 @@
-param([string]$Version = '4.1.24', [switch]$InstallerOnly)
+param([string]$Version = '4.1.26', [switch]$InstallerOnly)
 $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
 $bundle = Join-Path (Get-Location) 'build/windows/x64/runner/Release'
