@@ -18,11 +18,15 @@ Future<int> freePort() async {
 }
 
 Future<void> main(List<String> arguments) async {
+  final largeQueue = arguments.contains('--large-queue');
+  final serverCount = largeQueue ? 12040 : 60;
+  final checkedTags = <String>{};
   final appRouting = arguments.contains('--app-routing');
   final generatedGroups = appRouting || arguments.contains('--generated-groups');
   final diagnosticPort = appRouting ? await freePort() : 0;
   final library = File(
-    Platform.isWindows ? 'hiddify-core/windows-x64/hiddify-core.dll' : 'hiddify-core/bin/hiddify-core.dylib',
+    Platform.environment['PROXYYOU_TEST_CORE'] ??
+        (Platform.isWindows ? 'hiddify-core/windows-x64/hiddify-core.dll' : 'hiddify-core/bin/hiddify-core.dylib'),
   ).absolute.path;
   final base = await Directory.systemTemp.createTemp('proxyyou-worker-test-');
   final socks = await ServerSocket.bind('127.0.0.1', 0);
@@ -42,6 +46,8 @@ Future<void> main(List<String> arguments) async {
     if (peak == 20 && !twenty.isCompleted) twenty.complete();
     final buffer = <int>[];
     var greeting = false;
+    var authenticated = !largeQueue;
+    String? checkedTag;
     var command = false;
     var finished = false;
     void finish() {
@@ -58,15 +64,26 @@ Future<void> main(List<String> arguments) async {
           final len = 2 + buffer[1];
           buffer.removeRange(0, len);
           greeting = true;
-          socket.add([5, 0]);
+          socket.add([5, if (largeQueue) 2 else 0]);
         }
-        if (greeting && !command && buffer.length >= 5) {
+        if (greeting && !authenticated && buffer.length >= 2) {
+          final usernameLength = buffer[1];
+          if (buffer.length < 3 + usernameLength) return;
+          final passwordLength = buffer[2 + usernameLength];
+          if (buffer.length < 3 + usernameLength + passwordLength) return;
+          checkedTag = utf8.decode(buffer.sublist(2, 2 + usernameLength));
+          buffer.removeRange(0, 3 + usernameLength + passwordLength);
+          authenticated = true;
+          socket.add([1, 0]);
+        }
+        if (greeting && authenticated && !command && buffer.length >= 5) {
           final type = buffer[3];
           final len = type == 3 ? 7 + buffer[4] : (type == 1 ? 10 : 22);
           if (buffer.length < len) return;
           command = true;
+          if (checkedTag != null) checkedTags.add(checkedTag!);
           if (type == 3) hosts.add(utf8.decode(buffer.sublist(5, 5 + buffer[4])));
-          Future<void>.delayed(const Duration(milliseconds: 300), () {
+          Future<void>.delayed(Duration(milliseconds: largeQueue && count > 20 ? 1 : 300), () {
             finish();
             socket.add([5, 5, 0, 1, 0, 0, 0, 0, 0, 0]);
             socket.close();
@@ -134,10 +151,17 @@ Future<void> main(List<String> arguments) async {
           {
             'type': 'selector',
             'tag': 'select',
-            'outbounds': [for (var i = 0; i < 60; i++) 'test-$i'],
+            'outbounds': [for (var i = 0; i < serverCount; i++) 'test-$i'],
           },
-        for (var i = 0; i < 60; i++)
-          {'type': 'socks', 'tag': 'test-$i', 'server': '127.0.0.1', 'server_port': socks.port},
+        for (var i = 0; i < serverCount; i++)
+          {
+            'type': 'socks',
+            'tag': 'test-$i',
+            'server': '127.0.0.1',
+            'server_port': socks.port,
+            if (largeQueue) 'username': 'test-$i',
+            if (largeQueue) 'password': 'local-test',
+          },
       ],
       'experimental': {
         'monitoring': {
@@ -214,9 +238,26 @@ Future<void> main(List<String> arguments) async {
       }
     }
     if (!generatedGroups) {
-      await core.urlTest(UrlTestRequest(tag: 'select'));
+      if (!largeQueue) await core.urlTest(UrlTestRequest(tag: 'select'));
       await twenty.future.timeout(const Duration(seconds: 15));
-      await Future<void>.delayed(const Duration(seconds: 2));
+      if (largeQueue) {
+        final deadline = DateTime.now().add(const Duration(seconds: 90));
+        while (checkedTags.length < serverCount && DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        }
+        if (checkedTags.length != serverCount) {
+          throw StateError('Large queue dropped configurations: ${checkedTags.length}/$serverCount');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        final snapshot = await core.outboundsInfo(Empty()).first;
+        final entries = snapshot.items.firstWhere((group) => group.tag == 'select').items;
+        if (entries.length != serverCount || entries.any((item) => item.urlTestDelay != 65535)) {
+          throw StateError('Large queue did not publish every completed result');
+        }
+        stdout.writeln('PASS: all $serverCount unique configurations checked and completed; no 10,000-job cutoff');
+      } else {
+        await Future<void>.delayed(const Duration(seconds: 2));
+      }
       final expectedHosts = {'www.youtube.com', if (arguments.contains('--availability')) 'i.ytimg.com'};
       if (peak != 20 || hosts.length != expectedHosts.length || !hosts.containsAll(expectedHosts)) {
         throw StateError('Unexpected concurrency or destinations: peak=$peak hosts=$hosts');

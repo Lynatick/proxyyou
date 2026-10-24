@@ -379,7 +379,32 @@
  
 --- a/hiddify-sing-box/common/monitoring/outbound_monitoring.go
 +++ b/hiddify-sing-box/common/monitoring/outbound_monitoring.go
-@@ -86,16 +86,34 @@
+@@ -1,12 +1,12 @@
+ package monitoring
+ 
+ import (
++	stdlist "container/list"
+ 	"context"
+ 	"encoding/json"
+ 	"errors"
+ 	"fmt"
+ 	"net"
+-	"sort"
+ 	"sync"
+ 	"sync/atomic"
+ 	"time"
+@@ -78,24 +78,44 @@
+ 
+ 	mainTicker *time.Ticker
+ 
+-	priorityQueue chan *testTask
+-	normalQueue   chan *testTask
++	tasks         *testTaskQueue
++	queueOnce     sync.Once
++	outboundOrder []string
+ 
+ 	outbounds map[string]*outboundState
+ 	groups    map[string]*groupState
  
  	cacheDirty atomic.Bool
  
@@ -390,6 +415,7 @@
  
  	workerWG    sync.WaitGroup
  	schedulerWG sync.WaitGroup
++	retryWG     sync.WaitGroup
  	closerOnce  sync.Once
 +	probeOnce   sync.Once
 +	probeSlots  chan struct{}
@@ -415,7 +441,7 @@
  	m.startCycleOnce()
  }
  
-@@ -140,6 +158,9 @@
+@@ -140,6 +160,9 @@
  	state.mu.Lock()
  	his := state.history
  	his.IsFromCache = state.from_cache
@@ -425,7 +451,39 @@
  	state.mu.Unlock()
  	return &his
  
-@@ -328,9 +349,11 @@
+@@ -246,10 +269,8 @@
+ 		urlTestTimeout: options.URLTestTimeout.Build(),
+ 		debounceWindow: options.DebounceWindow.Build(),
+ 
+-		priorityQueue: make(chan *testTask, 1000),
+-		normalQueue:   make(chan *testTask, 10000),
+-		outbounds:     make(map[string]*outboundState),
+-		groups:        make(map[string]*groupState),
++		outbounds: make(map[string]*outboundState),
++		groups:    make(map[string]*groupState),
+ 	}
+ 
+ 	return m, nil
+@@ -263,12 +284,18 @@
+ 
+ 		for _, outbound := range m.outboundManager.Outbounds() {
+ 			// if _, ok := outbound.(adapter.OutboundGroup); !ok {
++			if _, exists := m.outbounds[outbound.Tag()]; !exists {
++				m.outboundOrder = append(m.outboundOrder, outbound.Tag())
++			}
+ 			m.outbounds[outbound.Tag()] = &outboundState{groupTags: []string{}, invalid: true, outbound: outbound, dependencies: outbound.Dependencies()}
+ 			// }
+ 			//m.logger.Info("registered outbound for monitoring: ", outbound.Tag())
+ 		}
+ 		for _, outbound := range m.endpointManager.Endpoints() {
+ 			// if _, ok := outbound.(adapter.OutboundGroup); !ok {
++			if _, exists := m.outbounds[outbound.Tag()]; !exists {
++				m.outboundOrder = append(m.outboundOrder, outbound.Tag())
++			}
+ 			m.outbounds[outbound.Tag()] = &outboundState{groupTags: []string{}, invalid: true, outbound: outbound, dependencies: outbound.Dependencies()}
+ 			// }
+ 			//m.logger.Info("registered outbound for monitoring: ", outbound.Tag())
+@@ -328,9 +355,11 @@
  
  	m.pauseCallback = pause.RegisterTicker(m.pause, m.mainTicker, m.mainInterval, nil)
  	m.schedulerWG.Add(1)
@@ -438,7 +496,21 @@
  	if !m.workersRunning.CompareAndSwap(true, false) {
  		return
  	}
-@@ -378,7 +401,7 @@
+@@ -366,9 +395,10 @@
+ }
+ func (m *OutboundMonitoring) testNow(outboundTag string, priority bool) error {
+ 	m.logger.Info("testing outbound ", outboundTag, " with priority: ", priority)
+-	if grp, ok := m.groups[outboundTag]; ok {
+-		for tag := range grp.outbounds {
+-			m.testNow(tag, false)
++	if _, ok := m.groups[outboundTag]; ok {
++		cycle := m.cycleSeq.Load()
++		for _, tag := range m.groupTestTargets(outboundTag) {
++			m.enqueueTask(&testTask{outboundTag: tag, cycleID: cycle})
+ 		}
+ 	} else {
+ 		state := m.getState(outboundTag)
+@@ -378,7 +408,7 @@
  
  		task := &testTask{
  			outboundTag: outboundTag,
@@ -447,7 +519,7 @@
  			priority:    priority,
  		}
  
-@@ -416,7 +439,7 @@
+@@ -416,7 +446,7 @@
  
  	m.enqueueTask(&testTask{
  		outboundTag: outboundTag,
@@ -456,15 +528,36 @@
  		priority:    true,
  	})
  
-@@ -440,6 +463,7 @@
+@@ -440,10 +470,19 @@
  
  func (m *OutboundMonitoring) Close() error {
  	m.closerOnce.Do(func() {
 +		m.cancel()
  		m.stopTimerWorkers()
  
- 		// close(m.priorityQueue)
-@@ -457,10 +481,9 @@
+-		// close(m.priorityQueue)
+-		// close(m.normalQueue)
++		for _, task := range m.taskQueue().close() {
++			if state := m.outbounds[task.outboundTag]; state != nil {
++				state.mu.Lock()
++				if state.pendingTask == task {
++					state.pendingTask = nil
++					state.queued, state.priorityQueued, state.enqueuedCycle = false, false, 0
++				}
++				state.mu.Unlock()
++			}
++		}
+ 		for _, g := range m.groups {
+ 			if g.observer != nil {
+ 				g.observer.Close()
+@@ -451,16 +490,16 @@
+ 		}
+ 		m.cancel()
+ 		m.workerWG.Wait()
++		m.retryWG.Wait()
+ 		m.schedulerWG.Wait()
+ 
+ 	})
  	return nil
  }
  
@@ -476,31 +569,157 @@
  	for {
  		select {
  		case <-m.ctx.Done():
-@@ -540,16 +563,18 @@
+@@ -478,96 +517,86 @@
+ }
+ 
+ func (m *OutboundMonitoring) workerLoop() {
+-
+ 	defer m.workerWG.Done()
++	queue := m.taskQueue()
+ 	for {
+-
++		if m.ctx.Err() != nil {
++			return
++		}
++		if task := queue.pop(); task != nil {
++			m.executeTask(task)
++			continue
++		}
+ 		select {
+ 		case <-m.ctx.Done():
+ 			return
+-		case task := <-m.priorityQueue:
+-			m.executeTask(task) //for prioritising tasks, we execute them immediately
+-		default:
+-			select {
+-			case <-m.ctx.Done():
+-				return
+-			case task := <-m.priorityQueue:
+-				m.executeTask(task)
+-			case task := <-m.normalQueue:
+-				m.executeTask(task)
+-			}
++		case <-queue.ready:
++		}
++	}
++}
++
++func (m *OutboundMonitoring) finishTask(task *testTask) {
++	state := m.outbounds[task.outboundTag]
++	state.mu.Lock()
++	if state.activeTask == task {
++		state.activeTask = nil
++		state.testing = false
++	}
++	state.mu.Unlock()
++}
++
++func (m *OutboundMonitoring) completeTask(task *testTask, history adapter.URLTestHistory, err error, epoch uint64) {
++	m.finishTask(task)
++	outcome := testOutcome{networkEpoch: epoch, outboundTag: task.outboundTag,
++		history: history, err: err, cycleID: task.cycleID, priority: task.priority}
++	m.applyResult(outcome)
++	if task.resultCh != nil {
++		select {
++		case task.resultCh <- outcome:
++		case <-m.ctx.Done():
+ 		}
+ 	}
+ }
+ 
+ func (m *OutboundMonitoring) executeTask(task *testTask) {
+-	select {
+-	case <-m.ctx.Done():
+-		return
+-	default:
+-	}
+-
+ 	state := m.outbounds[task.outboundTag]
+ 	if state == nil {
+ 		return
+ 	}
+-
+ 	state.mu.Lock()
+-	state.testing = true
++	if state.pendingTask != task {
++		state.mu.Unlock()
++		return
++	}
++	state.pendingTask = nil
++	state.queued, state.priorityQueued, state.enqueuedCycle = false, false, 0
++	if m.ctx.Err() != nil {
++		state.mu.Unlock()
++		return
++	}
++	state.activeTask, state.testing = task, true
+ 	state.mu.Unlock()
+-	defer func() {
+-		state.mu.Lock()
+-		state.testing = false
+-		state.mu.Unlock()
+-	}()
+-	state.mu.Lock()
+-	cycle := task.cycleID
+-	state.mu.Unlock()
+-
+-	if cycle < 10 && !state.outbound.IsReady() {
+-		m.logger.Info("outbound ", task.outboundTag, " is not ready, skipping test")
+-		go func() {
+-			select {
+-			case <-m.ctx.Done():
+-				return
+-			case <-time.After(3 * time.Second):
+-			}
+-			state.mu.Lock()
+-			task.cycleID++
+-			state.mu.Unlock()
+-			m.enqueueTask(task)
+-		}()
++	defer m.finishTask(task)
++	epoch := m.networkEpoch.Load()
++
++	if task.readinessRetries < 10 && !state.outbound.IsReady() {
++		// Every accepted cycle job completes even when a transport is not ready.
++		// The delayed retry has no cycle waiter of its own, and is canceled on stop.
++		m.completeTask(task, adapter.URLTestHistory{Time: time.Now(), Delay: TimeoutDelay}, errors.New("outbound not ready"), epoch)
++		m.retryWhenReady(task)
  		return
  	}
  	done := make(chan struct{})
-+	epoch := m.networkEpoch.Load()
  	go func() {
  		defer close(done)
- 		delay, err := m.tester(m.ctx, task.outboundTag)
- 
- 		outcome := testOutcome{
+-		delay, err := m.tester(m.ctx, task.outboundTag)
+-
+-		outcome := testOutcome{
 -			outboundTag: task.outboundTag,
 -			history:     delay,
 -			err:         err,
 -			cycleID:     task.cycleID,
 -			priority:    task.priority,
-+			networkEpoch: epoch,
-+			outboundTag:  task.outboundTag,
-+			history:      delay,
-+			err:          err,
-+			cycleID:      task.cycleID,
-+			priority:     task.priority,
- 		}
+-		}
+-
+-		m.applyResult(outcome)
+-		if task.resultCh != nil {
+-			select {
+-			case task.resultCh <- outcome:
+-			case <-m.ctx.Done():
+-			default:
+-			}
+-
+-		}
++		history, err := m.tester(m.ctx, task.outboundTag)
++		m.completeTask(task, history, err, epoch)
+ 	}()
+ 	select {
+ 	case <-m.ctx.Done():
+ 		return
+ 	case <-done:
+ 	}
+-
+ }
  
- 		m.applyResult(outcome)
-@@ -575,6 +600,22 @@
+ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter.URLTestHistory, error) {
+@@ -575,6 +604,22 @@
  	if !ok {
  		return adapter.URLTestHistory{Delay: 0}, errors.New("outbound not registered")
  	}
@@ -523,7 +742,7 @@
  
  	idx := m.currentLinkIndex.Load()
  
-@@ -619,7 +660,7 @@
+@@ -619,7 +664,7 @@
  }
  
  func (m *OutboundMonitoring) runCycle() {
@@ -532,15 +751,81 @@
  	tags := m.collectCycleTargets()
  
  	if len(tags) == 0 {
-@@ -739,11 +780,22 @@
+@@ -684,48 +729,33 @@
+ }
+ 
+ func (m *OutboundMonitoring) enqueueTask(task *testTask) bool {
+-
+-	select {
+-	case <-m.ctx.Done():
++	if m.ctx.Err() != nil {
+ 		return false
+-	default:
+-	}
+-	state, ok := m.outbounds[task.outboundTag]
+-	if !ok {
++	}
++	state := m.outbounds[task.outboundTag]
++	if state == nil {
+ 		return false
+ 	}
+ 	state.mu.Lock()
+ 	defer state.mu.Unlock()
+-
+-	if task.priority {
+-		if state.priorityQueued {
+-			return false
+-		}
+-		state.priorityQueued = true
+-	} else {
+-		if state.enqueuedCycle == task.cycleID {
+-			return false
+-		}
+-		state.enqueuedCycle = task.cycleID
+-		state.queued = true
+-	}
+-	if task.priority {
+-		select {
+-		case m.priorityQueue <- task:
+-			return true
+-		default:
+-			return false
+-		}
+-
+-	} else {
+-		select {
+-		case m.normalQueue <- task:
+-			return true
+-		default:
+-			return false
+-		}
+-	}
+-
++	if m.ctx.Err() != nil || state.testing {
++		return false
++	}
++	if state.pendingTask != nil {
++		if task.priority && m.taskQueue().promote(state.pendingTask) {
++			state.queued, state.priorityQueued = false, true
++		}
++		return false
++	}
++	// Commit state only after queue admission succeeds. No channel-capacity
++	// rejection can leave a node permanently marked as waiting.
++	if !m.taskQueue().push(task) {
++		return false
++	}
++	state.pendingTask = task
++	state.queued, state.priorityQueued = !task.priority, task.priority
++	state.enqueuedCycle = task.cycleID
++	return true
+ }
+ 
+ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHistory {
+@@ -739,11 +769,19 @@
  		return nil
  	}
  	state.mu.Lock()
--	defer state.mu.Unlock()
--
- 	state.queued = false
- 	state.priorityQueued = false
- 	state.enqueuedCycle = 0
 +	if outcome.networkEpoch != m.networkEpoch.Load() {
 +		state.invalid = true
 +		state.from_cache = true
@@ -548,7 +833,11 @@
 +		m.testNow(outcome.outboundTag, true)
 +		return nil
 +	}
-+	defer state.mu.Unlock()
+ 	defer state.mu.Unlock()
+-
+-	state.queued = false
+-	state.priorityQueued = false
+-	state.enqueuedCycle = 0
 +	// A superseded full check returns cancellation. Neither it nor an older
 +	// queued ping may overwrite the result of a newer availability check.
 +	if errors.Is(outcome.err, context.Canceled) || (!outcome.history.Time.IsZero() && state.history.Time.After(outcome.history.Time)) {
@@ -557,21 +846,49 @@
  	state.invalid = outcome.err != nil
  	state.lastURL = outcome.url
  	if (outcome.history.Delay != state.history.Delay) || state.history.IpInfo == nil || (outcome.history.IpInfo != nil) {
-@@ -793,9 +845,12 @@
- 			state.mu.Unlock()
+@@ -779,31 +817,24 @@
+ }
+ 
+ func (m *OutboundMonitoring) collectCycleTargets() []string {
+-
+ 	tags := make([]string, 0, len(m.outbounds))
+-
+-	delays := make(map[string]uint16, len(tags))
+-
+-	for tag, state := range m.outbounds {
+-		if _, ok := m.groups[tag]; ok {
++	delays := make(map[string]uint16, len(m.outbounds))
++	for _, tag := range m.sourceOrder() {
++		state := m.outbounds[tag]
++		if _, group := m.groups[tag]; group {
  			continue
  		}
+ 		state.mu.Lock()
+-		if state.testing || state.queued || state.priorityQueued {
+-			state.mu.Unlock()
+-			continue
+-		}
 -		if state.invalid || time.Since(state.history.Time) >= m.mainInterval {
-+		if state.from_cache || state.invalid || time.Since(state.history.Time) >= m.mainInterval {
++		if !state.testing && !state.retryPending && state.pendingTask == nil && !state.queued && !state.priorityQueued &&
++			(state.from_cache || state.invalid || time.Since(state.history.Time) >= m.mainInterval) {
  			tags = append(tags, tag)
- 			delays[tag] = state.history.Delay
-+			if delays[tag] == 0 {
-+				delays[tag] = TimeoutDelay
+-			delays[tag] = state.history.Delay
++			if !state.availabilityFailed {
++				delays[tag] = state.history.Delay
 +			}
  		}
  		state.mu.Unlock()
  	}
-@@ -828,8 +883,11 @@
+-
+-	sort.SliceStable(tags, func(i, j int) bool {
+-		return delays[tags[i]] < delays[tags[j]]
+-	})
+-	return tags
++	return interleaveTestTargets(tags, delays)
+ }
+ 
+ func (m *OutboundMonitoring) makeGroup(tag string) *groupState {
+@@ -828,8 +859,11 @@
  	}
  	m.access.Lock()
  	defer m.access.Unlock()
@@ -584,7 +901,20 @@
  		return
  	}
  	m.startTimerWorkers()
-@@ -949,12 +1007,13 @@
+@@ -942,19 +976,22 @@
+ }
+ 
+ type testTask struct {
+-	outboundTag string
+-	cycleID     uint64
+-	priority    bool
+-	resultCh    chan<- testOutcome
++	element          *stdlist.Element
++	readinessRetries int
++	outboundTag      string
++	cycleID          uint64
++	priority         bool
++	resultCh         chan<- testOutcome
  }
  
  type testOutcome struct {
@@ -604,7 +934,7 @@
  }
  
  type outboundState struct {
-@@ -966,12 +1025,14 @@
+@@ -966,12 +1003,17 @@
  	dependencies        []string
  	lastURL             string
  
@@ -618,6 +948,9 @@
 +	queued               bool
 +	priorityQueued       bool
 +	testing              bool
++	pendingTask          *testTask
++	activeTask           *testTask
++	retryPending         bool
 +	enqueuedCycle        uint64
 +	from_cache           bool
 +	availabilityFailed   bool
@@ -625,7 +958,7 @@
  
  	history adapter.URLTestHistory
  }
-@@ -994,6 +1055,7 @@
+@@ -994,6 +1036,7 @@
  
  type History struct {
  	OutboundData map[string]*adapter.URLTestHistory `json:"outbound_data"`
@@ -633,7 +966,7 @@
  }
  
  func (m *OutboundMonitoring) saveHistory() error {
-@@ -1002,10 +1064,14 @@
+@@ -1002,10 +1045,14 @@
  	}
  	history := &History{
  		OutboundData: make(map[string]*adapter.URLTestHistory),
@@ -648,7 +981,7 @@
  		state.mu.Unlock()
  		history.OutboundData[tag] = &h
  	}
-@@ -1044,6 +1110,7 @@
+@@ -1044,6 +1091,7 @@
  			}
  			state.mu.Lock()
  			state.history = *his
@@ -2100,3 +2433,616 @@
  	hello.RegisterHelloServer(grpcServer[mode], &hello.HelloService{})
  	// Listen on the provided address
  	lis, err := net.Listen("tcp", listenAddressG)
+--- /dev/null
++++ b/hiddify-sing-box/common/monitoring/test_task_queue.go
+@@ -0,0 +1,213 @@
++package monitoring
++
++import (
++	"container/list"
++	"sort"
++	"sync"
++	"time"
++)
++
++// Jobs are bounded by the number of registered outbounds, not by an arbitrary
++// channel capacity. The shared worker pool remains limited to 20 probes.
++type testTaskQueue struct {
++	mu       sync.Mutex
++	priority list.List
++	normal   list.List
++	ready    chan struct{}
++	closed   bool
++}
++
++func newTestTaskQueue() *testTaskQueue { return &testTaskQueue{ready: make(chan struct{}, 1)} }
++
++func (q *testTaskQueue) notify() {
++	select {
++	case q.ready <- struct{}{}:
++	default:
++	}
++}
++
++func (q *testTaskQueue) push(task *testTask) bool {
++	q.mu.Lock()
++	defer q.mu.Unlock()
++	if q.closed || task.element != nil {
++		return false
++	}
++	if task.priority {
++		task.element = q.priority.PushBack(task)
++	} else {
++		task.element = q.normal.PushBack(task)
++	}
++	q.notify()
++	return true
++}
++
++// Promote the original task, retaining its cycle result channel. A manual
++// recheck never starts a duplicate probe or strands the background collector.
++func (q *testTaskQueue) promote(task *testTask) bool {
++	q.mu.Lock()
++	defer q.mu.Unlock()
++	if q.closed || task.element == nil || task.priority {
++		return false
++	}
++	q.normal.Remove(task.element)
++	task.priority = true
++	task.element = q.priority.PushBack(task)
++	q.notify()
++	return true
++}
++
++func (q *testTaskQueue) pop() *testTask {
++	q.mu.Lock()
++	defer q.mu.Unlock()
++	if q.closed {
++		return nil
++	}
++	queue := &q.priority
++	if queue.Len() == 0 {
++		queue = &q.normal
++	}
++	front := queue.Front()
++	if front == nil {
++		return nil
++	}
++	task := queue.Remove(front).(*testTask)
++	task.element = nil
++	if q.priority.Len()+q.normal.Len() > 0 {
++		q.notify() // Wake another idle worker even after one bulk submission.
++	}
++	return task
++}
++
++func (q *testTaskQueue) close() []*testTask {
++	q.mu.Lock()
++	defer q.mu.Unlock()
++	q.closed = true
++	var pending []*testTask
++	for _, queue := range []*list.List{&q.priority, &q.normal} {
++		for element := queue.Front(); element != nil; {
++			next := element.Next()
++			task := element.Value.(*testTask)
++			task.element = nil
++			pending = append(pending, task)
++			element = next
++		}
++		queue.Init()
++	}
++	return pending
++}
++
++func (m *OutboundMonitoring) taskQueue() *testTaskQueue {
++	m.queueOnce.Do(func() { m.tasks = newTestTaskQueue() })
++	return m.tasks
++}
++
++func (m *OutboundMonitoring) retryWhenReady(task *testTask) {
++	state := m.outbounds[task.outboundTag]
++	state.mu.Lock()
++	if state.retryPending || m.ctx.Err() != nil {
++		state.mu.Unlock()
++		return
++	}
++	state.retryPending = true
++	state.mu.Unlock()
++	retry := &testTask{outboundTag: task.outboundTag, cycleID: task.cycleID,
++		priority: task.priority, readinessRetries: task.readinessRetries + 1}
++	m.retryWG.Add(1) // Called by a worker; Close waits workers before retries.
++	go func() {
++		defer m.retryWG.Done()
++		timer := time.NewTimer(3 * time.Second)
++		defer timer.Stop()
++		select {
++		case <-m.ctx.Done():
++		case <-timer.C:
++		}
++		state.mu.Lock()
++		state.retryPending = false
++		state.mu.Unlock()
++		if m.ctx.Err() == nil {
++			m.enqueueTask(retry)
++		}
++	}()
++}
++
++// Previously successful nodes go first. Then take one node from each of 20
++// balanced contiguous parts; workers freely share all parts through one queue.
++func interleaveTestTargets(tags []string, delays map[string]uint16) []string {
++	ordered := make([]string, 0, len(tags))
++	for _, tag := range tags {
++		if delay := delays[tag]; delay > 0 && delay < TimeoutDelay {
++			ordered = append(ordered, tag)
++		}
++	}
++	sort.SliceStable(ordered, func(i, j int) bool { return delays[ordered[i]] < delays[ordered[j]] })
++	parts := min(defaultWorkerCount, len(tags))
++	if parts == 0 {
++		return ordered
++	}
++	starts, sizes := make([]int, parts), make([]int, parts)
++	for part, start := 0, 0; part < parts; part++ {
++		starts[part], sizes[part] = start, len(tags)/parts
++		if part < len(tags)%parts {
++			sizes[part]++
++		}
++		start += sizes[part]
++	}
++	for row := 0; row < sizes[0]; row++ {
++		for part, start := range starts {
++			if row < sizes[part] {
++				tag := tags[start+row]
++				if delay := delays[tag]; delay == 0 || delay >= TimeoutDelay {
++					ordered = append(ordered, tag)
++				}
++			}
++		}
++	}
++	return ordered
++}
++
++func (m *OutboundMonitoring) sourceOrder() []string {
++	if len(m.outboundOrder) > 0 {
++		return m.outboundOrder
++	}
++	// Deterministic fallback for stand-alone fixtures; production registers the
++	// exact subscription order before starting any worker.
++	tags := make([]string, 0, len(m.outbounds))
++	for tag := range m.outbounds {
++		tags = append(tags, tag)
++	}
++	sort.Strings(tags)
++	return tags
++}
++
++func (m *OutboundMonitoring) groupTestTargets(tag string) []string {
++	leaves, visited := make(map[string]bool), make(map[string]bool)
++	var visit func(string)
++	visit = func(tag string) {
++		if visited[tag] {
++			return
++		}
++		visited[tag] = true
++		if group := m.groups[tag]; group != nil {
++			for child := range group.outbounds {
++				visit(child)
++			}
++		} else if m.outbounds[tag] != nil {
++			leaves[tag] = true
++		}
++	}
++	visit(tag)
++	tags, delays := make([]string, 0, len(leaves)), make(map[string]uint16, len(leaves))
++	for _, tag := range m.sourceOrder() {
++		if !leaves[tag] {
++			continue
++		}
++		tags = append(tags, tag)
++		state := m.outbounds[tag]
++		state.mu.Lock()
++		if !state.availabilityFailed {
++			delays[tag] = state.history.Delay
++		}
++		state.mu.Unlock()
++	}
++	return interleaveTestTargets(tags, delays)
++}
+--- /dev/null
++++ b/hiddify-sing-box/common/monitoring/test_task_queue_test.go
+@@ -0,0 +1,394 @@
++package monitoring
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"net"
++	"sync"
++	"sync/atomic"
++	"testing"
++	"time"
++
++	"github.com/sagernet/sing-box/adapter"
++	"github.com/sagernet/sing-box/common/urltest"
++	"github.com/sagernet/sing-box/log"
++	M "github.com/sagernet/sing/common/metadata"
++)
++
++type queueTestOutbound struct {
++	adapter.Outbound
++	tag          string
++	ready        atomic.Bool
++	calls        atomic.Int32
++	gate         <-chan struct{}
++	entered      chan<- struct{}
++	active, peak *atomic.Int32
++}
++
++func (o *queueTestOutbound) Tag() string   { return o.tag }
++func (o *queueTestOutbound) IsReady() bool { return o.ready.Load() }
++func (o *queueTestOutbound) DialContext(ctx context.Context, _ string, _ M.Socksaddr) (net.Conn, error) {
++	o.calls.Add(1)
++	if o.active != nil {
++		n := o.active.Add(1)
++		defer o.active.Add(-1)
++		for {
++			old := o.peak.Load()
++			if n <= old || o.peak.CompareAndSwap(old, n) {
++				break
++			}
++		}
++	}
++	if o.entered != nil {
++		select {
++		case o.entered <- struct{}{}:
++		default:
++		}
++	}
++	if o.gate != nil {
++		select {
++		case <-ctx.Done():
++			return nil, ctx.Err()
++		case <-o.gate:
++		}
++	}
++	return nil, errors.New("controlled offline proxy")
++}
++
++func newQueueTestMonitor(t *testing.T, count, workers int) *OutboundMonitoring {
++	t.Helper()
++	ctx, cancel := context.WithCancel(context.Background())
++	m := &OutboundMonitoring{ctx: ctx, cancel: cancel, mainInterval: time.Hour, urlTestTimeout: time.Minute,
++		urls: []string{defaultURLTest}, logger: log.NewNOPFactory().Logger(), history: urltest.NewHistoryStorage(),
++		outbounds: make(map[string]*outboundState, count), groups: make(map[string]*groupState)}
++	for i := 0; i < count; i++ {
++		tag := fmt.Sprintf("node-%06d", i)
++		out := &queueTestOutbound{tag: tag}
++		out.ready.Store(true)
++		m.outbounds[tag] = &outboundState{outbound: out, invalid: true}
++		m.outboundOrder = append(m.outboundOrder, tag)
++	}
++	for i := 0; i < workers; i++ {
++		m.workerWG.Add(1)
++		go m.workerLoop()
++	}
++	t.Cleanup(func() { m.Close() })
++	return m
++}
++
++func TestProxyYouTwentyPartsKeepEveryNodeAndCachedPriority(t *testing.T) {
++	for _, count := range []int{0, 1, 19, 20, 21, 43, 33726, 65734} {
++		t.Run(fmt.Sprint(count), func(t *testing.T) {
++			m := newQueueTestMonitor(t, count, 0)
++			if count > 3 {
++				m.outbounds[m.outboundOrder[1]].history.Delay = 30
++				m.outbounds[m.outboundOrder[3]].history.Delay = 10
++			}
++			tags := m.collectCycleTargets()
++			if len(tags) != count {
++				t.Fatalf("lost nodes: %d/%d", len(tags), count)
++			}
++			seen := make(map[string]bool, count)
++			for _, tag := range tags {
++				if seen[tag] {
++					t.Fatal("duplicate node", tag)
++				}
++				seen[tag] = true
++			}
++			if count > 3 && (tags[0] != m.outboundOrder[3] || tags[1] != m.outboundOrder[1]) {
++				t.Fatal("cached priority lost")
++			}
++		})
++	}
++	m := newQueueTestMonitor(t, 43, 0)
++	tags := m.collectCycleTargets()
++	for part, start := 0, 0; part < 20; part++ {
++		if tags[part] != m.outboundOrder[start] {
++			t.Fatalf("part %d did not contribute to the first wave", part)
++		}
++		size := 43 / 20
++		if part < 43%20 {
++			size++
++		}
++		start += size
++	}
++	// Quarantined servers must not regain priority from their retained raw ping.
++	m.outbounds[m.outboundOrder[42]].history.Delay = 1
++	m.outbounds[m.outboundOrder[42]].availabilityFailed = true
++	if m.collectCycleTargets()[0] == m.outboundOrder[42] {
++		t.Fatal("availability failure gained cached priority")
++	}
++}
++
++func TestProxyYouLargeSubscriptionsCompleteEveryAcceptedJob(t *testing.T) {
++	for _, count := range []int{33726, 65734} {
++		t.Run(fmt.Sprint(count), func(t *testing.T) {
++			m := newQueueTestMonitor(t, count, 20)
++			gate, entered := make(chan struct{}), make(chan struct{}, 20)
++			var release sync.Once
++			defer release.Do(func() { close(gate) })
++			var active, peak atomic.Int32
++			for _, state := range m.outbounds {
++				out := state.outbound.(*queueTestOutbound)
++				out.gate, out.entered, out.active, out.peak = gate, entered, &active, &peak
++			}
++			start := time.Now()
++			done := make(chan []testOutcome, 1)
++			go func() { done <- m.runStage(1, m.collectCycleTargets()) }()
++			for i := 0; i < 20; i++ {
++				select {
++				case <-entered:
++				case <-time.After(10 * time.Second):
++					t.Fatal("shared pool did not start 20 jobs")
++				}
++			}
++			release.Do(func() { close(gate) })
++			select {
++			case results := <-done:
++				if len(results) != count {
++					t.Fatalf("only %d/%d jobs completed", len(results), count)
++				}
++			case <-time.After(45 * time.Second):
++				t.Fatal("subscription scan stalled")
++			}
++			for _, state := range m.outbounds {
++				if state.outbound.(*queueTestOutbound).calls.Load() != 1 {
++					t.Fatal("job lost or duplicated")
++				}
++			}
++			if peak.Load() != 20 {
++				t.Fatalf("unexpected peak: %d", peak.Load())
++			}
++			if next := m.collectCycleTargets(); len(next) != count {
++				t.Fatalf("failed nodes stranded: %d/%d", len(next), count)
++			}
++			t.Logf("PASS: %d/%d results, exactly one attempt per node, peak=%d, elapsed=%s", count, count, peak.Load(), time.Since(start))
++		})
++	}
++}
++
++func TestProxyYouManualPriorityPromotesOriginalCycleJob(t *testing.T) {
++	m := newQueueTestMonitor(t, 3, 0)
++	results := make(chan testOutcome, 3)
++	tasks := make([]*testTask, 3)
++	for i, tag := range m.outboundOrder {
++		tasks[i] = &testTask{outboundTag: tag, cycleID: 1, resultCh: results}
++		if !m.enqueueTask(tasks[i]) {
++			t.Fatal("task rejected")
++		}
++	}
++	urgent := m.outboundOrder[2]
++	for i := 0; i < 100; i++ {
++		m.enqueueTask(&testTask{outboundTag: urgent, priority: true})
++	}
++	if got := m.taskQueue().pop(); got != tasks[2] {
++		t.Fatal("manual priority lost the original task or its collector")
++	} else {
++		m.executeTask(got)
++	}
++	for _, index := range []int{0, 1} {
++		if got := m.taskQueue().pop(); got != tasks[index] {
++			t.Fatal("FIFO order changed")
++		} else {
++			m.executeTask(got)
++		}
++	}
++	if len(results) != 3 || m.taskQueue().pop() != nil {
++		t.Fatal("duplicate or missing cycle results")
++	}
++	for _, state := range m.outbounds {
++		if state.outbound.(*queueTestOutbound).calls.Load() != 1 {
++			t.Fatal("repeated manual ping started duplicate checks")
++		}
++	}
++}
++
++func TestProxyYouCycleZeroAndNestedGroupCheckAllLeavesOnce(t *testing.T) {
++	m := newQueueTestMonitor(t, 43, 0)
++	m.groups["select"] = &groupState{outbounds: map[string]struct{}{"nested": {}, "select": {}}}
++	m.groups["nested"] = &groupState{outbounds: make(map[string]struct{}, 44)}
++	for _, tag := range m.outboundOrder {
++		m.groups["nested"].outbounds[tag] = struct{}{}
++	}
++	m.groups["nested"].outbounds["select"] = struct{}{}
++	// testNow is also the path reached by TestNow after parent traversal.
++	if err := m.testNow("select", true); err != nil {
++		t.Fatal(err)
++	}
++	for range m.outboundOrder {
++		task := m.taskQueue().pop()
++		if task == nil {
++			t.Fatal("cycle zero lost a manual group check")
++		}
++		m.executeTask(task)
++	}
++	if m.taskQueue().pop() != nil {
++		t.Fatal("nested group enqueued duplicates")
++	}
++}
++
++func TestProxyYouStopCancelsLargeQueueAndReadinessRetry(t *testing.T) {
++	m := newQueueTestMonitor(t, 20000, 20)
++	gate, entered := make(chan struct{}), make(chan struct{}, 20)
++	for _, state := range m.outbounds {
++		out := state.outbound.(*queueTestOutbound)
++		out.gate, out.entered = gate, entered
++	}
++	done := make(chan []testOutcome, 1)
++	go func() { done <- m.runStage(1, m.collectCycleTargets()) }()
++	select {
++	case <-entered:
++	case <-time.After(5 * time.Second):
++		t.Fatal("scan did not start")
++	}
++	stopped := make(chan struct{})
++	go func() { m.Close(); close(stopped) }()
++	select {
++	case <-stopped:
++	case <-time.After(2 * time.Second):
++		t.Fatal("stop blocked behind ping queue")
++	}
++	select {
++	case <-done:
++	case <-time.After(time.Second):
++		t.Fatal("collector did not observe cancellation")
++	}
++	if m.enqueueTask(&testTask{outboundTag: m.outboundOrder[0]}) {
++		t.Fatal("stopped monitor accepted work")
++	}
++
++	retrying := newQueueTestMonitor(t, 1, 1)
++	retrying.outbounds[retrying.outboundOrder[0]].outbound.(*queueTestOutbound).ready.Store(false)
++	retried := make(chan []testOutcome, 1)
++	go func() { retried <- retrying.runStage(1, retrying.outboundOrder) }()
++	select {
++	case results := <-retried:
++		if len(results) != 1 || results[0].err == nil {
++			t.Fatal("not-ready job did not report its terminal result")
++		}
++	case <-time.After(time.Second):
++		t.Fatal("not-ready transport stranded collector")
++	}
++	start := time.Now()
++	retrying.Close()
++	if time.Since(start) > time.Second {
++		t.Fatal("stop waited for readiness retry timer")
++	}
++}
++
++func TestProxyYouQueueRejectionDoesNotReserveAndOldCompletionKeepsNewTask(t *testing.T) {
++	m := newQueueTestMonitor(t, 1, 0)
++	tag := m.outboundOrder[0]
++	task := &testTask{outboundTag: tag, cycleID: 0}
++	if !m.enqueueTask(task) {
++		t.Fatal("cycle zero rejected")
++	}
++	m.executeTask(m.taskQueue().pop())
++	next := &testTask{outboundTag: tag, cycleID: 1}
++	if !m.enqueueTask(next) {
++		t.Fatal("completed node could not be requeued")
++	}
++	m.applyResult(testOutcome{outboundTag: tag, history: adapter.URLTestHistory{Delay: 10, Time: time.Now()}})
++	state := m.outbounds[tag]
++	if state.pendingTask != next || !state.queued {
++		t.Fatal("old completion erased pending state")
++	}
++	m.Close()
++	if state.pendingTask != nil || state.queued || state.priorityQueued {
++		t.Fatal("stop stranded queued flags")
++	}
++
++	other := newQueueTestMonitor(t, 1, 0)
++	other.taskQueue().close()
++	if other.enqueueTask(&testTask{outboundTag: other.outboundOrder[0]}) {
++		t.Fatal("closed queue accepted a task")
++	}
++	state = other.outbounds[other.outboundOrder[0]]
++	if state.pendingTask != nil || state.queued || state.priorityQueued {
++		t.Fatal("rejected queue admission reserved a node")
++	}
++}
++
++func TestProxyYouIdleWorkerContinuesPastAnotherPartsSlowServer(t *testing.T) {
++	m := newQueueTestMonitor(t, 40, 2)
++	gate := make(chan struct{})
++	defer close(gate)
++	m.outbounds[m.outboundOrder[0]].outbound.(*queueTestOutbound).gate = gate
++	done := make(chan []testOutcome, 1)
++	go func() { done <- m.runStage(1, m.collectCycleTargets()) }()
++	deadline := time.NewTimer(time.Second)
++	defer deadline.Stop()
++	tick := time.NewTicker(time.Millisecond)
++	defer tick.Stop()
++	// Nodes 0 and 1 belong to the same part. The shared pool must reach node 1
++	// while node 0 is still blocked, rather than pinning a worker to this part.
++	for m.outbounds[m.outboundOrder[1]].outbound.(*queueTestOutbound).calls.Load() == 0 {
++		select {
++		case <-tick.C:
++		case <-deadline.C:
++			t.Fatal("an idle worker waited for another part's slow server")
++		}
++	}
++	m.Close()
++	select {
++	case <-done:
++	case <-time.After(time.Second):
++		t.Fatal("scan did not stop")
++	}
++}
++
++func TestProxyYouManualLargeGroupReservesEveryLeafAndCanceledPopIsReleased(t *testing.T) {
++	m := newQueueTestMonitor(t, 65734, 0)
++	m.groups["select"] = &groupState{outbounds: make(map[string]struct{}, len(m.outbounds))}
++	for _, tag := range m.outboundOrder {
++		m.groups["select"].outbounds[tag] = struct{}{}
++	}
++	start := time.Now()
++	if err := m.TestNow("select"); err != nil {
++		t.Fatal(err)
++	}
++	if got := m.taskQueue().normal.Len(); got != len(m.outbounds) {
++		t.Fatalf("manual request admitted only %d/%d nodes", got, len(m.outbounds))
++	}
++	t.Logf("PASS: manual group enqueued %d nodes in %s", len(m.outbounds), time.Since(start))
++	task := m.taskQueue().pop()
++	m.cancel()
++	m.executeTask(task)
++	state := m.outbounds[task.outboundTag]
++	if state.pendingTask != nil || state.queued || state.priorityQueued || state.testing {
++		t.Fatal("cancellation between pop and execution stranded a node")
++	}
++	m.Close()
++}
++
++func TestProxyYouNotReadyTransportRecoversWithoutStrandingCycle(t *testing.T) {
++	m := newQueueTestMonitor(t, 1, 1)
++	out := m.outbounds[m.outboundOrder[0]].outbound.(*queueTestOutbound)
++	out.ready.Store(false)
++	done := make(chan []testOutcome, 1)
++	go func() { done <- m.runStage(1, m.outboundOrder) }()
++	select {
++	case results := <-done:
++		if len(results) != 1 || results[0].err == nil {
++			t.Fatal("not-ready job stranded its cycle")
++		}
++	case <-time.After(time.Second):
++		t.Fatal("not-ready job did not finish its cycle")
++	}
++	out.ready.Store(true)
++	deadline := time.NewTimer(6 * time.Second)
++	defer deadline.Stop()
++	tick := time.NewTicker(10 * time.Millisecond)
++	defer tick.Stop()
++	for out.calls.Load() == 0 {
++		select {
++		case <-tick.C:
++		case <-deadline.C:
++			t.Fatal("ready transport never received the delayed retry")
++		}
++	}
++	if out.calls.Load() != 1 {
++		t.Fatal("readiness retry duplicated the probe")
++	}
++}
