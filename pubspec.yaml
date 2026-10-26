@@ -1,7 +1,22 @@
 name: hiddify
 description: Cross Platform Multi Protocol Proxy Frontend.
 publish_to: "none"
-version: 4.1.26+40126
+version: 4.1.27+40127
+
+# Flutter and the core must share one SQLite implementation in each process.
+# Independent copies cannot coordinate POSIX locks and WAL lifetimes.
+hooks:
+  user_defines:
+    sqlite3:
+      source:
+        android: system
+        macos: system
+        windows: system
+        default: sqlite3
+      name:
+        android: hiddify-core
+        macos: "@rpath/hiddify-core.dylib"
+        windows: hiddify-core
 
 environment:
   sdk: ^3.13.5
@@ -37,9 +52,11 @@ dependencies:
   rxdart: ^0.28.0
   drift: ^2.35.2
   drift_flutter: ^0.3.1
+  sqlite3: ^3.7.1
   shared_preferences: ^2.5.2
   # shared_preferences_android: ^2.4.8
   crypto: ^3.0.6
+  collection: ^1.19.1
   dio: ^5.4.1
   ffi: ^2.1.2
   path_provider: ^2.1.1

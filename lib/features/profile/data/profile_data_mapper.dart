@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:drift/drift.dart';
 import 'package:hiddify/core/db/db.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
@@ -14,8 +12,14 @@ extension ProfileEntityMapper on ProfileEntity {
       url: Value(rp.url),
       lastUpdate: rp.lastUpdate,
       updateInterval: Value(rp.options?.updateInterval),
-      populatedHeaders: Value(jsonEncode(rp.populatedHeaders)),
-      userOverride: Value(rp.userOverride?.toStr()),
+      populatedHeaders: const Value(null),
+      userOverride: const Value(null),
+      overrideVersion: Value(rp.userOverride?.version),
+      overrideName: Value(rp.userOverride?.name),
+      overrideAutoUpdateDisable: Value(rp.userOverride?.isAutoUpdateDisable),
+      overrideUpdateInterval: Value(rp.userOverride?.updateInterval),
+      overrideExtraSecurity: Value(rp.userOverride?.extraSecurity),
+      overrideFragment: Value(rp.userOverride?.enableFragment),
       upload: Value(rp.subInfo?.upload),
       download: Value(rp.subInfo?.download),
       total: Value(rp.subInfo?.total),
@@ -30,8 +34,14 @@ extension ProfileEntityMapper on ProfileEntity {
       active: lp.active,
       name: lp.name,
       lastUpdate: lp.lastUpdate,
-      populatedHeaders: Value(jsonEncode(lp.populatedHeaders)),
-      userOverride: Value(lp.userOverride?.toStr()),
+      populatedHeaders: const Value(null),
+      userOverride: const Value(null),
+      overrideVersion: Value(lp.userOverride?.version),
+      overrideName: Value(lp.userOverride?.name),
+      overrideAutoUpdateDisable: Value(lp.userOverride?.isAutoUpdateDisable),
+      overrideUpdateInterval: Value(lp.userOverride?.updateInterval),
+      overrideExtraSecurity: Value(lp.userOverride?.extraSecurity),
+      overrideFragment: Value(lp.userOverride?.enableFragment),
       pinned: Value(lp.pinned),
     ),
   );
@@ -43,8 +53,14 @@ extension ProfileEntityMapper on ProfileEntity {
       name: Value(rp.name),
       lastUpdate: Value(rp.lastUpdate),
       updateInterval: Value(rp.options?.updateInterval),
-      populatedHeaders: Value(jsonEncode(rp.populatedHeaders)),
-      userOverride: Value(rp.userOverride?.toStr()),
+      populatedHeaders: const Value(null),
+      userOverride: const Value(null),
+      overrideVersion: Value(rp.userOverride?.version),
+      overrideName: Value(rp.userOverride?.name),
+      overrideAutoUpdateDisable: Value(rp.userOverride?.isAutoUpdateDisable),
+      overrideUpdateInterval: Value(rp.userOverride?.updateInterval),
+      overrideExtraSecurity: Value(rp.userOverride?.extraSecurity),
+      overrideFragment: Value(rp.userOverride?.enableFragment),
       upload: Value(rp.subInfo?.upload),
       download: Value(rp.subInfo?.download),
       total: Value(rp.subInfo?.total),
@@ -55,14 +71,20 @@ extension ProfileEntityMapper on ProfileEntity {
     local: (lp) => ProfileEntriesCompanion(
       name: Value(lp.name),
       lastUpdate: Value(lp.lastUpdate),
-      populatedHeaders: Value(jsonEncode(lp.populatedHeaders)),
-      userOverride: Value(lp.userOverride?.toStr()),
+      populatedHeaders: const Value(null),
+      userOverride: const Value(null),
+      overrideVersion: Value(lp.userOverride?.version),
+      overrideName: Value(lp.userOverride?.name),
+      overrideAutoUpdateDisable: Value(lp.userOverride?.isAutoUpdateDisable),
+      overrideUpdateInterval: Value(lp.userOverride?.updateInterval),
+      overrideExtraSecurity: Value(lp.userOverride?.extraSecurity),
+      overrideFragment: Value(lp.userOverride?.enableFragment),
     ),
   );
 }
 
 extension ProfileEntryMapper on ProfileEntry {
-  ProfileEntity toEntity() {
+  ProfileEntity toEntity({Map<String, dynamic>? headers}) {
     ProfileOptions? options;
     if (updateInterval != null) {
       options = ProfileOptions(updateInterval: updateInterval!);
@@ -72,12 +94,16 @@ extension ProfileEntryMapper on ProfileEntry {
     if (upload != null && download != null && total != null && expire != null) {
       subInfo = SubscriptionInfo(upload: upload!, download: download!, total: total!, expire: expire!);
     }
-    Map<String, dynamic>? mPopulatedHeaders;
-
-    if (populatedHeaders != null) {
-      final m = jsonDecode(populatedHeaders!) as Map;
-      mPopulatedHeaders = m.cast<String, dynamic>();
-    }
+    final override = overrideVersion == null
+        ? null
+        : UserOverride(
+            version: overrideVersion!,
+            name: overrideName,
+            isAutoUpdateDisable: overrideAutoUpdateDisable ?? true,
+            updateInterval: overrideUpdateInterval,
+            extraSecurity: overrideExtraSecurity,
+            enableFragment: overrideFragment,
+          );
 
     return switch (type) {
       ProfileType.remote => RemoteProfileEntity(
@@ -90,8 +116,8 @@ extension ProfileEntryMapper on ProfileEntry {
         subInfo: subInfo,
         webPageUrl: webPageUrl,
         supportUrl: supportUrl,
-        populatedHeaders: mPopulatedHeaders,
-        userOverride: UserOverride.fromStr(userOverride),
+        populatedHeaders: headers,
+        userOverride: override,
         pinned: pinned,
       ),
       ProfileType.local => LocalProfileEntity(
@@ -99,8 +125,8 @@ extension ProfileEntryMapper on ProfileEntry {
         active: active,
         name: name,
         lastUpdate: lastUpdate,
-        populatedHeaders: mPopulatedHeaders,
-        userOverride: UserOverride.fromStr(userOverride),
+        populatedHeaders: headers,
+        userOverride: override,
         pinned: pinned,
       ),
     };

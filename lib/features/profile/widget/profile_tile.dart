@@ -393,10 +393,6 @@ class ProfileActionsMenu extends HookConsumerWidget {
               },
             ),
           ],
-          AdaptiveMenuItem(
-            title: t.pages.profiles.share.jsonToClipboard,
-            onTap: () async => await ref.read(profilesNotifierProvider.notifier).exportConfigToClipboard(profile),
-          ),
         ],
       ),
       AdaptiveMenuItem(

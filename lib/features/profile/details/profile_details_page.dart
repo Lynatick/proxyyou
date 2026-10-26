@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/model/failures.dart';
-import 'package:hiddify/features/profile/details/json_editor.dart';
 import 'package:hiddify/features/profile/details/profile_details_notifier.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/utils/utils.dart';
@@ -243,37 +240,6 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
                       ],
                     ),
                   ),
-                  if (data.profile is LocalProfileEntity)
-                    SizedBox(
-                      height: MediaQuery.of(context).size.height * 0.7,
-                      child: isJson(data.configContent)
-                          ? JsonEditor(
-                              expandedObjects: const ["outbounds", "endpoints"],
-                              onChanged: (value) {
-                                if (value == null) return;
-                                try {
-                                  const encoder = JsonEncoder.withIndent('  ');
-                                  ref.read(provider.notifier).setContent(encoder.convert(value));
-                                } catch (e) {
-                                  ref.read(provider.notifier).setContent("$value");
-                                }
-                              },
-                              enableHorizontalScroll: true,
-                              json: data.configContent,
-                            )
-                          : TextFormField(
-                              onChanged: (value) {
-                                ref.read(provider.notifier).setContent(value);
-                              },
-                              maxLines: null,
-                              expands: true,
-                              textAlignVertical: TextAlignVertical.top,
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.only(left: 5, top: 8, bottom: 8),
-                              ),
-                            ),
-                    ),
                 ],
               ),
             );
@@ -306,14 +272,5 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
         TextSpan(text: text),
       ],
     );
-  }
-}
-
-bool isJson(String value) {
-  try {
-    jsonDecode(value);
-    return true;
-  } catch (_) {
-    return false;
   }
 }

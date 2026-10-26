@@ -51,7 +51,7 @@ class TestProfiles implements ProfileRepository {
 }
 
 void main() {
-  test('opening subscription reads metadata only; saving preserves every raw config field', () async {
+  test('editing subscription metadata never reads or rewrites configuration contents', () async {
     final repo = TestProfiles();
     final container = ProviderContainer(
       overrides: [
@@ -70,8 +70,8 @@ void main() {
     expect(repo.reads, 0);
     container.read(provider.notifier).setUserOverride(const UserOverride(name: 'Новое имя'));
     expect(await container.read(provider.notifier).save(), isTrue);
-    expect(repo.reads, 1);
-    expect(repo.saved, repo.raw);
+    expect(repo.reads, 0);
+    expect(repo.saved, '');
   });
   testWidgets('subscription form hides the config editor and disables refresh by default', (tester) async {
     final repo = TestProfiles();

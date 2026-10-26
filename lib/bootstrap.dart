@@ -21,6 +21,7 @@ import 'package:hiddify/features/chain/notifier/chain_profile_notifier.dart';
 
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/log/data/log_data_providers.dart';
+import 'package:hiddify/features/log/model/log_level.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
@@ -106,7 +107,10 @@ Future<void> _bootstrap(Environment env) async {
 
   // The log level decides this now. There is no second debug switch to keep in
   // sync, and the core reaches the same conclusion from the same value.
-  final debug = kDebugMode || container.read(ConfigOptions.logLevel).isVerbose;
+  final debug = container.read(ConfigOptions.logLevel).isVerbose;
+  container.listen(ConfigOptions.logLevel, (previous, next) {
+    logSetEnabled(next != LogLevel.off);
+  }, fireImmediately: true);
 
   if (PlatformUtils.isDesktop) {
     await _init("window controller", () => container.read(windowNotifierProvider.future));

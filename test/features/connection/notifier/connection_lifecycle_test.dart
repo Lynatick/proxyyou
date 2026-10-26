@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/core/haptic/haptic_service.dart';
+import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/features/connection/data/connection_data_providers.dart';
 import 'package:hiddify/features/connection/data/connection_repository.dart';
@@ -35,6 +36,10 @@ class LifecycleRepository implements ConnectionRepository {
   final actions = <String>[];
   void Function()? onStarted;
   void Function()? onConnecting;
+  bool failReconnect = false;
+
+  @override
+  bool get coreIsRunning => statuses.value.isConnected;
 
   @override
   SingboxConfigOption? get configOptionsSnapshot => null;
@@ -64,8 +69,9 @@ class LifecycleRepository implements ConnectionRepository {
   });
 
   @override
-  TaskEither<ConnectionFailure, Unit> reconnect(ProfileEntity profile, bool disableMemoryLimit) =>
-      disconnect().flatMap((_) => connect(profile, disableMemoryLimit));
+  TaskEither<ConnectionFailure, Unit> reconnect(ProfileEntity profile, bool disableMemoryLimit) => failReconnect
+      ? TaskEither.left(const ConnectionFailure.unexpected('reload failed'))
+      : disconnect().flatMap((_) => connect(profile, disableMemoryLimit));
 }
 
 void main() {
@@ -78,6 +84,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           sharedPreferencesProvider.overrideWith((ref) => Future.value(preferences)),
+          translationsProvider.overrideWith((ref) => AppLocale.ru.build()),
           connectionRepositoryProvider.overrideWithValue(repository),
           activeProfileProvider.overrideWith(LifecycleProfile.new),
           hapticServiceProvider.overrideWith(NoHaptics.new),
@@ -88,6 +95,7 @@ void main() {
         await repository.statuses.close();
       });
       await container.read(sharedPreferencesProvider.future);
+      await container.read(translationsProvider.future);
       final profileSubscription = container.listen(activeProfileProvider, (_, next) {});
       addTearDown(profileSubscription.close);
       await container.read(activeProfileProvider.future).timeout(const Duration(seconds: 2));
@@ -103,6 +111,13 @@ void main() {
         await notifier.toggleConnection().timeout(const Duration(seconds: 2));
         await container.pump();
         expect(await container.read(connectionNotifierProvider.future), const Connected());
+        if (cycle == 0) {
+          repository.failReconnect = true;
+          await notifier.reconnect(await container.read(activeProfileProvider.future));
+          await container.pump();
+          expect(container.read(connectionNotifierProvider).value, const Connected());
+          repository.failReconnect = false;
+        }
         await notifier.toggleConnection().timeout(const Duration(seconds: 2));
         await container.pump();
         expect(await container.read(connectionNotifierProvider.future), const Disconnected());

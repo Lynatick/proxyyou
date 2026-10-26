@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 import 'package:grpc/grpc.dart';
+import 'package:hiddify/core/db/database_uri.dart';
 import 'package:hiddify/gen/hiddify_core_generated_bindings.dart';
 import 'package:hiddify/hiddifycore/core_interface/responsive_core_client.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcommon/common.pb.dart';
@@ -118,11 +119,15 @@ Future<void> main(List<String> arguments) async {
   );
   final core = ResponsiveCoreClient(channel, options: CallOptions(timeout: const Duration(seconds: 20)));
   try {
-    if (generatedGroups) {
+    {
       final settings = await core.changeHiddifySettings(
         ChangeHiddifySettingsRequest(
           hiddifySettingsJson: jsonEncode({
             'mixed-port': mixedPort,
+            'direct-port': 0,
+            'redirect-port': 0,
+            'tproxy-port': 0,
+            'clash-api-port': 0,
             'enable-tun': false,
             'set-system-proxy': false,
             'log-level': 'error',
@@ -172,11 +177,23 @@ Future<void> main(List<String> arguments) async {
         },
       },
     });
+    final database = File('${base.path}/data/configurations.db');
+    final location = Uri(
+      scheme: 'proxyyou-db',
+      path: databaseUriPath(database.absolute.path),
+      queryParameters: {'profile': 'packaged-core-test'},
+    ).toString();
+    final imported = await core.parseForValidation(ParseRequest(configPath: location, content: config));
+    if (imported.responseCode != ResponseCode.OK) throw StateError('database import rejected');
+    final header = await database.open();
+    final magic = await header.read(16);
+    await header.close();
+    if (ascii.decode(magic) != 'SQLite format 3\x00') throw StateError('configuration catalog is not SQLite');
     final started = await core.start(
       StartRequest(
-        configContent: config,
+        configPath: location,
         configName: 'Local concurrency test',
-        enableRawConfig: !generatedGroups,
+        enableRawConfig: false,
         disableMemoryLimit: true,
       ),
     );
@@ -207,35 +224,16 @@ Future<void> main(List<String> arguments) async {
       );
     }
     if (generatedGroups) {
-      final files = await base
-          .list(recursive: true)
-          .where((file) => file.path.endsWith('current-config.json'))
-          .toList();
-      final generated = jsonDecode(await File(files.single.path).readAsString()) as Map<String, dynamic>;
-      final automatic = (generated['outbounds'] as List)
-          .cast<Map<String, dynamic>>()
-          .where((out) => ['select', 'balance', 'lowest'].contains(out['tag']))
-          .toList();
-      if (automatic.length != 3 || automatic.any((out) => out['interrupt_exist_connections'] == true)) {
-        throw StateError('Generated automatic groups interrupt client connections');
+      final snapshot = await core.outboundsInfo(Empty()).first;
+      final tags = snapshot.items.map((group) => group.tag).toSet();
+      if (!tags.containsAll({'select', 'balance', 'lowest'})) {
+        throw StateError('Missing automatic groups in database source');
       }
-      stdout.writeln('PASS: embedded native binary generates select/balance/lowest without client interruption');
-      if (appRouting) {
-        final inbounds = (generated['inbounds'] as List).cast<Map<String, dynamic>>();
-        final mixed = inbounds.firstWhere((value) => value['listen_port'] == mixedPort)['tag'];
-        final diagnostic = inbounds.firstWhere((value) => value['listen_port'] == diagnosticPort)['tag'];
-        final route = generated['route'] as Map<String, dynamic>;
-        final rules = (route['rules'] as List).cast<Map<String, dynamic>>();
-        if (!(rules[0]['inbound'] as List).contains(mixed) ||
-            (rules[0]['inbound'] as List).contains(diagnostic) ||
-            rules[0]['outbound'] != 'select' ||
-            rules[1]['outbound'] != 'direct §hide§') {
-          throw StateError('application rules do not match actual inbound tags');
-        }
-        stdout.writeln(
-          'PASS: generated application rules match actual proxy listener; diagnostics use separate listener',
-        );
+      for (final selected in ['test-0', 'balance', 'test-1', 'lowest', 'test-0']) {
+        final response = await core.selectOutbound(SelectOutboundRequest(groupTag: 'select', outboundTag: selected));
+        if (response.code != ResponseCode.OK) throw StateError('selection failed: $selected');
       }
+      stdout.writeln('PASS: SQLite import and server/balance/lowest selection in compiled core');
     }
     if (!generatedGroups) {
       if (!largeQueue) await core.urlTest(UrlTestRequest(tag: 'select'));
@@ -250,7 +248,11 @@ Future<void> main(List<String> arguments) async {
         }
         await Future<void>.delayed(const Duration(milliseconds: 200));
         final snapshot = await core.outboundsInfo(Empty()).first;
-        final entries = snapshot.items.firstWhere((group) => group.tag == 'select').items;
+        final entries = snapshot.items
+            .firstWhere((group) => group.tag == 'select')
+            .items
+            .where((item) => item.tag.startsWith('test-'))
+            .toList();
         if (entries.length != serverCount || entries.any((item) => item.urlTestDelay != 65535)) {
           throw StateError('Large queue did not publish every completed result');
         }

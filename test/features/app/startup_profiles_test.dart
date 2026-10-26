@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/bootstrap.dart';
-import 'package:hiddify/core/db/db.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/features/chain/model/chain_enum.dart';
 import 'package:hiddify/features/chain/notifier/chain_profile_notifier.dart';
@@ -17,10 +16,10 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class StartupProfileSource implements ProfileDataSource {
-  final profiles = StreamController<ProfileEntry?>();
+  final profiles = StreamController<ProfileEntity?>();
 
   @override
-  Stream<ProfileEntry?> watchActiveProfile() => profiles.stream;
+  Stream<ProfileEntity?> watchActiveProfile() => profiles.stream;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
@@ -78,14 +77,7 @@ void main() {
   test('startup completes for a selected profile and keeps following profile changes', () async {
     final ready = initializeStartupProfiles(container, timeout: const Duration(seconds: 1));
     source.profiles.add(
-      ProfileEntry(
-        id: 'selected',
-        type: ProfileType.local,
-        active: true,
-        name: 'Selected profile',
-        lastUpdate: DateTime(2026),
-        pinned: false,
-      ),
+      ProfileEntity.local(id: 'selected', active: true, name: 'Selected profile', lastUpdate: DateTime(2026)),
     );
     await ready;
 

@@ -100,7 +100,9 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
-# sqlite3 3 and other Dart packages provide their libraries as native assets.
+# SQLite is provided by hiddify-core.dll. Remove an old bundled copy on rebuild.
+install(CODE "file(REMOVE \"${INSTALL_BUNDLE_LIB_DIR}/sqlite3.dll\")" COMPONENT Runtime)
+# Other Dart packages may provide libraries as native assets.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:hiddify/core/logger/logger_setup.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 
 // Re-exported so every file that already imports this one also gets the short
@@ -23,7 +24,7 @@ class Logger {
     // FlutterError.onError defaults to presentError, which prints the full
     // formatted report. Assigning this handler replaced it, which is why
     // crashes used to arrive as one terse line. Keep the report in debug.
-    if (kDebugMode) {
+    if (kDebugMode && loggingEnabled) {
       FlutterError.presentError(details);
     }
 
@@ -36,11 +37,7 @@ class Logger {
     final library = details.library ?? 'unknown library';
     final context = details.context == null ? '' : ' ${details.context}';
 
-    app.error(
-      'Flutter error in $library$context: ${details.exceptionAsString()}',
-      details.exception,
-      details.stack,
-    );
+    app.error('Flutter error in $library$context: ${details.exceptionAsString()}', details.exception, details.stack);
   }
 
   /// Errors that never touched a widget — an unawaited future, a timer, a

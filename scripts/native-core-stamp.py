@@ -18,7 +18,17 @@ mode, name = sys.argv[1:]
 binary = Path(name)
 patch = Path(__file__).resolve().parent.parent / 'native-patches/connection-stability.patch'
 stamp = binary.with_name(binary.name + '.proxyyou.json')
-expected = {'binary_sha256': checksum(binary), 'stability_patch_sha256': checksum(patch)}
+project = patch.parent.parent
+sources = [project / 'native-patches/database-source.patch',
+           project / 'scripts/build-windows-core.sh',
+           *sorted((project / 'native').rglob('*'))]
+digest = hashlib.sha256()
+for source in sources:
+    if source.is_file():
+        digest.update(source.relative_to(project).as_posix().encode())
+        digest.update(bytes.fromhex(checksum(source)))
+expected = {'binary_sha256': checksum(binary), 'stability_patch_sha256': checksum(patch),
+            'database_source_sha256': digest.hexdigest()}
 if mode == 'write':
     stamp.write_text(json.dumps(expected, indent=2) + '\n')
 elif mode == 'verify':
