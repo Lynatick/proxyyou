@@ -224,6 +224,49 @@ func TestDatabaseLiveReloadPreservesConnections(t *testing.T) {
 	if !selector.SelectOutbound("server-a") {
 		t.Fatal("initial selection failed")
 	}
+	t.Run("cold automatic group still publishes selection", func(t *testing.T) {
+		monitor := monitoring.Get(static.Context())
+		automatic, _ := static.Box().Outbound().Outbound("balance")
+		if automatic.(adapter.OutboundGroup).Now() != "" {
+			t.Fatal("fixture should be a cold round-robin group")
+		}
+		if !selector.SelectOutbound("server-a") {
+			t.Fatal("manual selection failed")
+		}
+		observer, err := monitor.SubscribeGroup("")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer monitor.UnsubscribeGroup("", observer)
+		// Drain the preceding manual selection and health notifications.
+		quiet := time.NewTimer(500 * time.Millisecond)
+		defer quiet.Stop()
+	drain:
+		for {
+			select {
+			case <-observer:
+				quiet.Reset(500 * time.Millisecond)
+			case <-quiet.C:
+				break drain
+			}
+		}
+		for _, tag := range []string{"balance", "lowest"} {
+			if !selector.SelectOutbound(tag) {
+				t.Fatal("automatic selection failed", tag)
+			}
+			select {
+			case <-observer:
+				if selector.Now() != tag {
+					t.Fatal("selection snapshot is stale", selector.Now())
+				}
+			case <-time.After(time.Second):
+				t.Fatal("selection change was not published for empty group", tag)
+			}
+		}
+	})
+	if !selector.SelectOutbound("server-a") {
+		t.Fatal("restore manual selection")
+	}
 	dial := func(want byte) net.Conn {
 		t.Helper()
 		connection, dialErr := selector.DialContext(interrupt.ContextWithIsExternalConnection(ctx), "tcp", M.Socksaddr{Addr: netip.MustParseAddr("127.0.0.1"), Port: 22222})

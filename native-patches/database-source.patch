@@ -1390,6 +1390,19 @@
  		cacheFile := service.FromContext[adapter.CacheFile](s.ctx)
  		if cacheFile != nil {
  			err := cacheFile.StoreSelected(s.Tag(), tag)
+@@ -148,6 +173,12 @@
+ 	return true
+ }
+ func (s *Selector) pingSelected() {
++	monitor := monitoring.Get(s.ctx)
++	if monitor != nil {
++		// Publish the selected mode even when a cold/empty automatic group
++		// has no concrete server to ping. The UI listens to the global group.
++		monitor.SelectionChanged(s.Tag())
++	}
+ 	selected := s.selected.Load()
+ 	if selected == nil {
+ 		s.logger.Warn("no outbound selected")
 --- a/v2/config/builder.go
 +++ b/v2/config/builder.go
 @@ -4,6 +4,7 @@
