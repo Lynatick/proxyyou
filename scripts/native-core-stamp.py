@@ -19,7 +19,9 @@ binary = Path(name)
 patch = Path(__file__).resolve().parent.parent / 'native-patches/connection-stability.patch'
 stamp = binary.with_name(binary.name + '.proxyyou.json')
 project = patch.parent.parent
-sources = [project / 'native-patches/database-source.patch', *sorted((project / 'native').rglob('*'))]
+sources = [project / 'native-patches/database-source.patch',
+           project / 'scripts/build-windows-core.sh',
+           *sorted((project / 'native').rglob('*'))]
 digest = hashlib.sha256()
 for source in sources:
     if source.is_file():

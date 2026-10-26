@@ -18,7 +18,9 @@ out="$root/hiddify-core/windows-x64"
 mkdir -p "$out"
 tags=with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_awg,tfogo_checklinkname0,with_naive_outbound,with_conntrack,with_purego
 export GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC="$cc"
-go -C "$source_dir" build -trimpath -ldflags='-w -s -checklinkname=0 -buildid=' \
+# Dart's sqlite3 native asset resolves this DLL too. Export SQLite's C API so
+# both clients use the same connection/lock registry, as on macOS and Android.
+CGO_CFLAGS="${CGO_CFLAGS:-} -DSQLITE_API=__declspec(dllexport)" go -C "$source_dir" build -trimpath -ldflags='-w -s -checklinkname=0 -buildid=' \
   -tags="$tags" -buildmode=c-shared -o "$out/hiddify-core.dll" ./platform/desktop
 CGO_LDFLAGS="$out/hiddify-core.dll" go -C "$source_dir" build -trimpath \
   -ldflags='-w -s -checklinkname=0 -buildid=' -tags="$tags" -o "$out/HiddifyCli.exe" ./cmd/bydll

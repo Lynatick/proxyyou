@@ -3,11 +3,12 @@ $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
 $bundle = Join-Path (Get-Location) 'build/windows/x64/runner/Release'
 foreach ($file in @('ProxyYou.exe','hiddify-core.dll','libcronet.dll','HiddifyCli.exe',
-  'flutter_windows.dll','sqlite3.dll','msvcp140.dll','vcruntime140.dll','vcruntime140_1.dll','data/app.so','data/icudtl.dat','data/flutter_assets')) {
+  'flutter_windows.dll','msvcp140.dll','vcruntime140.dll','vcruntime140_1.dll','data/app.so','data/icudtl.dat','data/flutter_assets')) {
   if (!(Test-Path (Join-Path $bundle $file))) { throw "В сборке отсутствует $file" }
 }
 New-Item -ItemType Directory -Force 'out' | Out-Null
-foreach ($file in @('ProxyYou.exe','hiddify-core.dll','HiddifyCli.exe','libcronet.dll','flutter_windows.dll','sqlite3.dll')) {
+if (Test-Path (Join-Path $bundle 'sqlite3.dll')) { throw 'Обнаружена лишняя копия SQLite; очистите старую сборку.' }
+foreach ($file in @('ProxyYou.exe','hiddify-core.dll','HiddifyCli.exe','libcronet.dll','flutter_windows.dll')) {
   $reader = [System.IO.BinaryReader]::new([System.IO.File]::OpenRead((Join-Path $bundle $file)))
   try {
     $reader.BaseStream.Position = 0x3c

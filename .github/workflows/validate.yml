@@ -36,7 +36,15 @@ jobs:
       - name: Static analysis
         run: flutter analyze
       - name: Flutter tests
-        run: flutter test --concurrency=1
+        # These unit tests do not load the Go core. Give the native-asset loader
+        # a test-only SQLite provider; actual shared-core interop is tested on
+        # the local release cores, not claimed by this CI job.
+        run: |
+          mkdir -p "$RUNNER_TEMP/unit-sqlite"
+          ln -s /usr/lib/libsqlite3.dylib "$RUNNER_TEMP/unit-sqlite/hiddify-core.dylib"
+          # Invoke the snapshot directly: macOS strips DYLD_* when launching
+          # Flutter's /usr/bin/env shell entrypoint.
+          DYLD_LIBRARY_PATH="$RUNNER_TEMP/unit-sqlite" "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" "$FLUTTER_ROOT/bin/cache/flutter_tools.snapshot" test --concurrency=1
       - name: Video playback proof tests
         run: node --test test/playback/proof.test.cjs
       - name: Download page tests

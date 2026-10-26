@@ -104,16 +104,6 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	file, err := os.OpenFile(absolute, os.O_CREATE|os.O_RDWR, 0600)
-	if err != nil {
-		return nil, err
-	}
-	if err = file.Close(); err != nil {
-		return nil, err
-	}
-	if err = os.Chmod(absolute, 0600); err != nil {
-		return nil, err
-	}
 	u := databaseURL("file", absolute)
 	q := url.Values{"_journal_mode": {"WAL"}, "_foreign_keys": {"on"}, "_busy_timeout": {"5000"}, "_synchronous": {"FULL"}, "_txlock": {"immediate"}}
 	u.RawQuery = q.Encode()
@@ -122,6 +112,16 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(8)
+	// Never open/close the database with ordinary file APIs: POSIX close()
+	// releases locks held by other SQLite connections in this process.
+	if err = db.PingContext(ctx); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err = os.Chmod(absolute, 0600); err != nil {
+		db.Close()
+		return nil, err
+	}
 	s := &Store{DB: db, codec: ContextCodec(ctx), context: ctx}
 	if err = s.initialize(); err != nil {
 		db.Close()
