@@ -248,7 +248,11 @@ Future<void> main(List<String> arguments) async {
         }
         await Future<void>.delayed(const Duration(milliseconds: 200));
         final snapshot = await core.outboundsInfo(Empty()).first;
-        final entries = snapshot.items.firstWhere((group) => group.tag == 'select').items;
+        final entries = snapshot.items
+            .firstWhere((group) => group.tag == 'select')
+            .items
+            .where((item) => item.tag.startsWith('test-'))
+            .toList();
         if (entries.length != serverCount || entries.any((item) => item.urlTestDelay != 65535)) {
           throw StateError('Large queue did not publish every completed result');
         }
