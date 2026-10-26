@@ -124,7 +124,7 @@ Future<void> main(List<String> arguments) async {
         ChangeHiddifySettingsRequest(
           hiddifySettingsJson: jsonEncode({
             'mixed-port': mixedPort,
-            'local-dns-port': 0,
+            'direct-port': 0,
             'redirect-port': 0,
             'tproxy-port': 0,
             'clash-api-port': 0,
