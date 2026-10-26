@@ -19,6 +19,7 @@ import 'package:meta/meta.dart';
 
 abstract interface class ConnectionRepository {
   SingboxConfigOption? get configOptionsSnapshot;
+  bool get coreIsRunning;
 
   TaskEither<ConnectionFailure, Unit> setup();
   Stream<ConnectionStatus> watchConnectionStatus();
@@ -47,6 +48,9 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   SingboxConfigOption? _configOptionsSnapshot;
   @override
   SingboxConfigOption? get configOptionsSnapshot => _configOptionsSnapshot;
+
+  @override
+  bool get coreIsRunning => singbox.currentState is CoreStarted;
 
   bool _initialized = false;
 
@@ -82,7 +86,8 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   @override
   TaskEither<ConnectionFailure, Unit> connect(ProfileEntity activeProfile, bool disableMemoryLimit) => setup().flatMap(
     (_) => applyConfigOption(activeProfile).flatMap(
-      (_) => singbox.start(profilePathResolver.file(activeProfile.id).path, activeProfile.name, disableMemoryLimit),
+      (_) =>
+          singbox.start(profilePathResolver.databaseLocation(activeProfile.id), activeProfile.name, disableMemoryLimit),
       // .mapLeft(UnexpectedConnectionFailure.new),
     ),
   );
@@ -94,7 +99,7 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   TaskEither<ConnectionFailure, Unit> reconnect(ProfileEntity activeProfile, bool disableMemoryLimit) =>
       applyConfigOption(activeProfile).flatMap(
         (_) => singbox
-            .restart(profilePathResolver.file(activeProfile.id).path, activeProfile.name, disableMemoryLimit)
+            .restart(profilePathResolver.databaseLocation(activeProfile.id), activeProfile.name, disableMemoryLimit)
             .mapLeft(UnexpectedConnectionFailure.new),
       );
 

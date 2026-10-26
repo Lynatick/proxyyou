@@ -1,0 +1,2047 @@
+--- a/go.mod
++++ b/go.mod
+@@ -99,6 +99,7 @@
+ 	github.com/libp2p/go-reuseport v0.4.0 // indirect
+ 	github.com/mahsanet/dnstt v0.0.0-20260208072932-d75b50056612 // indirect
+ 	github.com/marusama/semaphore v0.0.0-20171214154724-565ffd8e868a // indirect
++	github.com/mattn/go-sqlite3 v1.14.52
+ 	github.com/mdlayher/netlink v1.7.3-0.20250113171957-fbb4dce95f42 // indirect
+ 	github.com/mdlayher/socket v0.5.1 // indirect
+ 	github.com/metacubex/utls v1.8.4 // indirect
+--- a/go.sum
++++ b/go.sum
+@@ -449,6 +449,8 @@
+ github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
+ github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
+ github.com/mattn/go-runewidth v0.0.2/go.mod h1:LwmH8dsx7+W8Uxz3IHJYH5QSwggIsqBzpuz5H//U1FU=
++github.com/mattn/go-sqlite3 v1.14.52 h1:wVbm2Qnf4OXkqhBTSPuCRZDRnxfbVrrmiCEroVdog8U=
++github.com/mattn/go-sqlite3 v1.14.52/go.mod h1:6JTjA44L93a0QCyJef5YvlPoKXntQPjzWv5gtm9sB6w=
+ github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
+ github.com/mdlayher/netlink v1.7.3-0.20250113171957-fbb4dce95f42 h1:A1Cq6Ysb0GM0tpKMbdCXCIfBclan4oHk1Jb+Hrejirg=
+ github.com/mdlayher/netlink v1.7.3-0.20250113171957-fbb4dce95f42/go.mod h1:BB4YCPDOzfy7FniQ/lxuYQ3dgmM2cZumHbK8RpTjN2o=
+--- a/hiddify-sing-box/adapter/endpoint/manager.go
++++ b/hiddify-sing-box/adapter/endpoint/manager.go
+@@ -7,9 +7,11 @@
+ 	"time"
+ 
+ 	"github.com/sagernet/sing-box/adapter"
++	"github.com/sagernet/sing-box/adapter/outbound"
+ 	"github.com/sagernet/sing-box/common/taskmonitor"
+ 	C "github.com/sagernet/sing-box/constant"
+ 	"github.com/sagernet/sing-box/log"
++	"github.com/sagernet/sing-box/option"
+ 	"github.com/sagernet/sing/common"
+ 	E "github.com/sagernet/sing/common/exceptions"
+ 	F "github.com/sagernet/sing/common/format"
+@@ -18,18 +20,21 @@
+ var _ adapter.EndpointManager = (*Manager)(nil)
+ 
+ type Manager struct {
+-	logger        log.ContextLogger
+-	registry      adapter.EndpointRegistry
+-	access        sync.Mutex
+-	started       bool
+-	stage         adapter.StartStage
+-	endpoints     []adapter.Endpoint
+-	endpointByTag map[string]adapter.Endpoint
++	databasePool    *outbound.DatabasePool
++	databaseRetired []*outbound.Deferred
++	logger          log.ContextLogger
++	registry        adapter.EndpointRegistry
++	access          sync.Mutex
++	started         bool
++	stage           adapter.StartStage
++	endpoints       []adapter.Endpoint
++	endpointByTag   map[string]adapter.Endpoint
+ }
+ 
+ func NewManager(logger log.ContextLogger, registry adapter.EndpointRegistry) *Manager {
+ 	return &Manager{
+ 		logger:        logger,
++		databasePool:  outbound.NewDatabasePool(32),
+ 		registry:      registry,
+ 		endpointByTag: make(map[string]adapter.Endpoint),
+ 	}
+@@ -69,7 +74,11 @@
+ 		return nil
+ 	}
+ 	m.started = false
+-	endpoints := m.endpoints
++	endpoints := append([]adapter.Endpoint(nil), m.endpoints...)
++	for _, retired := range m.databaseRetired {
++		endpoints = append(endpoints, retired)
++	}
++	m.databaseRetired = nil
+ 	m.endpoints = nil
+ 	monitor := taskmonitor.New(m.logger, C.StopTimeout)
+ 	var err error
+@@ -90,7 +99,7 @@
+ func (m *Manager) Endpoints() []adapter.Endpoint {
+ 	m.access.Lock()
+ 	defer m.access.Unlock()
+-	return m.endpoints
++	return append([]adapter.Endpoint(nil), m.endpoints...)
+ }
+ 
+ func (m *Manager) Get(tag string) (adapter.Endpoint, bool) {
+@@ -124,12 +133,26 @@
+ }
+ 
+ func (m *Manager) Create(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, outboundType string, options any) error {
+-	endpoint, err := m.registry.Create(ctx, router, logger, tag, outboundType, options)
++	var endpoint adapter.Endpoint
++	var err error
++	if deferred, ok := options.(*option.DeferredOutboundOptions); ok {
++		endpoint = outbound.NewDeferred(ctx, outboundType, tag, deferred, m.databasePool, func(lifetime context.Context, parameters any) (adapter.Outbound, error) {
++			return m.registry.Create(lifetime, router, logger, tag, outboundType, parameters)
++		})
++	} else {
++		endpoint, err = m.registry.Create(ctx, router, logger, tag, outboundType, options)
++	}
+ 	if err != nil {
+ 		return err
+ 	}
++	var retireDatabaseAfterUnlock *outbound.Deferred
+ 	m.access.Lock()
+-	defer m.access.Unlock()
++	defer func() {
++		m.access.Unlock()
++		if retireDatabaseAfterUnlock != nil {
++			retireDatabaseAfterUnlock.Retire()
++		}
++	}()
+ 	if m.started {
+ 		name := "endpoint/" + endpoint.Type() + "[" + endpoint.Tag() + "]"
+ 		for _, stage := range adapter.ListStartStages {
+@@ -144,7 +167,13 @@
+ 	}
+ 	if existsEndpoint, loaded := m.endpointByTag[tag]; loaded {
+ 		if m.started {
+-			err = existsEndpoint.Close()
++			if deferred, ok := existsEndpoint.(*outbound.Deferred); ok {
++				m.databaseRetired = append(m.databaseRetired, deferred)
++				retireDatabaseAfterUnlock = deferred
++				err = nil
++			} else {
++				err = existsEndpoint.Close()
++			}
+ 			if err != nil {
+ 				return E.Cause(err, "close endpoint/", existsEndpoint.Type(), "[", existsEndpoint.Tag(), "]")
+ 			}
+--- a/hiddify-sing-box/adapter/outbound/manager.go
++++ b/hiddify-sing-box/adapter/outbound/manager.go
+@@ -22,6 +22,8 @@
+ var _ adapter.OutboundManager = (*Manager)(nil)
+ 
+ type Manager struct {
++	databasePool            *DatabasePool
++	databaseRetired         []*Deferred
+ 	logger                  log.ContextLogger
+ 	registry                adapter.OutboundRegistry
+ 	endpoint                adapter.EndpointManager
+@@ -39,6 +41,7 @@
+ func NewManager(logger logger.ContextLogger, registry adapter.OutboundRegistry, endpoint adapter.EndpointManager, defaultTag string) *Manager {
+ 	return &Manager{
+ 		logger:        logger,
++		databasePool:  NewDatabasePool(128),
+ 		registry:      registry,
+ 		endpoint:      endpoint,
+ 		defaultTag:    defaultTag,
+@@ -179,7 +182,11 @@
+ 		return nil
+ 	}
+ 	m.started = false
+-	outbounds := m.outbounds
++	outbounds := append([]adapter.Outbound(nil), m.outbounds...)
++	for _, retired := range m.databaseRetired {
++		outbounds = append(outbounds, retired)
++	}
++	m.databaseRetired = nil
+ 	m.outbounds = nil
+ 	m.access.Unlock()
+ 	var err error
+@@ -202,7 +209,7 @@
+ func (m *Manager) Outbounds() []adapter.Outbound {
+ 	m.access.RLock()
+ 	defer m.access.RUnlock()
+-	return m.outbounds
++	return append([]adapter.Outbound(nil), m.outbounds...)
+ }
+ 
+ func (m *Manager) Outbound(tag string) (adapter.Outbound, bool) {
+@@ -269,7 +276,15 @@
+ 	if tag == "" {
+ 		return os.ErrInvalid
+ 	}
+-	outbound, err := m.registry.CreateOutbound(ctx, router, logger, tag, inboundType, options)
++	var outbound adapter.Outbound
++	var err error
++	if deferred, ok := options.(*option.DeferredOutboundOptions); ok {
++		outbound = NewDeferred(ctx, inboundType, tag, deferred, m.databasePool, func(lifetime context.Context, parameters any) (adapter.Outbound, error) {
++			return m.registry.CreateOutbound(lifetime, router, logger, tag, inboundType, parameters)
++		})
++	} else {
++		outbound, err = m.registry.CreateOutbound(ctx, router, logger, tag, inboundType, options)
++	}
+ 	if err != nil { // hiddify fallback to invalid config
+ 		err2 := E.New("parse outbound[", tag, "] error: ", err)
+ 		m.logger.Error(err2)
+@@ -294,11 +309,23 @@
+ 			m.logger.Trace(stage, " ", name, " completed (", F.Seconds(time.Since(startTime).Seconds()), "s)")
+ 		}
+ 	}
++	var retireDatabaseAfterUnlock *Deferred
+ 	m.access.Lock()
+-	defer m.access.Unlock()
++	defer func() {
++		m.access.Unlock()
++		if retireDatabaseAfterUnlock != nil {
++			retireDatabaseAfterUnlock.Retire()
++		}
++	}()
+ 	if existsOutbound, loaded := m.outboundByTag[tag]; loaded {
+ 		if m.started {
+-			err = common.Close(existsOutbound)
++			if deferred, ok := existsOutbound.(*Deferred); ok {
++				m.databaseRetired = append(m.databaseRetired, deferred)
++				retireDatabaseAfterUnlock = deferred
++				err = nil
++			} else {
++				err = common.Close(existsOutbound)
++			}
+ 			if err != nil {
+ 				return E.Cause(err, "close outbound/", existsOutbound.Type(), "[", existsOutbound.Tag(), "]")
+ 			}
+--- a/hiddify-sing-box/box.go
++++ b/hiddify-sing-box/box.go
+@@ -6,6 +6,7 @@
+ 	"io"
+ 	"os"
+ 	"runtime/debug"
++	"sync"
+ 	"time"
+ 
+ 	"github.com/sagernet/sing-box/adapter"
+@@ -40,20 +41,26 @@
+ var _ adapter.SimpleLifecycle = (*Box)(nil)
+ 
+ type Box struct {
+-	createdAt       time.Time
+-	logFactory      log.Factory
+-	logger          log.ContextLogger
+-	network         *route.NetworkManager
+-	endpoint        *endpoint.Manager
+-	inbound         *inbound.Manager
+-	outbound        *outbound.Manager
+-	service         *boxService.Manager
+-	dnsTransport    *dns.TransportManager
+-	dnsRouter       *dns.Router
+-	connection      *route.ConnectionManager
+-	router          *route.Router
+-	internalService []adapter.LifecycleService
+-	done            chan struct{}
++	databaseMu       sync.RWMutex
++	databaseSource   *option.DatabaseSourceOptions
++	databaseClose    func() error
++	databaseActivate func() error
++	databaseUsage    func() map[string][2]int64
++	databaseUsageWG  sync.WaitGroup
++	createdAt        time.Time
++	logFactory       log.Factory
++	logger           log.ContextLogger
++	network          *route.NetworkManager
++	endpoint         *endpoint.Manager
++	inbound          *inbound.Manager
++	outbound         *outbound.Manager
++	service          *boxService.Manager
++	dnsTransport     *dns.TransportManager
++	dnsRouter        *dns.Router
++	connection       *route.ConnectionManager
++	router           *route.Router
++	internalService  []adapter.LifecycleService
++	done             chan struct{}
+ }
+ 
+ type Options struct {
+@@ -411,6 +418,25 @@
+ 		internalServices = append(internalServices, adapter.NewLifecycleService(ntpService, "ntp service"))
+ 	}
+ 	return &Box{
++		databaseSource: options.DatabaseSource,
++		databaseUsage: func() func() map[string][2]int64 {
++			if server, ok := service.FromContext[adapter.ClashServer](ctx).(interface{ DatabaseUsage() map[string][2]int64 }); ok {
++				return server.DatabaseUsage
++			}
++			return nil
++		}(),
++		databaseClose: func() func() error {
++			if options.DatabaseSource != nil {
++				return options.DatabaseSource.Close
++			}
++			return nil
++		}(),
++		databaseActivate: func() func() error {
++			if options.DatabaseSource != nil {
++				return options.DatabaseSource.Activate
++			}
++			return nil
++		}(),
+ 		network:         networkManager,
+ 		endpoint:        endpointManager,
+ 		inbound:         inboundManager,
+@@ -448,6 +474,11 @@
+ }
+ 
+ func (s *Box) Start() error {
++	if s.databaseActivate != nil {
++		if err := s.databaseActivate(); err != nil {
++			return err
++		}
++	}
+ 	err := s.start()
+ 	if err != nil {
+ 		// TODO: remove catch error
+@@ -462,6 +493,10 @@
+ 		s.Close()
+ 		return err
+ 	}
++	if s.DatabaseSource() != nil {
++		s.databaseUsageWG.Add(1)
++		go s.databaseUsageLoop()
++	}
+ 	s.logger.Info("sing-box started (", F.Seconds(time.Since(s.createdAt).Seconds()), "s)")
+ 	return nil
+ }
+@@ -528,6 +563,7 @@
+ 	default:
+ 		close(s.done)
+ 	}
++	s.databaseUsageWG.Wait()
+ 	closeTimeout := time.Second * 10
+ 	var err error
+ 	for _, closeItem := range []struct {
+@@ -555,6 +591,9 @@
+ 			return E.Cause(err, "close ", lifecycleService.Name())
+ 		})
+ 	}
++	if s.databaseClose != nil {
++		err = E.Append(err, s.databaseClose(), func(err error) error { return E.Cause(err, "close configuration database") })
++	}
+ 	cerr := s.closeWithTimeout("logger", closeTimeout, s.logFactory.Close)
+ 	err = E.Append(err, cerr, func(err error) error {
+ 		return E.Cause(err, "close logger")
+--- a/hiddify-sing-box/common/conntrack/conn.go
++++ b/hiddify-sing-box/common/conntrack/conn.go
+@@ -30,14 +30,12 @@
+ }
+ 
+ func (c *Conn) Close() error {
++	connAccess.Lock()
+ 	if c.element.Value != nil {
+-		connAccess.Lock()
+-		if c.element.Value != nil {
+-			openConnection.Remove(c.element)
+-			c.element.Value = nil
+-		}
+-		connAccess.Unlock()
++		openConnection.Remove(c.element)
++		c.element.Value = nil
+ 	}
++	connAccess.Unlock()
+ 	return c.Conn.Close()
+ }
+ 
+--- a/hiddify-sing-box/common/conntrack/packet_conn.go
++++ b/hiddify-sing-box/common/conntrack/packet_conn.go
+@@ -31,14 +31,12 @@
+ }
+ 
+ func (c *PacketConn) Close() error {
++	connAccess.Lock()
+ 	if c.element.Value != nil {
+-		connAccess.Lock()
+-		if c.element.Value != nil {
+-			openConnection.Remove(c.element)
+-			c.element.Value = nil
+-		}
+-		connAccess.Unlock()
++		openConnection.Remove(c.element)
++		c.element.Value = nil
+ 	}
++	connAccess.Unlock()
+ 	return c.PacketConn.Close()
+ }
+ 
+--- a/hiddify-sing-box/common/monitoring/availability.go
++++ b/hiddify-sing-box/common/monitoring/availability.go
+@@ -59,7 +59,7 @@
+ }
+ 
+ func (m *OutboundMonitoring) AvailabilityFailed(tag string) bool {
+-	state := m.outbounds[tag]
++	state := m.state(tag)
+ 	if state == nil {
+ 		return false
+ 	}
+@@ -72,11 +72,11 @@
+ // another node, so its last-selected label is never accepted as a probe route.
+ func (m *OutboundMonitoring) CheckAvailability(parent context.Context, tag string) (AvailabilityReport, error) {
+ 	report := AvailabilityReport{Tag: tag, Reachable: true}
+-	state := m.outbounds[tag]
++	state := m.state(tag)
+ 	if state == nil {
+ 		return report, fmt.Errorf("outbound not registered")
+ 	}
+-	if _, group := m.groups[tag]; group {
++	if _, group := m.lookupGroup(tag); group {
+ 		return report, fmt.Errorf("availability requires a concrete outbound")
+ 	}
+ 	ctx, cancel := context.WithTimeout(parent, 12*time.Second)
+@@ -107,6 +107,8 @@
+ 			report.Reachable = false
+ 		}
+ 	}
++	m.sourceEpochMu.RLock()
++	defer m.sourceEpochMu.RUnlock()
+ 	// UI disposal, disconnect and network changes do not blacklist a server.
+ 	if parent.Err() != nil || m.ctx.Err() != nil || epoch != m.networkEpoch.Load() {
+ 		return report, context.Canceled
+@@ -123,6 +125,13 @@
+ 	if report.Reachable {
+ 		state.history.Delay = report.Delay()
+ 		state.from_cache = false
++	}
++	if m.database() != nil && m.database().Record != nil {
++		delay := state.history.Delay
++		if state.availabilityFailed {
++			delay = TimeoutDelay
++		}
++		m.database().Record(tag, delay, state.availabilityFailed, "", epoch, seq)
+ 	}
+ 	groups := append([]string(nil), state.groupTags...)
+ 	state.mu.Unlock()
+@@ -201,3 +210,5 @@
+ 	}
+ 	return result
+ }
++
++// database-catalog-snapshot-access
+--- a/hiddify-sing-box/common/monitoring/outbound_monitoring.go
++++ b/hiddify-sing-box/common/monitoring/outbound_monitoring.go
+@@ -54,6 +54,10 @@
+ 
+ // OutboundMonitoring orchestrates URL testing and traffic sampling for outbounds.
+ type OutboundMonitoring struct {
++	catalogMu        sync.RWMutex
++	databaseMu       sync.RWMutex
++	sourceEpochMu    sync.RWMutex
++	databaseSource   *option.DatabaseSourceOptions
+ 	endpointManager  adapter.EndpointManager
+ 	outboundManager  adapter.OutboundManager
+ 	logger           log.ContextLogger
+@@ -101,9 +105,14 @@
+ 
+ // InterfaceUpdated implements [adapter.InterfaceUpdateListener].
+ func (m *OutboundMonitoring) InterfaceUpdated() {
+-	m.networkEpoch.Add(1)
+-	for tag, state := range m.outbounds {
+-		if _, group := m.groups[tag]; group {
++	m.sourceEpochMu.Lock()
++	defer m.sourceEpochMu.Unlock()
++	epoch := m.networkEpoch.Add(1)
++	if m.database() != nil && m.database().NetworkChanged != nil {
++		m.database().NetworkChanged(epoch)
++	}
++	for tag, state := range m.statesSnapshot() {
++		if _, group := m.lookupGroup(tag); group {
+ 			continue
+ 		}
+ 		state.mu.Lock()
+@@ -111,8 +120,8 @@
+ 		state.invalid = true
+ 		state.mu.Unlock()
+ 	}
+-	groups := make([]string, 0, len(m.groups))
+-	for tag := range m.groups {
++	groups := make([]string, 0, m.groupsCount())
++	for tag := range m.groupsSnapshot() {
+ 		groups = append(groups, tag)
+ 	}
+ 	m.emitGroupEvent(groups)
+@@ -128,12 +137,12 @@
+ 
+ 	histories := make(map[string]*adapter.URLTestHistory)
+ 
+-	grp, ok := m.groups[groupTag]
++	grp, ok := m.lookupGroup(groupTag)
+ 	if !ok {
+ 		return histories
+ 	}
+-	//m.logger.Debug("collecting history for group ", groupTag, " with ", len(grp.outbounds), " outbounds")
+-	for outboundTag := range grp.outbounds {
++	//m.logger.Debug("collecting history for group ", groupTag, " with ", grp.memberCount(), " outbounds")
++	for outboundTag := range grp.membersSnapshot() {
+ 		histories[outboundTag] = m.getUrlTest(outboundTag)
+ 		// m.logger.Error("checking history for outbound ", outboundTag)
+ 
+@@ -142,12 +151,12 @@
+ }
+ 
+ func (m *OutboundMonitoring) getUrlTest(outboundTag string) *adapter.URLTestHistory {
+-	state, ok := m.outbounds[outboundTag]
++	state, ok := m.lookupState(outboundTag)
+ 	if !ok {
+ 		return nil
+ 	}
+ 
+-	if grp, ok := m.groups[outboundTag]; ok {
++	if grp, ok := m.lookupGroup(outboundTag); ok {
+ 		realtag := RealTag(state.outbound)
+ 		//m.logger.Debug("outbound ", outboundTag, " is a group, checking group ", grp.tag, " with real tag ", realtag)
+ 		if realtag != "" && realtag != outboundTag {
+@@ -169,13 +178,13 @@
+ }
+ 
+ func (m *OutboundMonitoring) getMinGroupOutboundHistory(groupTag string) *adapter.URLTestHistory {
+-	grp, ok := m.groups[groupTag]
++	grp, ok := m.lookupGroup(groupTag)
+ 	if !ok {
+ 		return nil
+ 	}
+ 	var minHis *adapter.URLTestHistory
+ 	var minHisFromCache *adapter.URLTestHistory
+-	for outboundTag := range grp.outbounds {
++	for outboundTag := range grp.membersSnapshot() {
+ 		his := m.getUrlTest(outboundTag)
+ 		if his == nil || his.Delay == 0 {
+ 			continue
+@@ -252,6 +261,7 @@
+ 
+ 	ctx, cancel := context.WithCancel(ctx)
+ 	m := &OutboundMonitoring{
++		databaseSource:  options.DatabaseSource,
+ 		ctx:             ctx,
+ 		cancel:          cancel,
+ 		urls:            cloned,
+@@ -284,7 +294,7 @@
+ 
+ 		for _, outbound := range m.outboundManager.Outbounds() {
+ 			// if _, ok := outbound.(adapter.OutboundGroup); !ok {
+-			if _, exists := m.outbounds[outbound.Tag()]; !exists {
++			if _, exists := m.lookupState(outbound.Tag()); !exists {
+ 				m.outboundOrder = append(m.outboundOrder, outbound.Tag())
+ 			}
+ 			m.outbounds[outbound.Tag()] = &outboundState{groupTags: []string{}, invalid: true, outbound: outbound, dependencies: outbound.Dependencies()}
+@@ -293,51 +303,51 @@
+ 		}
+ 		for _, outbound := range m.endpointManager.Endpoints() {
+ 			// if _, ok := outbound.(adapter.OutboundGroup); !ok {
+-			if _, exists := m.outbounds[outbound.Tag()]; !exists {
++			if _, exists := m.lookupState(outbound.Tag()); !exists {
+ 				m.outboundOrder = append(m.outboundOrder, outbound.Tag())
+ 			}
+ 			m.outbounds[outbound.Tag()] = &outboundState{groupTags: []string{}, invalid: true, outbound: outbound, dependencies: outbound.Dependencies()}
+ 			// }
+ 			//m.logger.Info("registered outbound for monitoring: ", outbound.Tag())
+ 		}
+-		for tag, outbound := range m.outbounds {
++		for tag, outbound := range m.statesSnapshot() {
+ 			for _, dep := range outbound.dependencies {
+-				m.outbounds[dep].dependenciesInverse = append(m.outbounds[dep].dependenciesInverse, tag)
+-			}
+-		}
+-
+-		m.logger.Info("registered ", len(m.outbounds), " outbounds for monitoring")
++				m.state(dep).dependenciesInverse = append(m.state(dep).dependenciesInverse, tag)
++			}
++		}
++
++		m.logger.Info("registered ", m.statesCount(), " outbounds for monitoring")
+ 		grp := m.makeGroup("")
+-		for tag := range m.outbounds {
++		for tag := range m.statesSnapshot() {
+ 			grp.outbounds[tag] = struct{}{}
+-			m.outbounds[tag].groupTags = append(m.outbounds[tag].groupTags, "")
++			m.state(tag).groupTags = append(m.state(tag).groupTags, "")
+ 		}
+ 		for _, outbound := range m.outboundManager.Outbounds() {
+ 			if og, ok := outbound.(adapter.OutboundGroup); ok {
+ 				groupTag := og.Tag()
+ 				grp := m.makeGroup(groupTag)
+ 				for _, tag := range og.All() {
+-					if _, exists := m.outbounds[tag]; !exists {
++					if _, exists := m.lookupState(tag); !exists {
+ 						return errors.New("outbound monitoring: outbound not found: " + tag + " in group " + groupTag)
+ 					}
+ 					grp.outbounds[tag] = struct{}{}
+-					m.outbounds[tag].groupTags = append(m.outbounds[tag].groupTags, groupTag)
++					m.state(tag).groupTags = append(m.state(tag).groupTags, groupTag)
+ 				}
+ 
+ 				//m.logger.Info("registered outbound group for monitoring: ", groupTag, " with ", len(og.All()), " outbounds")
+ 
+ 			}
+ 		}
+-		m.logger.Info("registered ", len(m.groups), " outbound groups for monitoring")
++		m.logger.Info("registered ", m.groupsCount(), " outbound groups for monitoring")
+ 		m.loadHistory()
+ 	case adapter.StartStatePostStart:
+ 		for i := 0; i < m.workersCount; i++ {
+ 			m.workerWG.Add(1)
+ 			go m.workerLoop()
+ 		}
+-		for groupTag := range m.groups {
++		for groupTag := range m.groupsSnapshot() {
+ 			m.schedulerWG.Add(1)
+-			go m.groupNotifierLoop(m.groups[groupTag])
++			go m.groupNotifierLoop(m.group(groupTag))
+ 		}
+ 
+ 		m.started = true
+@@ -373,7 +383,7 @@
+ }
+ 
+ func (m *OutboundMonitoring) SignalChange(outboundTag string) error {
+-	if grp, ok := m.groups[outboundTag]; ok {
++	if grp, ok := m.lookupGroup(outboundTag); ok {
+ 		grp.notifyCh <- struct{}{}
+ 		return nil
+ 	}
+@@ -382,7 +392,7 @@
+ 		return errors.New("outbound not registered")
+ 	}
+ 	for _, groupTag := range state.groupTags {
+-		if grp, ok := m.groups[groupTag]; ok {
++		if grp, ok := m.lookupGroup(groupTag); ok {
+ 			grp.notifyCh <- struct{}{}
+ 		}
+ 	}
+@@ -395,7 +405,7 @@
+ }
+ func (m *OutboundMonitoring) testNow(outboundTag string, priority bool) error {
+ 	m.logger.Info("testing outbound ", outboundTag, " with priority: ", priority)
+-	if _, ok := m.groups[outboundTag]; ok {
++	if _, ok := m.lookupGroup(outboundTag); ok {
+ 		cycle := m.cycleSeq.Load()
+ 		for _, tag := range m.groupTestTargets(outboundTag) {
+ 			m.enqueueTask(&testTask{outboundTag: tag, cycleID: cycle})
+@@ -424,7 +434,7 @@
+ 	if state == nil {
+ 		return
+ 	}
+-	if _, ok := m.groups[outboundTag]; !ok && !first {
++	if _, ok := m.lookupGroup(outboundTag); !ok && !first {
+ 		m.logger.Info("testing outbound ", outboundTag)
+ 		m.testNow(outboundTag, true)
+ 	}
+@@ -455,13 +465,13 @@
+ 
+ func (m *OutboundMonitoring) SubscribeGroup(groupTag string) (observer <-chan GroupEvent, err error) {
+ 
+-	if g, ok := m.groups[groupTag]; ok {
++	if g, ok := m.lookupGroup(groupTag); ok {
+ 		return g.observer.Subscribe(1), nil
+ 	}
+ 	return nil, E.New("group not found ", groupTag)
+ }
+ func (m *OutboundMonitoring) UnsubscribeGroup(groupTag string, observer <-chan GroupEvent) (err error) {
+-	if g, ok := m.groups[groupTag]; ok {
++	if g, ok := m.lookupGroup(groupTag); ok {
+ 		g.observer.Unsubscribe(observer)
+ 		return nil
+ 	}
+@@ -474,7 +484,7 @@
+ 		m.stopTimerWorkers()
+ 
+ 		for _, task := range m.taskQueue().close() {
+-			if state := m.outbounds[task.outboundTag]; state != nil {
++			if state := m.state(task.outboundTag); state != nil {
+ 				state.mu.Lock()
+ 				if state.pendingTask == task {
+ 					state.pendingTask = nil
+@@ -483,7 +493,7 @@
+ 				state.mu.Unlock()
+ 			}
+ 		}
+-		for _, g := range m.groups {
++		for _, g := range m.groupsSnapshot() {
+ 			if g.observer != nil {
+ 				g.observer.Close()
+ 			}
+@@ -536,8 +546,17 @@
+ }
+ 
+ func (m *OutboundMonitoring) finishTask(task *testTask) {
+-	state := m.outbounds[task.outboundTag]
++	state := m.state(task.outboundTag)
++	if state == nil {
++		return
++	}
+ 	state.mu.Lock()
++	if state.pendingTask == task {
++		state.pendingTask = nil
++		state.queued = false
++		state.priorityQueued = false
++		state.enqueuedCycle = 0
++	}
+ 	if state.activeTask == task {
+ 		state.activeTask = nil
+ 		state.testing = false
+@@ -559,13 +578,19 @@
+ }
+ 
+ func (m *OutboundMonitoring) executeTask(task *testTask) {
+-	state := m.outbounds[task.outboundTag]
++	if task.networkEpoch != m.networkEpoch.Load() {
++		m.completeTask(task, adapter.URLTestHistory{}, context.Canceled, task.networkEpoch)
++		return
++	}
++	state := m.state(task.outboundTag)
+ 	if state == nil {
++		m.completeTask(task, adapter.URLTestHistory{}, context.Canceled, task.networkEpoch)
+ 		return
+ 	}
+ 	state.mu.Lock()
+ 	if state.pendingTask != task {
+ 		state.mu.Unlock()
++		m.completeTask(task, adapter.URLTestHistory{}, context.Canceled, task.networkEpoch)
+ 		return
+ 	}
+ 	state.pendingTask = nil
+@@ -600,7 +625,7 @@
+ }
+ 
+ func (m *OutboundMonitoring) tester(parent context.Context, tag string) (adapter.URLTestHistory, error) {
+-	out, ok := m.outbounds[tag]
++	out, ok := m.lookupState(tag)
+ 	if !ok {
+ 		return adapter.URLTestHistory{Delay: 0}, errors.New("outbound not registered")
+ 	}
+@@ -656,7 +681,13 @@
+ 		return false
+ 	}
+ 	go func() {
+-		defer m.cycleRunning.Store(false)
++		epoch := m.networkEpoch.Load()
++		defer func() {
++			m.cycleRunning.Store(false)
++			if m.ctx.Err() == nil && epoch != m.networkEpoch.Load() {
++				m.startCycleOnce()
++			}
++		}()
+ 		m.logger.Info("starting regular outbound monitoring cycle")
+ 		m.runCycle()
+ 	}()
+@@ -732,7 +763,7 @@
+ 	if m.ctx.Err() != nil {
+ 		return false
+ 	}
+-	state := m.outbounds[task.outboundTag]
++	state := m.state(task.outboundTag)
+ 	if state == nil {
+ 		return false
+ 	}
+@@ -749,6 +780,7 @@
+ 	}
+ 	// Commit state only after queue admission succeeds. No channel-capacity
+ 	// rejection can leave a node permanently marked as waiting.
++	task.networkEpoch = m.networkEpoch.Load()
+ 	if !m.taskQueue().push(task) {
+ 		return false
+ 	}
+@@ -759,12 +791,17 @@
+ }
+ 
+ func (m *OutboundMonitoring) applyResult(outcome testOutcome) *adapter.URLTestHistory {
++	m.sourceEpochMu.RLock()
++	defer m.sourceEpochMu.RUnlock()
++	if errors.Is(outcome.err, context.Canceled) {
++		return nil
++	}
+ 	select {
+ 	case <-m.ctx.Done():
+ 		return nil
+ 	default:
+ 	}
+-	state, ok := m.outbounds[outcome.outboundTag]
++	state, ok := m.lookupState(outcome.outboundTag)
+ 	if !ok {
+ 		return nil
+ 	}
+@@ -794,6 +831,9 @@
+ 		state.history.IpInfo = outcome.history.IpInfo
+ 	}
+ 	m.history.StoreURLTestHistory(outcome.outboundTag, &state.history)
++	if m.database() != nil && m.database().Record != nil {
++		m.database().Record(outcome.outboundTag, state.history.Delay, state.availabilityFailed, "", m.networkEpoch.Load(), 0)
++	}
+ 
+ 	m.emitGroupEvent(state.groupTags)
+ 	return &state.history
+@@ -817,11 +857,14 @@
+ }
+ 
+ func (m *OutboundMonitoring) collectCycleTargets() []string {
+-	tags := make([]string, 0, len(m.outbounds))
+-	delays := make(map[string]uint16, len(m.outbounds))
++	tags := make([]string, 0, m.statesCount())
++	delays := make(map[string]uint16, m.statesCount())
+ 	for _, tag := range m.sourceOrder() {
+-		state := m.outbounds[tag]
+-		if _, group := m.groups[tag]; group {
++		state := m.state(tag)
++		if state == nil {
++			continue
++		}
++		if _, group := m.lookupGroup(tag); group {
+ 			continue
+ 		}
+ 		state.mu.Lock()
+@@ -837,21 +880,7 @@
+ 	return interleaveTestTargets(tags, delays)
+ }
+ 
+-func (m *OutboundMonitoring) makeGroup(tag string) *groupState {
+-	grp, ok := m.groups[tag]
+-	if ok {
+-		return grp
+-	}
+-
+-	grp = &groupState{
+-		tag:       tag,
+-		outbounds: make(map[string]struct{}),
+-		observer:  NewBroadcaster[GroupEvent](m.ctx),
+-		notifyCh:  make(chan struct{}, 1),
+-	}
+-	m.groups[tag] = grp
+-	return grp
+-}
++func (m *OutboundMonitoring) makeGroup(tag string) *groupState { return m.makeDatabaseGroup(tag) }
+ 
+ func (m *OutboundMonitoring) Touch() {
+ 	if !m.started {
+@@ -872,7 +901,7 @@
+ 
+ func (m *OutboundMonitoring) emitGroupEvent(groupTags []string) {
+ 	for _, groupTag := range groupTags {
+-		grp, ok := m.groups[groupTag]
++		grp, ok := m.lookupGroup(groupTag)
+ 		if !ok || grp.observer == nil {
+ 			continue
+ 		}
+@@ -886,13 +915,13 @@
+ 
+ func (m *OutboundMonitoring) emitGroupEventThrottled(groupTag string, since time.Time) {
+ 
+-	grp, ok := m.groups[groupTag]
++	grp, ok := m.lookupGroup(groupTag)
+ 	if !ok || grp.observer == nil {
+ 		return
+ 	}
+-	tags := make([]string, 0, len(grp.outbounds))
+-	for tag := range grp.outbounds {
+-		state := m.outbounds[tag]
++	tags := make([]string, 0, grp.memberCount())
++	for tag := range grp.membersSnapshot() {
++		state := m.state(tag)
+ 		if state == nil {
+ 			continue
+ 		}
+@@ -972,10 +1001,11 @@
+ }
+ 
+ func (m *OutboundMonitoring) getState(tag string) *outboundState {
+-	return m.outbounds[tag]
++	return m.state(tag)
+ }
+ 
+ type testTask struct {
++	networkEpoch     uint64
+ 	element          *stdlist.Element
+ 	readinessRetries int
+ 	outboundTag      string
+@@ -1026,6 +1056,7 @@
+ }
+ 
+ type groupState struct {
++	membersMu sync.RWMutex
+ 	tag       string
+ 	outbounds map[string]struct{}
+ 
+@@ -1040,6 +1071,16 @@
+ }
+ 
+ func (m *OutboundMonitoring) saveHistory() error {
++	if m.database() != nil {
++		if m.database().Record != nil {
++			for tag, state := range m.statesSnapshot() {
++				state.mu.Lock()
++				m.database().Record(tag, state.history.Delay, state.availabilityFailed, "", m.networkEpoch.Load(), 0)
++				state.mu.Unlock()
++			}
++		}
++		return nil
++	}
+ 	if m.cache == nil {
+ 		return nil
+ 	}
+@@ -1047,7 +1088,7 @@
+ 		OutboundData: make(map[string]*adapter.URLTestHistory),
+ 		Unavailable:  make(map[string]bool),
+ 	}
+-	for tag, state := range m.outbounds {
++	for tag, state := range m.statesSnapshot() {
+ 		state.mu.Lock()
+ 		h := state.history
+ 		if state.availabilityFailed {
+@@ -1069,6 +1110,31 @@
+ }
+ func (m *OutboundMonitoring) loadHistory() *History {
+ 	history := &History{}
++	if m.database() != nil && m.database().ReadHistory != nil {
++		values, err := m.database().ReadHistory()
++		if err != nil {
++			m.logger.Warn("read database history: ", err)
++			return history
++		}
++		history.OutboundData = make(map[string]*adapter.URLTestHistory, len(values))
++		history.Unavailable = make(map[string]bool)
++		for _, value := range values {
++			if state, ok := m.lookupState(value.Tag); ok {
++				delay := value.Delay
++				if delay >= TimeoutDelay {
++					delay = 0
++				}
++				state.mu.Lock()
++				state.history = adapter.URLTestHistory{Time: value.Time, Delay: delay}
++				state.availabilityFailed = value.Unavailable
++				state.from_cache = true
++				history.OutboundData[value.Tag] = &adapter.URLTestHistory{Time: value.Time, Delay: delay}
++				history.Unavailable[value.Tag] = value.Unavailable
++				state.mu.Unlock()
++			}
++		}
++		return history
++	}
+ 	if m.cache == nil {
+ 		return history
+ 	}
+@@ -1082,8 +1148,8 @@
+ 		return history
+ 	}
+ 	for tag, his := range history.OutboundData {
+-		if state, ok := m.outbounds[tag]; ok && his != nil {
+-			if _, ok := m.groups[tag]; ok {
++		if state, ok := m.lookupState(tag); ok && his != nil {
++			if _, ok := m.lookupGroup(tag); ok {
+ 				continue
+ 			}
+ 			if his.Delay >= TimeoutDelay {
+@@ -1098,3 +1164,5 @@
+ 	}
+ 	return history
+ }
++
++// database-catalog-snapshot-access
+--- a/hiddify-sing-box/common/monitoring/test_task_queue.go
++++ b/hiddify-sing-box/common/monitoring/test_task_queue.go
+@@ -102,7 +102,7 @@
+ }
+ 
+ func (m *OutboundMonitoring) retryWhenReady(task *testTask) {
+-	state := m.outbounds[task.outboundTag]
++	state := m.state(task.outboundTag)
+ 	state.mu.Lock()
+ 	if state.retryPending || m.ctx.Err() != nil {
+ 		state.mu.Unlock()
+@@ -166,13 +166,16 @@
+ }
+ 
+ func (m *OutboundMonitoring) sourceOrder() []string {
+-	if len(m.outboundOrder) > 0 {
+-		return m.outboundOrder
++	m.catalogMu.RLock()
++	order := append([]string(nil), m.outboundOrder...)
++	m.catalogMu.RUnlock()
++	if len(order) > 0 {
++		return order
+ 	}
+ 	// Deterministic fallback for stand-alone fixtures; production registers the
+ 	// exact subscription order before starting any worker.
+-	tags := make([]string, 0, len(m.outbounds))
+-	for tag := range m.outbounds {
++	tags := make([]string, 0, m.statesCount())
++	for tag := range m.statesSnapshot() {
+ 		tags = append(tags, tag)
+ 	}
+ 	sort.Strings(tags)
+@@ -187,11 +190,11 @@
+ 			return
+ 		}
+ 		visited[tag] = true
+-		if group := m.groups[tag]; group != nil {
++		if group := m.group(tag); group != nil {
+ 			for child := range group.outbounds {
+ 				visit(child)
+ 			}
+-		} else if m.outbounds[tag] != nil {
++		} else if m.state(tag) != nil {
+ 			leaves[tag] = true
+ 		}
+ 	}
+@@ -202,7 +205,7 @@
+ 			continue
+ 		}
+ 		tags = append(tags, tag)
+-		state := m.outbounds[tag]
++		state := m.state(tag)
+ 		state.mu.Lock()
+ 		if !state.availabilityFailed {
+ 			delays[tag] = state.history.Delay
+@@ -211,3 +214,5 @@
+ 	}
+ 	return interleaveTestTargets(tags, delays)
+ }
++
++// database-catalog-snapshot-access
+--- a/hiddify-sing-box/log/export.go
++++ b/hiddify-sing-box/log/export.go
+@@ -2,83 +2,78 @@
+ 
+ import (
+ 	"context"
+-	"os"
+-	"time"
++	"sync/atomic"
+ )
+ 
+-var std ContextLogger
++type standardLoggerValue struct{ logger ContextLogger }
+ 
+-func init() {
+-	std = NewDefaultFactory(
+-		context.Background(),
+-		Formatter{BaseTime: time.Now()},
+-		os.Stderr,
+-		"",
+-		nil,
+-		false,
+-	).Logger()
+-}
++var std atomic.Pointer[standardLoggerValue]
++
++func init() { SetStdLogger(NewNOPFactory().Logger()) }
+ 
+ func StdLogger() ContextLogger {
+-	return std
++	return std.Load().logger
+ }
+ 
+ func SetStdLogger(logger ContextLogger) {
+-	std = logger
++	if logger == nil {
++		logger = NewNOPFactory().Logger()
++	}
++	std.Store(&standardLoggerValue{logger: logger})
+ }
+ 
+ func Trace(args ...any) {
+-	std.Trace(args...)
++	StdLogger().Trace(args...)
+ }
+ 
+ func Debug(args ...any) {
+-	std.Debug(args...)
++	StdLogger().Debug(args...)
+ }
+ 
+ func Info(args ...any) {
+-	std.Info(args...)
++	StdLogger().Info(args...)
+ }
+ 
+ func Warn(args ...any) {
+-	std.Warn(args...)
++	StdLogger().Warn(args...)
+ }
+ 
+ func Error(args ...any) {
+-	std.Error(args...)
++	StdLogger().Error(args...)
+ }
+ 
+ func Fatal(args ...any) {
+-	std.Fatal(args...)
++	StdLogger().Fatal(args...)
+ }
+ 
+ func Panic(args ...any) {
+-	std.Panic(args...)
++	StdLogger().Panic(args...)
+ }
+ 
+ func TraceContext(ctx context.Context, args ...any) {
+-	std.TraceContext(ctx, args...)
++	StdLogger().TraceContext(ctx, args...)
+ }
+ 
+ func DebugContext(ctx context.Context, args ...any) {
+-	std.DebugContext(ctx, args...)
++	StdLogger().DebugContext(ctx, args...)
+ }
+ 
+ func InfoContext(ctx context.Context, args ...any) {
+-	std.InfoContext(ctx, args...)
++	StdLogger().InfoContext(ctx, args...)
+ }
+ 
+ func WarnContext(ctx context.Context, args ...any) {
+-	std.WarnContext(ctx, args...)
++	StdLogger().WarnContext(ctx, args...)
+ }
+ 
+ func ErrorContext(ctx context.Context, args ...any) {
+-	std.ErrorContext(ctx, args...)
++	StdLogger().ErrorContext(ctx, args...)
+ }
+ 
+ func FatalContext(ctx context.Context, args ...any) {
+-	std.FatalContext(ctx, args...)
++	StdLogger().FatalContext(ctx, args...)
+ }
+ 
+ func PanicContext(ctx context.Context, args ...any) {
+-	std.PanicContext(ctx, args...)
++	StdLogger().PanicContext(ctx, args...)
+ }
+--- a/hiddify-sing-box/option/group.go
++++ b/hiddify-sing-box/option/group.go
+@@ -3,9 +3,10 @@
+ import "github.com/sagernet/sing/common/json/badoption"
+ 
+ type SelectorOutboundOptions struct {
+-	Outbounds                 []string `json:"outbounds"`
+-	Default                   string   `json:"default,omitempty"`
+-	InterruptExistConnections bool     `json:"interrupt_exist_connections,omitempty"`
++	DatabaseSource            *DatabaseSourceOptions `json:"-"`
++	Outbounds                 []string               `json:"outbounds"`
++	Default                   string                 `json:"default,omitempty"`
++	InterruptExistConnections bool                   `json:"interrupt_exist_connections,omitempty"`
+ }
+ 
+ type URLTestOutboundOptions struct {
+--- a/hiddify-sing-box/option/monitoring.go
++++ b/hiddify-sing-box/option/monitoring.go
+@@ -3,10 +3,11 @@
+ import "github.com/sagernet/sing/common/json/badoption"
+ 
+ type MonitoringOptions struct {
+-	Interval       badoption.Duration `json:"interval,omitempty"`
+-	URLs           []string           `json:"urls,omitempty"` //H
+-	Workers        int                `json:"workers,omitempty"`
+-	DebounceWindow badoption.Duration `json:"debounce_window,omitempty"`
+-	URLTestTimeout badoption.Duration `json:"url_test_timeout,omitempty"`
+-	IdleTimeout    badoption.Duration `json:"idle_timeout,omitempty"`
++	DatabaseSource *DatabaseSourceOptions `json:"-"`
++	Interval       badoption.Duration     `json:"interval,omitempty"`
++	URLs           []string               `json:"urls,omitempty"` //H
++	Workers        int                    `json:"workers,omitempty"`
++	DebounceWindow badoption.Duration     `json:"debounce_window,omitempty"`
++	URLTestTimeout badoption.Duration     `json:"url_test_timeout,omitempty"`
++	IdleTimeout    badoption.Duration     `json:"idle_timeout,omitempty"`
+ }
+--- a/hiddify-sing-box/option/options.go
++++ b/hiddify-sing-box/option/options.go
+@@ -10,18 +10,19 @@
+ )
+ 
+ type _Options struct {
+-	RawMessage   json.RawMessage      `json:"-"`
+-	Schema       string               `json:"$schema,omitempty"`
+-	Log          *LogOptions          `json:"log,omitempty"`
+-	DNS          *DNSOptions          `json:"dns,omitempty"`
+-	NTP          *NTPOptions          `json:"ntp,omitempty"`
+-	Certificate  *CertificateOptions  `json:"certificate,omitempty"`
+-	Endpoints    []Endpoint           `json:"endpoints,omitempty"`
+-	Inbounds     []Inbound            `json:"inbounds,omitempty"`
+-	Outbounds    []Outbound           `json:"outbounds,omitempty"`
+-	Route        *RouteOptions        `json:"route,omitempty"`
+-	Services     []Service            `json:"services,omitempty"`
+-	Experimental *ExperimentalOptions `json:"experimental,omitempty"`
++	DatabaseSource *DatabaseSourceOptions `json:"-"`
++	RawMessage     json.RawMessage        `json:"-"`
++	Schema         string                 `json:"$schema,omitempty"`
++	Log            *LogOptions            `json:"log,omitempty"`
++	DNS            *DNSOptions            `json:"dns,omitempty"`
++	NTP            *NTPOptions            `json:"ntp,omitempty"`
++	Certificate    *CertificateOptions    `json:"certificate,omitempty"`
++	Endpoints      []Endpoint             `json:"endpoints,omitempty"`
++	Inbounds       []Inbound              `json:"inbounds,omitempty"`
++	Outbounds      []Outbound             `json:"outbounds,omitempty"`
++	Route          *RouteOptions          `json:"route,omitempty"`
++	Services       []Service              `json:"services,omitempty"`
++	Experimental   *ExperimentalOptions   `json:"experimental,omitempty"`
+ 
+ 	Custom *map[string]any `json:"custom,omitempty"` //H
+ }
+--- a/hiddify-sing-box/protocol/group/balancer/balancer.go
++++ b/hiddify-sing-box/protocol/group/balancer/balancer.go
+@@ -3,6 +3,7 @@
+ import (
+ 	"context"
+ 	"net"
++	"sync"
+ 	"sync/atomic"
+ 	"time"
+ 
+@@ -34,6 +35,7 @@
+ )
+ 
+ type Balancer struct {
++	databaseMu sync.RWMutex
+ 	outbound.Adapter
+ 	ctx                          context.Context
+ 	router                       adapter.Router
+@@ -79,6 +81,8 @@
+ }
+ 
+ func (s *Balancer) Strategy() string {
++	s.databaseMu.RLock()
++	defer s.databaseMu.RUnlock()
+ 	return s.options.Strategy
+ }
+ 
+@@ -97,7 +101,7 @@
+ 	case StrategyRoundRobin, StrategyConsistentHashing, StrategyStickySessions, StrategyLowestDelay:
+ 		s.strategyFn = newHealthyStrategy(outbounds, s.options)
+ 		if s.monitor != nil {
+-			s.strategyFn.(*healthyStrategy).available = func(tag string) bool { return !s.monitor.AvailabilityFailed(tag) }
++			s.databaseStrategy().(*healthyStrategy).available = func(tag string) bool { return !s.monitor.AvailabilityFailed(tag) }
+ 		}
+ 	default:
+ 		return E.New("unknown load balance strategy: ", s.options.Strategy)
+@@ -119,7 +123,7 @@
+ 		return
+ 	}
+ 	defer s.monitor.UnsubscribeGroup(s.Tag(), observer)
+-	s.strategyFn.UpdateOutboundsInfo(s.monitor.OutboundsHistory(s.Tag()))
++	s.databaseStrategy().UpdateOutboundsInfo(s.monitor.OutboundsHistory(s.Tag()))
+ 
+ 	for {
+ 		select {
+@@ -133,7 +137,7 @@
+ 				return
+ 			}
+ 			outbounds := s.monitor.OutboundsHistory(s.Tag())
+-			if s.strategyFn.UpdateOutboundsInfo(outbounds) {
++			if s.databaseStrategy().UpdateOutboundsInfo(outbounds) {
+ 				s.interruptGroup.Interrupt(s.interruptExternalConnections)
+ 			}
+ 
+@@ -148,10 +152,10 @@
+ }
+ 
+ func (s *Balancer) Now() string {
+-	if s.strategyFn == nil {
++	if s.databaseStrategy() == nil {
+ 		return ""
+ 	}
+-	if selected := s.strategyFn.Now(); selected != "" {
++	if selected := s.databaseStrategy().Now(); selected != "" {
+ 		return selected
+ 	}
+ 	if selected := s.lastSelected.Load(); selected != nil {
+@@ -168,7 +172,9 @@
+ }
+ 
+ func (s *Balancer) All() []string {
+-	return s.tags
++	s.databaseMu.RLock()
++	defer s.databaseMu.RUnlock()
++	return append([]string(nil), s.tags...)
+ }
+ 
+ func (s *Balancer) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+@@ -176,7 +182,7 @@
+ 	if metadata == nil {
+ 		metadata = &adapter.InboundContext{}
+ 	}
+-	return establish(ctx, s.strategyFn.(*healthyStrategy), *metadata, network,
++	return establish(ctx, s.databaseStrategy().(*healthyStrategy), *metadata, network,
+ 		func(attempt context.Context, outbound adapter.Outbound) (net.Conn, error) {
+ 			metadata.SetRealOutbound(outbound.Tag())
+ 			conn, err := outbound.DialContext(attempt, network, destination)
+@@ -193,7 +199,7 @@
+ 	if metadata == nil {
+ 		metadata = &adapter.InboundContext{}
+ 	}
+-	return establish(ctx, s.strategyFn.(*healthyStrategy), *metadata, N.NetworkUDP,
++	return establish(ctx, s.databaseStrategy().(*healthyStrategy), *metadata, N.NetworkUDP,
+ 		func(attempt context.Context, outbound adapter.Outbound) (net.PacketConn, error) {
+ 			metadata.SetRealOutbound(outbound.Tag())
+ 			conn, err := outbound.ListenPacket(attempt, destination)
+@@ -216,14 +222,20 @@
+ }
+ 
+ func (s *Balancer) NewDirectRouteConnection(metadata adapter.InboundContext, routeContext tun.DirectRouteContext, timeout time.Duration) (tun.DirectRouteDestination, error) {
+-	selected := s.strategyFn.Select(metadata, metadata.Network, true)
++	selected := s.databaseStrategy().Select(metadata, metadata.Network, true)
+ 	if selected == nil {
+ 		return nil, E.New(metadata.Network, " is not supported by outbound: ")
+ 	}
+ 	metadata.SetRealOutbound(selected.Tag())
+-	connection, err := selected.(adapter.DirectRouteOutbound).NewDirectRouteConnection(metadata, routeContext, timeout)
++	direct, ok := selected.(adapter.DirectRouteOutbound)
++	if !ok {
++		return nil, E.New("direct route unavailable for outbound: ", selected.Tag())
++	}
++	connection, err := direct.NewDirectRouteConnection(metadata, routeContext, timeout)
+ 	if err == nil {
+ 		s.reportSelection(selected.Tag())
+ 	}
+ 	return connection, err
+ }
++
++// database-strategy-snapshot-access
+--- a/hiddify-sing-box/protocol/group/selector.go
++++ b/hiddify-sing-box/protocol/group/selector.go
+@@ -3,6 +3,7 @@
+ import (
+ 	"context"
+ 	"net"
++	"sync"
+ 	"time"
+ 
+ 	"github.com/sagernet/sing-box/adapter"
+@@ -32,6 +33,8 @@
+ )
+ 
+ type Selector struct {
++	databaseMu     sync.RWMutex
++	databaseSource *option.DatabaseSourceOptions
+ 	outbound.Adapter
+ 	ctx                          context.Context
+ 	outbound                     adapter.OutboundManager
+@@ -47,6 +50,7 @@
+ 
+ func NewSelector(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.SelectorOutboundOptions) (adapter.Outbound, error) {
+ 	outbound := &Selector{
++		databaseSource:               options.DatabaseSource,
+ 		Adapter:                      outbound.NewAdapter(C.TypeSelector, tag, nil, options.Outbounds),
+ 		ctx:                          ctx,
+ 		outbound:                     service.FromContext[adapter.OutboundManager](ctx),
+@@ -80,7 +84,14 @@
+ 		}
+ 		s.outbounds[tag] = detour
+ 	}
+-	if s.Tag() != "" {
++	if s.databaseSource != nil && s.databaseSource.ReadSelection != nil {
++		selected := s.databaseSource.ReadSelection(s.Tag())
++		if detour, loaded := s.outbounds[selected]; loaded {
++			s.selected.Store(detour)
++			return nil
++		}
++	}
++	if s.databaseSource == nil && s.Tag() != "" {
+ 		cacheFile := service.FromContext[adapter.CacheFile](s.ctx)
+ 		if cacheFile != nil {
+ 			selected := cacheFile.LoadSelected(s.Tag())
+@@ -115,18 +126,27 @@
+ func (s *Selector) Now() string {
+ 	selected := s.selected.Load()
+ 	if selected == nil {
+-		return s.tags[0]
++		tags := s.All()
++		if len(tags) == 0 {
++			return ""
++		}
++		return tags[0]
+ 	}
+ 	return selected.Tag()
+ }
+ 
+ func (s *Selector) All() []string {
+-	return s.tags
++	s.databaseMu.RLock()
++	defer s.databaseMu.RUnlock()
++	return append([]string(nil), s.tags...)
+ }
+ 
+ func (s *Selector) SelectOutbound(tag string) bool {
+ 	defer s.pingSelected()
++	s.databaseMu.RLock()
+ 	detour, loaded := s.outbounds[tag]
++	source := s.databaseSource
++	s.databaseMu.RUnlock()
+ 	if !loaded {
+ 		return false
+ 	}
+@@ -134,7 +154,12 @@
+ 	if s.selected.Swap(detour) == detour {
+ 		return true
+ 	}
+-	if s.Tag() != "" {
++	if source != nil && source.StoreSelection != nil {
++		if err := source.StoreSelection(s.Tag(), tag); err != nil {
++			s.logger.Error("store database selection: ", err)
++		}
++	}
++	if source == nil && s.Tag() != "" {
+ 		cacheFile := service.FromContext[adapter.CacheFile](s.ctx)
+ 		if cacheFile != nil {
+ 			err := cacheFile.StoreSelected(s.Tag(), tag)
+--- a/v2/config/builder.go
++++ b/v2/config/builder.go
+@@ -4,6 +4,7 @@
+ 	context "context"
+ 	"encoding/base64"
+ 	"fmt"
++	"github.com/hiddify/hiddify-core/v2/configdb"
+ 	"math/rand"
+ 	"net"
+ 	"net/netip"
+@@ -61,7 +62,7 @@
+ )
+ 
+ // TODO include selectors
+-func BuildConfig(ctx context.Context, hopts *HiddifyOptions, inputOpt *ReadOptions) (*option.Options, error) {
++func BuildConfig(ctx context.Context, hopts *HiddifyOptions, inputOpt *ReadOptions) (result *option.Options, buildErr error) {
+ 
+ 	stableOptions := *hopts
+ 	stableOptions.DirectDnsDomainStrategy = stableDNSStrategy(hopts.IPv6Mode, hopts.DirectDnsDomainStrategy)
+@@ -72,7 +73,31 @@
+ 		return nil, err
+ 	}
+ 
++	defer func() {
++		if buildErr != nil && input.DatabaseSource != nil {
++			input.DatabaseSource.Close()
++		}
++	}()
++
+ 	var options option.Options
++	options.DatabaseSource = input.DatabaseSource
++	if input.DatabaseSource != nil {
++		fields, encodeErr := configdb.NewCodec(*hopts).Encode(hopts)
++		if encodeErr != nil {
++			return nil, encodeErr
++		}
++		input.DatabaseSource.SettingsHash = configdb.Fingerprint(fields)
++		for i := range input.Outbounds {
++			if deferred, ok := input.Outbounds[i].Options.(*option.DeferredOutboundOptions); ok {
++				deferred.Fingerprint += "/" + input.DatabaseSource.SettingsHash
++			}
++		}
++		for i := range input.Endpoints {
++			if deferred, ok := input.Endpoints[i].Options.(*option.DeferredOutboundOptions); ok {
++				deferred.Fingerprint += "/" + input.DatabaseSource.SettingsHash
++			}
++		}
++	}
+ 	if hopts.EnableFullConfig {
+ 		options.Inbounds = input.Inbounds
+ 		options.DNS = input.DNS
+@@ -80,6 +105,9 @@
+ 	}
+ 
+ 	setExperimental(&options, hopts)
++	if options.Experimental != nil && options.Experimental.Monitoring != nil {
++		options.Experimental.Monitoring.DatabaseSource = input.DatabaseSource
++	}
+ 
+ 	setLog(&options, hopts)
+ 	setInbound(&options, hopts)
+@@ -306,6 +334,9 @@
+ 			InterruptExistConnections: false,
+ 		},
+ 	}
++	if len(tags) == 0 {
++		return fmt.Errorf("подписка не содержит конфигураций для подключения")
++	}
+ 	defaultSelect := tags[0]
+ 
+ 	for _, tag := range tags {
+@@ -331,6 +362,7 @@
+ 		Type: C.TypeSelector,
+ 		Tag:  OutboundSelectTag,
+ 		Options: &option.SelectorOutboundOptions{
++			DatabaseSource:            options.DatabaseSource,
+ 			Outbounds:                 selectorTags,
+ 			Default:                   defaultSelect,
+ 			InterruptExistConnections: false,
+@@ -425,7 +457,7 @@
+ 	options.Log = &option.LogOptions{
+ 		Level:        opt.LogLevel,
+ 		Output:       opt.LogFile,
+-		Disabled:     false,
++		Disabled:     opt.LogLevel == "off",
+ 		Timestamp:    false,
+ 		DisableColor: true,
+ 	}
+--- a/v2/config/config.go
++++ b/v2/config/config.go
+@@ -2,6 +2,7 @@
+ 
+ import (
+ 	context "context"
++	"github.com/hiddify/hiddify-core/v2/configdb"
+ 
+ 	"github.com/sagernet/sing-box/experimental/libbox"
+ 	"github.com/sagernet/sing-box/option"
+@@ -16,6 +17,12 @@
+ func ReadSingOptions(ctx context.Context, opt *ReadOptions) (*option.Options, error) {
+ 	if opt.Options != nil {
+ 		return opt.Options, nil
++	}
++	if location, isDatabase, parseErr := configdb.ParseLocation(opt.Path); isDatabase {
++		if parseErr != nil {
++			return nil, parseErr
++		}
++		return configdb.Load(ctx, location)
+ 	}
+ 	content, err := ReadContent(ctx, opt)
+ 	if err != nil {
+--- a/v2/config/hiddify_option.go
++++ b/v2/config/hiddify_option.go
+@@ -108,7 +108,8 @@
+ 
+ func DefaultHiddifyOptions() *HiddifyOptions {
+ 	return &HiddifyOptions{
+-		EnableNTP: true,
++		BalancerStrategy: "round-robin",
++		EnableNTP:        true,
+ 		DNSOptions: DNSOptions{
+ 			RemoteDnsAddress:        "1.1.1.1",
+ 			RemoteDnsDomainStrategy: option.DomainStrategy(dns.DomainStrategyAsIS),
+@@ -140,7 +141,7 @@
+ 			BypassLAN:              false,
+ 			AllowConnectionFromLAN: false,
+ 		},
+-		LogLevel: "warn",
++		LogLevel: "off",
+ 		// LogFile:        "/dev/null",
+ 		LogFile:        "data/box.log",
+ 		Region:         "other",
+--- a/v2/config/outbound.go
++++ b/v2/config/outbound.go
+@@ -1,6 +1,7 @@
+ package config
+ 
+ import (
++	"context"
+ 	"fmt"
+ 
+ 	C "github.com/sagernet/sing-box/constant"
+@@ -125,6 +126,27 @@
+ }
+ 
+ func patchEndpoint(base *option.Endpoint, configOpt HiddifyOptions, staticIPs *map[string][]string) (*option.Endpoint, error) {
++	if deferred, ok := base.Options.(*option.DeferredOutboundOptions); ok {
++		cloned := *deferred
++		load := deferred.Load
++		original := *base
++		cloned.Load = func(ctx context.Context) (any, error) {
++			parameters, err := load(ctx)
++			if err != nil {
++				return nil, err
++			}
++			endpoint := original
++			endpoint.Options = parameters
++			patched, err := patchEndpoint(&endpoint, configOpt, staticIPs)
++			if err != nil {
++				return nil, err
++			}
++			return patched.Options, nil
++		}
++		endpoint := *base
++		endpoint.Options = &cloned
++		return &endpoint, nil
++	}
+ 	formatErr := func(err error) error {
+ 		return fmt.Errorf("error patching outbound[%s][%s]: %w", base.Tag, base.Type, err)
+ 	}
+@@ -135,6 +157,26 @@
+ 	return base, nil
+ }
+ func patchOutbound(base option.Outbound, configOpt HiddifyOptions, staticIPs *map[string][]string) (*option.Outbound, error) {
++	if deferred, ok := base.Options.(*option.DeferredOutboundOptions); ok {
++		cloned := *deferred
++		load := deferred.Load
++		original := base
++		cloned.Load = func(ctx context.Context) (any, error) {
++			parameters, err := load(ctx)
++			if err != nil {
++				return nil, err
++			}
++			outbound := original
++			outbound.Options = parameters
++			patched, err := patchOutbound(outbound, configOpt, staticIPs)
++			if err != nil {
++				return nil, err
++			}
++			return patched.Options, nil
++		}
++		base.Options = &cloned
++		return &base, nil
++	}
+ 
+ 	base = patchOutboundTLSTricks(base, configOpt)
+ 
+--- a/v2/config/parser.go
++++ b/v2/config/parser.go
+@@ -60,7 +60,9 @@
+ 	var tmpJsonResult any
+ 	jsonDecoder := json.NewDecoder(SJ.NewCommentFilter(bytes.NewReader(content)))
+ 	if err := jsonDecoder.Decode(&tmpJsonResult); err == nil {
+-		fmt.Printf("Convert using json\n")
++		if debug {
++			fmt.Printf("Convert using json\n")
++		}
+ 		if tmpJsonObj, ok := tmpJsonResult.(map[string]interface{}); ok {
+ 			if tmpJsonObj["outbounds"] == nil && tmpJsonObj["endpoints"] == nil {
+ 				jsonObj["outbounds"] = []interface{}{jsonObj}
+@@ -92,7 +94,9 @@
+ 	if err == nil {
+ 		return patchConfigOptions(ctx, v2ray, "V2rayParser", configOpt)
+ 	}
+-	fmt.Printf("Convert using clash\n")
++	if debug {
++		fmt.Printf("Convert using clash\n")
++	}
+ 	clashObj := clash.Clash{}
+ 	if err := yaml.Unmarshal(content, &clashObj); err == nil && clashObj.Proxies != nil {
+ 		if len(clashObj.Proxies) == 0 {
+--- a/v2/hcore/buildconfighelper.go
++++ b/v2/hcore/buildconfighelper.go
+@@ -3,7 +3,11 @@
+ import (
+ 	"context"
+ 	"encoding/json"
++	"fmt"
++	"github.com/hiddify/hiddify-core/v2/configdb"
++	"net/url"
+ 	"os"
++	"path/filepath"
+ 
+ 	"github.com/hiddify/hiddify-core/v2/config"
+ 	"github.com/hiddify/hiddify-core/v2/db"
+@@ -11,6 +15,7 @@
+ 	hutils "github.com/hiddify/hiddify-core/v2/hutils"
+ 	C "github.com/sagernet/sing-box/constant"
+ 	"github.com/sagernet/sing-box/experimental/libbox"
++	"github.com/sagernet/sing-box/log"
+ 	"github.com/sagernet/sing-box/option"
+ )
+ 
+@@ -37,7 +42,11 @@
+ 
+ 		// Log(LogLevel_DEBUG, LogType_CORE, "Building config ", string(hcontent))
+ 		// Log(LogLevel_DEBUG, LogType_CORE, "Building config ")
+-		return config.BuildConfig(ctx, static.HiddifyOptions, readOpt)
++		snapshot, err := static.settingsSnapshot()
++		if err != nil {
++			return nil, err
++		}
++		return config.BuildConfig(ctx, snapshot, readOpt)
+ 	}
+ 	return config.ReadSingOptions(ctx, readOpt)
+ 
+@@ -47,18 +56,72 @@
+ 	return Parse(libbox.FromContext(ctx, nil), in)
+ }
+ 
+-func Parse(ctx context.Context, in *ParseRequest) (*ParseResponse, error) {
++func Parse(ctx context.Context, in *ParseRequest) (response *ParseResponse, parseError error) {
+ 	defer config.DeferPanicToError("parse", func(err error) {
+ 		Log(LogLevel_FATAL, LogType_CONFIG, err.Error())
+-		StopAndAlert(MessageType_UNEXPECTED_ERROR, err.Error())
++		parseError = err
+ 	})
+ 
++	snapshot, snapshotErr := static.settingsSnapshot()
++	if snapshotErr != nil {
++		return nil, snapshotErr
++	}
++	if location, isDatabase, locationErr := configdb.ParseLocation(in.ConfigPath); isDatabase {
++		if locationErr != nil {
++			return nil, locationErr
++		}
++		store, openErr := configdb.Open(ctx, location.Path)
++		if openErr != nil {
++			return nil, openErr
++		}
++		defer store.Close()
++		parsedLocation, _ := url.Parse(in.ConfigPath)
++		if parsedLocation.Query().Get("operation") == "delete" {
++			if deleteErr := store.DeleteProfile(ctx, location.Profile); deleteErr != nil {
++				return nil, deleteErr
++			}
++			return &ParseResponse{ResponseCode: hcommon.ResponseCode_OK}, nil
++		}
++		if parsedLocation.Query().Get("operation") == "migrate" {
++			if revision, resolveErr := store.Resolve(ctx, location.Profile, ""); resolveErr == nil {
++				return &ParseResponse{ResponseCode: hcommon.ResponseCode_OK, Message: revision}, nil
++			}
++		}
++		if in.TempPath == "" && in.Content == "" {
++			revision, resolveErr := store.Resolve(ctx, location.Profile, location.Revision)
++			if resolveErr != nil {
++				return nil, resolveErr
++			}
++			return &ParseResponse{ResponseCode: hcommon.ResponseCode_OK, Message: revision}, nil
++		}
++		options, parseErr := config.ParseConfig(ctx, &config.ReadOptions{Content: in.Content, Path: in.TempPath}, false, snapshot, false)
++		if parseErr != nil {
++			return nil, parseErr
++		}
++		metadata, inspectErr := libbox.InspectDatabaseImport(ctx, options)
++		if inspectErr != nil {
++			return nil, inspectErr
++		}
++		descriptors := make(map[string]configdb.Descriptor, len(metadata))
++		for _, item := range metadata {
++			descriptors[item.Tag] = configdb.Descriptor{Network: item.Network, Dependencies: item.Dependencies, Display: item.Display, IsGroup: item.IsGroup}
++		}
++		sourceBytes, readErr := config.ReadContent(ctx, &config.ReadOptions{Content: in.Content, Path: in.TempPath})
++		if readErr != nil {
++			return nil, readErr
++		}
++		revision, importErr := store.Import(ctx, location.Profile, options, descriptors, configdb.SourceHash(sourceBytes))
++		if importErr != nil {
++			return nil, fmt.Errorf("import configuration tables: %w", importErr)
++		}
++		return &ParseResponse{ResponseCode: hcommon.ResponseCode_OK, Message: revision}, nil
++	}
+ 	path := in.TempPath
+ 	if path == "" {
+ 		path = in.ConfigPath
+ 	}
+ 
+-	config, err := config.ParseConfigBytes(ctx, &config.ReadOptions{Content: in.Content, Path: path}, true, static.HiddifyOptions, false)
++	config, err := config.ParseConfigBytes(ctx, &config.ReadOptions{Content: in.Content, Path: path}, false, snapshot, false)
+ 	if err != nil {
+ 		return &ParseResponse{
+ 			ResponseCode: hcommon.ResponseCode_FAILED,
+@@ -85,54 +148,95 @@
+ 	return ChangeHiddifySettings(in, true)
+ }
+ 
+-func ChangeHiddifySettings(in *ChangeHiddifySettingsRequest, insert bool) (*CoreInfoResponse, error) {
+-	static.HiddifyOptions = config.DefaultHiddifyOptions()
++func ChangeHiddifySettings(in *ChangeHiddifySettingsRequest, insert bool) (response *CoreInfoResponse, resultErr error) {
++	static.settingsMu.Lock()
++	defer static.settingsMu.Unlock()
++	settingsOptions := config.DefaultHiddifyOptions()
+ 	defer func() {
+-		switch static.HiddifyOptions.LogLevel {
++		if resultErr != nil {
++			return
++		}
++		static.HiddifyOptions = settingsOptions
++		var coreLevel LogLevel
++		switch settingsOptions.LogLevel {
+ 		case "debug":
+-			static.logLevel = LogLevel_DEBUG
++			coreLevel = LogLevel_DEBUG
+ 		case "info":
+-			static.logLevel = LogLevel_INFO
++			coreLevel = LogLevel_INFO
+ 		case "warn":
+-			static.logLevel = LogLevel_WARNING
++			coreLevel = LogLevel_WARNING
+ 		case "error":
+-			static.logLevel = LogLevel_ERROR
++			coreLevel = LogLevel_ERROR
+ 		case "fatal":
+-			static.logLevel = LogLevel_FATAL
++			coreLevel = LogLevel_FATAL
+ 		case "trace":
+-			static.logLevel = LogLevel_TRACE
++			coreLevel = LogLevel_TRACE
+ 		default:
+-			static.logLevel = LogLevel_INFO
+-		}
+-		static.debug = static.debug || static.logLevel <= LogLevel_DEBUG
++			coreLevel = LogLevel_INFO
++		}
++		loggingEnabled.Store(settingsOptions.LogLevel != "off")
++		static.logLevel.Store(int32(coreLevel))
++		static.debug.Store(loggingEnabled.Load() && coreLevel <= LogLevel_DEBUG)
++		if loggingEnabled.Load() && static.CoreLogFactory != nil {
++			if level, parseErr := log.ParseLevel(settingsOptions.LogLevel); parseErr == nil {
++				static.CoreLogFactory.SetLevel(level)
++			}
++			log.SetStdLogger(static.CoreLogFactory.Logger())
++		} else {
++			log.SetStdLogger(log.NewNOPFactory().Logger())
++		}
++
+ 	}()
+ 
+ 	if in.HiddifySettingsJson == "" {
+ 		return &CoreInfoResponse{}, nil
+ 	}
+-	if insert {
++	if isDatabase, readErr := configdb.ReadSettings(libbox.BaseContext(nil), in.HiddifySettingsJson, settingsOptions); isDatabase {
++		if readErr != nil {
++			return nil, readErr
++		}
++		if insert {
++			settings := db.GetTable[hcommon.AppSettings]()
++			if saveErr := settings.UpdateInsert(&hcommon.AppSettings{Id: "HiddifySettingsJson", Value: in.HiddifySettingsJson}); saveErr != nil {
++				return nil, saveErr
++			}
++		}
++		return &CoreInfoResponse{}, nil
++	}
++
++	err := json.Unmarshal([]byte(in.HiddifySettingsJson), settingsOptions)
++	if err != nil {
++		return nil, err
++	}
++
++	if settingsOptions.Warp.WireguardConfigStr != "" {
++		err := json.Unmarshal([]byte(settingsOptions.Warp.WireguardConfigStr), &settingsOptions.Warp.WireguardConfig)
++		if err != nil {
++			return nil, err
++		}
++	}
++	settingsOptions.Warp.WireguardConfigStr = ""
++	if settingsOptions.Warp2.WireguardConfigStr != "" {
++		err := json.Unmarshal([]byte(settingsOptions.Warp2.WireguardConfigStr), &settingsOptions.Warp2.WireguardConfig)
++		if err != nil {
++			return nil, err
++		}
++	}
++	settingsOptions.Warp2.WireguardConfigStr = ""
++	{
++		catalog, openErr := configdb.Open(libbox.BaseContext(nil), filepath.Join(sWorkingPath, "data", "configurations.db"))
++		if openErr != nil {
++			return nil, openErr
++		}
++		defer catalog.Close()
++		version, saveErr := catalog.SaveTypedSettings(libbox.BaseContext(nil), settingsOptions)
++		if saveErr != nil {
++			return nil, saveErr
++		}
++		location := configdb.SettingsLocation(filepath.Join(sWorkingPath, "data", "configurations.db"), version)
+ 		settings := db.GetTable[hcommon.AppSettings]()
+-		settings.UpdateInsert(&hcommon.AppSettings{
+-			Id:    "HiddifySettingsJson",
+-			Value: in.HiddifySettingsJson,
+-		})
+-	}
+-
+-	err := json.Unmarshal([]byte(in.HiddifySettingsJson), static.HiddifyOptions)
+-	if err != nil {
+-		return nil, err
+-	}
+-
+-	if static.HiddifyOptions.Warp.WireguardConfigStr != "" {
+-		err := json.Unmarshal([]byte(static.HiddifyOptions.Warp.WireguardConfigStr), &static.HiddifyOptions.Warp.WireguardConfig)
+-		if err != nil {
+-			return nil, err
+-		}
+-	}
+-	if static.HiddifyOptions.Warp2.WireguardConfigStr != "" {
+-		err := json.Unmarshal([]byte(static.HiddifyOptions.Warp2.WireguardConfigStr), &static.HiddifyOptions.Warp2.WireguardConfig)
+-		if err != nil {
+-			return nil, err
++		if saveErr = settings.UpdateInsert(&hcommon.AppSettings{Id: "HiddifySettingsJson", Value: location}); saveErr != nil {
++			return nil, saveErr
+ 		}
+ 	}
+ 	return &CoreInfoResponse{}, nil
+--- a/v2/hcore/grpc_server.go
++++ b/v2/hcore/grpc_server.go
+@@ -12,9 +12,11 @@
+ 	"io"
+ 	"net/http"
+ 
++	"github.com/hiddify/hiddify-core/v2/configdb"
+ 	"net"
+ 	_ "net/http/pprof"
+ 	"os"
++	"path/filepath"
+ 	"strconv"
+ 	"strings"
+ 	sync "sync"
+@@ -53,8 +55,11 @@
+ 		Log(LogLevel_WARNING, LogType_CORE, "grpcServer already started")
+ 		return nil
+ 	}
+-	static.BaseContext = libbox.BaseContext(platformInterface)
+-	static.debug = params.Debug
++	// The CLI can install a default stderr logger before Setup. Remain silent
++	// until persisted settings explicitly enable diagnostics.
++	log.SetStdLogger(log.NewNOPFactory().Logger())
++	// BaseContext is initialized after libbox.Setup sets the user/path defaults.
++	static.debug.Store(params.Debug)
+ 	static.globalPlatformInterface = platformInterface
+ 	tcpConn := true // runtime.GOOS == "windows" // TODO add TVOS
+ 	libbox.Setup(
+@@ -68,7 +73,9 @@
+ 			Debug:           params.Debug,
+ 		})
+ 
+-	hutils.RedirectStderr(fmt.Sprint(params.WorkingDir, "/data/stderr", params.Mode, ".log"))
++	if params.Debug {
++		hutils.RedirectStderr(fmt.Sprint(params.WorkingDir, "/data/stderr", params.Mode, ".log"))
++	}
+ 
+ 	Log(LogLevel_DEBUG, LogType_CORE, fmt.Sprintf("libbox.Setup success %s %s %s %v", params.BasePath, params.WorkingDir, params.TempDir, tcpConn))
+ 
+@@ -77,6 +84,12 @@
+ 	sTempPath = params.TempDir
+ 	sUserID = os.Getuid()
+ 	sGroupID = os.Getgid()
++	static.BaseContext = libbox.BaseContext(platformInterface)
++	catalog, dbErr := configdb.Open(static.BaseContext, filepath.Join(sWorkingPath, "data", "configurations.db"))
++	if dbErr != nil {
++		return dbErr
++	}
++	catalog.Close()
+ 
+ 	var defaultWriter io.Writer
+ 	if !params.Debug {
+@@ -140,7 +153,7 @@
+ 	if service == "core" {
+ 		// Setup("./tmp/", "./tmp", "./tmp", 11111, false)
+ 		RegisterCoreServer(s, &CoreService{})
+-	registerAvailabilityServer(s)
++		registerAvailabilityServer(s)
+ 		// pb.RegisterExtensionHostServiceServer(s, &extension.ExtensionHostService{})
+ 	} else if service == "hello" {
+ 		// RegisterHelloServer(s, &hello.HelloService{})
+--- a/v2/hcore/logproto.go
++++ b/v2/hcore/logproto.go
+@@ -30,7 +30,7 @@
+ 	}
+ }
+ func Log(level LogLevel, typ LogType, message ...any) {
+-	if level < static.logLevel {
++	if !loggingEnabled.Load() || level < LogLevel(static.logLevel.Load()) {
+ 		return
+ 	}
+ 	// if static.debug {
+--- a/v2/hcore/proxy_info.go
++++ b/v2/hcore/proxy_info.go
+@@ -182,7 +182,7 @@
+ 	if ctx, urlTestHistory := h.Context(), h.UrlTestHistory(); ctx != nil && urlTestHistory != nil {
+ 		monitor := monitoring.Get(ctx)
+ 
+-		stream.Send(h.GetAllProxiesInfo(monitor.OutboundsHistory(""), onlyMain))
++		stream.Send(h.proxySnapshot(monitor, onlyMain))
+ 
+ 		urltestch, err := monitor.SubscribeGroup("")
+ 		if err != nil {
+@@ -218,7 +218,7 @@
+ 					timerCh = timer.C
+ 				}
+ 			case <-timerCh:
+-				if err := stream.Send(h.GetAllProxiesInfo(monitor.OutboundsHistory(""), onlyMain)); err != nil {
++				if err := stream.Send(h.proxySnapshot(monitor, onlyMain)); err != nil {
+ 					Log(LogLevel_ERROR, LogType_CORE, "failed to send outbounds info: ", err)
+ 					// return err
+ 				}
+--- a/v2/hcore/restart.go
++++ b/v2/hcore/restart.go
+@@ -17,6 +17,13 @@
+ 	defer config.DeferPanicToError("startmobile", func(recovered_err error) {
+ 		coreResponse, err = errorWrapper(MessageType_UNEXPECTED_ERROR, recovered_err)
+ 	})
++	if response, handled, reloadErr := reloadDatabase(ctx, in); handled {
++		if reloadErr != nil {
++			Log(LogLevel_ERROR, LogType_CORE, "Database reload failed; retaining running service: ", reloadErr)
++			return nil, reloadErr
++		}
++		return response, nil
++	}
+ 	log.Debug("[Service] Restarting")
+ 	// if static.CoreState != CoreStates_STARTED {
+ 	// 	return errorWrapper(MessageType_INSTANCE_NOT_STARTED, fmt.Errorf("instance not started"))
+@@ -30,7 +37,7 @@
+ 		return resp, err
+ 	}
+ 
+-	if C.IsAndroid && static.HiddifyOptions.EnableTun {
++	if C.IsAndroid && static.tunEnabled() {
+ 		select {
+ 		case <-ctx.Done():
+ 			return SetCoreStatus(CoreStates_STOPPED, MessageType_INSTANCE_NOT_STARTED, "restart cancelled"), nil
+--- a/v2/hcore/service.go
++++ b/v2/hcore/service.go
+@@ -20,7 +20,7 @@
+ 	logInterface := LogInterface{}
+ 	bopts := daemon.ServiceOptions{
+ 		Context:     ctx,
+-		Debug:       static.debug,
++		Debug:       static.debug.Load(),
+ 		LogMaxLines: 100,
+ 		// Options:           *options,
+ 		Handler: &logInterface,
+@@ -28,7 +28,10 @@
+ 			&hiddifyMainServiceManager{},
+ 		},
+ 	}
++	databaseSource := options.DatabaseSource
++	options.DatabaseSource = nil
+ 	err := libbox.CheckConfigOptions(&options)
++	options.DatabaseSource = databaseSource
+ 	if err != nil {
+ 		return nil, err
+ 	}
+--- a/v2/hcore/start.go
++++ b/v2/hcore/start.go
+@@ -111,8 +111,10 @@
+ 	currentBuildConfigPath := filepath.Join(sWorkingPath, "data/current-config.json")
+ 	Log(LogLevel_DEBUG, LogType_CORE, "Saving config to ", currentBuildConfigPath)
+ 
+-	config.SaveCurrentConfig(ctx, currentBuildConfigPath, *options)
+-	if static.debug {
++	if options.DatabaseSource == nil {
++		config.SaveCurrentConfig(ctx, currentBuildConfigPath, *options)
++	}
++	if static.debug.Load() && options.DatabaseSource == nil {
+ 		pout, err := options.MarshalJSONContext(ctx)
+ 		if err != nil {
+ 			return errorWrapper(MessageType_ERROR_BUILDING_CONFIG, err)
+@@ -136,7 +138,7 @@
+ 		return errorWrapper(MessageType_START_SERVICE, err)
+ 	}
+ 	static.StartedService = instance
+-	if static.debug {
++	if static.debug.Load() {
+ 		dumpGoroutinesToFile(fmt.Sprint(sWorkingPath, "/data/goroutine-start.log"))
+ 	}
+ 	for inb := range options.Inbounds {
+--- a/v2/hcore/static_data.go
++++ b/v2/hcore/static_data.go
+@@ -3,6 +3,7 @@
+ import (
+ 	"context"
+ 	"sync"
++	"sync/atomic"
+ 	"time"
+ 
+ 	"github.com/hiddify/hiddify-core/v2/config"
+@@ -26,13 +27,17 @@
+ 	lock                      sync.Mutex
+ 	globalPlatformInterface   libbox.PlatformInterface
+ 	previousStartRequest      *StartRequest
+-	debug                     bool
++	debug                     atomic.Bool
+ 	ListenPort                uint16
+ 	BaseContext               context.Context
+ 	endPauseTimer             *time.Timer // only for ios
+ 
+-	logLevel LogLevel
++	logLevel   atomic.Int32
++	settingsMu sync.RWMutex
+ }
++
++// Logging starts disabled until settings explicitly enable diagnostics.
++var loggingEnabled atomic.Bool
+ 
+ var static = &HiddifyInstance{
+ 	CoreState:                 CoreStates_STOPPED,

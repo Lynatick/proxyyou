@@ -48,6 +48,8 @@ GEO_ASSETS_DIR=assets$(SEP)core
 CORE_PRODUCT_NAME=hiddify-core
 CORE_NAME=hiddify-lib
 LIB_NAME=hiddify-core
+NATIVE_SOURCE ?= ../core-source
+NATIVE_MACOS_ARCH ?= arm64
 
 ifeq ($(CHANNEL),prod)
 	CORE_URL=https://github.com/hiddify/hiddify-core/releases/download/v$(core.version)
@@ -472,17 +474,15 @@ macos-release:
 ios-release: #not tested
 	fastforge package --platform ios --targets ipa --build-export-options-plist  ios/exportOptions.plist $(DISTRIBUTOR_ARGS)
 
+# Database-backed configurations require ProxyYou's locally patched native core.
 android-libs:
-	$(MKDIR) $(ANDROID_OUT) || echo Folder already exists. Skipping...
-	curl -L $(CORE_URL)/$(CORE_NAME)-android.tar.gz | tar xz -C $(ANDROID_OUT)/
+	python3 scripts/native-core-stamp.py verify android/app/libs/hiddify-core.aar
 
 android-apk-libs: android-libs
 android-aab-libs: android-libs
 
 windows-libs:
-	$(MKDIR) $(DESKTOP_OUT) || echo Folder already exists. Skipping...
-	curl -L $(CORE_URL)/$(CORE_NAME)-windows-amd64.tar.gz | tar xz -C $(DESKTOP_OUT)/
-	ls $(DESKTOP_OUT) || dir $(DESKTOP_OUT)/
+	python3 scripts/native-core-stamp.py verify hiddify-core/windows-x64/hiddify-core.dll
 
 
 linux-amd64-libs:
@@ -503,8 +503,7 @@ linux-arm64-musl-libs:
 
 
 macos-libs:
-	mkdir -p  $(DESKTOP_OUT) 
-	curl -L $(CORE_URL)/$(CORE_NAME)-macos.tar.gz | tar xz -C $(DESKTOP_OUT)
+	python3 scripts/native-core-stamp.py verify hiddify-core/bin/hiddify-core.dylib
 
 ios-libs: #not tested
 	mkdir -p $(IOS_OUT)
@@ -520,17 +519,16 @@ build-headers:
 	make -C hiddify-core -f Makefile headers && mv $(BINDIR)/$(CORE_NAME)-headers.h $(BINDIR)/hiddify-core.h
 
 build-android-libs:
-	make -C hiddify-core -f Makefile android 
-	mv $(BINDIR)/$(LIB_NAME).aar $(ANDROID_OUT)/
+	bash scripts/build-android-core.sh "$(NATIVE_SOURCE)"
 
 build-windows-libs:
-	make -C hiddify-core -f Makefile windows-amd64
+	bash scripts/build-windows-core.sh "$(NATIVE_SOURCE)"
 
 build-linux-libs:
 	make -C hiddify-core -f Makefile linux-amd64 
 
 build-macos-libs:
-	make -C hiddify-core -f Makefile macos
+	bash scripts/build-macos-core.sh "$(NATIVE_SOURCE)" "$(NATIVE_MACOS_ARCH)"
 
 build-ios-libs: 
 	rm -rf $(IOS_OUT)/HiddifyCore.xcframework 

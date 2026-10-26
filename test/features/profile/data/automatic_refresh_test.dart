@@ -7,15 +7,14 @@ void main() {
   final now = DateTime(2026, 10, 13, 12);
   RemoteProfileEntity profile({UserOverride? override, Duration interval = const Duration(hours: 6)}) =>
       ProfileEntity.remote(
-            id: 'p',
-            active: true,
-            name: 'Подписка',
-            url: 'https://example.com/',
-            lastUpdate: now.subtract(const Duration(days: 1)),
-            userOverride: override,
-            options: ProfileOptions(updateInterval: interval),
-          )
-          as RemoteProfileEntity;
+        id: 'p',
+        active: true,
+        name: 'Подписка',
+        url: 'https://example.com/',
+        lastUpdate: now.subtract(const Duration(days: 1)),
+        userOverride: override,
+        options: ProfileOptions(updateInterval: interval),
+      ) as RemoteProfileEntity;
   test('default is disabled; explicit saved choice survives serialization', () {
     expect(const UserOverride().isAutoUpdateDisable, isTrue);
     expect(UserOverride.fromStr('{"version":2,"isAutoUpdateDisable":false}')!.isAutoUpdateDisable, isFalse);
@@ -25,9 +24,8 @@ void main() {
     for (final o in [null, const UserOverride(), const UserOverride(isAutoUpdateDisable: false)]) {
       final parsed = ProfileParser.parse(
         tempFilePath: '',
-        profile: profile(
-          override: o,
-        ).copyWith(populatedHeaders: {'profile-title': 'Подписка', 'profile-update-interval': '6'}),
+        profile: profile(override: o)
+            .copyWith(populatedHeaders: {'profile-title': 'Подписка', 'profile-update-interval': '6'}),
       );
       parsed.match((err) => fail('$err'), (entity) {
         final rp = entity as RemoteProfileEntity;
@@ -50,6 +48,25 @@ void main() {
         now,
       ),
       isFalse,
+    );
+  });
+  test('metadata edits apply a name and refresh interval without reading configuration or changing download time', () {
+    final original = profile().copyWith(
+      populatedHeaders: {'profile-update-interval': '6'},
+      userOverride: const UserOverride(name: 'Новое имя', isAutoUpdateDisable: false),
+    );
+    final updated = ProfileParser.parse(
+      tempFilePath: '',
+      profile: original,
+      metadataOnly: true,
+    ).getOrElse((error) => throw error);
+    expect(updated.name, 'Новое имя');
+    expect(updated.lastUpdate, original.lastUpdate);
+    expect((updated as RemoteProfileEntity).options?.updateInterval, const Duration(hours: 6));
+    final local = ProfileEntity.local(id: 'local', active: false, name: 'Локальная', lastUpdate: now);
+    expect(
+      ProfileParser.parse(tempFilePath: '', profile: local, metadataOnly: true).getOrElse((error) => throw error).name,
+      'Локальная',
     );
   });
 }

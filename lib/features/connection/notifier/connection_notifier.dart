@@ -134,7 +134,7 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       await ref.read(Preferences.startedByUser.notifier).update(true);
       await _connectionRepo.reconnect(profile, ref.read(Preferences.disableMemoryLimit)).mapLeft((err) async {
         loggy.warning("error reconnecting", err);
-        state = AsyncError(err, StackTrace.current);
+        state = _connectionRepo.coreIsRunning ? const AsyncData(Connected()) : AsyncError(err, StackTrace.current);
         await ref
             .read(dialogNotifierProvider.notifier)
             .showCustomAlertFromErr(err.present(ref.read(translationsProvider).requireValue));

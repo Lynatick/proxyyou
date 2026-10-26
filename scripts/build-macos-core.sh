@@ -13,7 +13,7 @@ fi
 if grep -q "InterruptExistConnections: true," "$source_dir/v2/config/builder.go"; then
   patch -d "$source_dir" -p1 < "$root/native-patches/connection-continuity.patch"
 fi
-bash "$root/scripts/apply-native-stability.sh" "$source_dir"
+bash "$root/scripts/apply-native-sources.sh" "$source_dir"
 mkdir -p "$root/hiddify-core/bin"
 architecture="${2:-arm64}"
 case "$architecture" in
@@ -27,9 +27,9 @@ export CGO_CXXFLAGS="$CGO_CFLAGS"
 export CGO_LDFLAGS="-arch $clang_arch -mmacosx-version-min=14.0 -O2 -lpthread"
 tags=with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_awg,tfogo_checklinkname0,with_naive_outbound,with_conntrack,with_dhcp
 if [[ "$(go env GOHOSTARCH)" == "$architecture" ]]; then
-  go -C "$source_dir" test -tags="$tags" ./v2/config -run TestProxyYou -count=1
+  go -C "$source_dir" test -ldflags=-checklinkname=0 -tags="$tags" ./v2/config -run TestProxyYou -count=1
 else
-  go -C "$source_dir" test -c -tags="$tags" ./v2/config -o "$root/hiddify-core/bin/proxyyou-routing-$architecture.test"
+  go -C "$source_dir" test -c -ldflags=-checklinkname=0 -tags="$tags" ./v2/config -o "$root/hiddify-core/bin/proxyyou-routing-$architecture.test"
 fi
 go -C "$source_dir" build -trimpath -ldflags='-w -s -checklinkname=0 -buildid=' -tags="$tags" \
   -buildmode=c-shared -o "$root/hiddify-core/bin/hiddify-core.dylib" ./platform/desktop

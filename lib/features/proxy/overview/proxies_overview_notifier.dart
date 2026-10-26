@@ -5,7 +5,6 @@ import 'package:dartx/dartx.dart';
 import 'package:hiddify/core/haptic/haptic_service.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
-import 'package:hiddify/core/utils/latest_async_map.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
@@ -63,17 +62,14 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     if (!serviceRunning) {
       return Stream.error(const ServiceNotRunning());
     }
-    final sortBy = ref.watch(proxiesSortNotifierProvider);
-    return latestAsyncMap(
-      ref.watch(proxyRepositoryProvider).watchProxies().map((event) => event.getOrElse((err) => throw err)),
-      (group) => sortOutboundGroup(group, sortBy),
-      interval: const Duration(milliseconds: 250),
-    );
+    return ref.watch(proxyRepositoryProvider).watchActiveProxies().map((event) {
+      final groups = event.getOrElse((err) => throw err);
+      return groups.where((group) => group.tag == 'select').firstOrNull;
+    });
   }
 
   Future<void> changeProxy(String groupTag, String outboundTag) async {
     loggy.debug("changing proxy, group: [$groupTag] - outbound: [$outboundTag]");
-    if (!state.hasValue) return;
     final repository = ref.read(proxyRepositoryProvider);
     await ref.read(hapticServiceProvider.notifier).lightImpact();
     await repository.selectProxy(groupTag, outboundTag).getOrElse((err) {
@@ -101,14 +97,12 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
 
   Future<void> urlTest(String groupTag) async {
     loggy.debug("testing group: [$groupTag]");
-    if (state case AsyncData()) {
-      final repository = ref.read(proxyRepositoryProvider);
-      await ref.read(hapticServiceProvider.notifier).lightImpact();
-      await repository.urlTest(groupTag).getOrElse((err) {
-        loggy.error("error testing group", err);
-        throw err;
-      }).run();
-    }
+    final repository = ref.read(proxyRepositoryProvider);
+    await ref.read(hapticServiceProvider.notifier).lightImpact();
+    await repository.urlTest(groupTag).getOrElse((err) {
+      loggy.error("error testing group", err);
+      throw err;
+    }).run();
   }
 }
 

@@ -39,7 +39,25 @@ final logRing = LogRing(1000);
 /// Nobody listens to dev.log in a release build, so the sink is never even
 /// attached there. In debug it is on by default and can be switched off when
 /// the logs page alone is enough.
-bool _consoleEnabled = !kReleaseMode;
+bool _consoleEnabled = false;
+bool _loggingEnabled = false;
+String? _filePath;
+bool _keepFile = false;
+
+bool get loggingEnabled => _loggingEnabled;
+
+/// The persisted core log level controls app logging as well. No startup
+/// records or files are created until the user opts into diagnostics.
+void logSetEnabled(bool enabled) {
+  _loggingEnabled = enabled;
+  Logger.root.level = enabled ? Level.ALL : Level.OFF;
+  if (enabled && _keepFile && _filePath != null) {
+    logSetFileEnabled(true);
+  } else if (!enabled) {
+    _dropFile();
+    logRing.clear();
+  }
+}
 
 bool get consoleEnabled => _consoleEnabled;
 
@@ -80,8 +98,7 @@ int errorFrames = 4;
 /// than at whoever called it.
 const _loggerInternals = 'package:hiddify/core/logger/';
 
-bool _isOurs(String frame) =>
-    frame.contains(ownPackagePrefix) && !frame.contains(_loggerInternals);
+bool _isOurs(String frame) => frame.contains(ownPackagePrefix) && !frame.contains(_loggerInternals);
 
 /// Turns the first frame from our own code into `Class.method (file.dart:line)`.
 ///
@@ -126,12 +143,7 @@ String? originOf(StackTrace? stack) {
 StackTrace? _ownFrames(StackTrace? stack) {
   if (stack == null) return null;
 
-  final mine = stack
-      .toString()
-      .split('\n')
-      .where(_isOurs)
-      .take(errorFrames)
-      .toList();
+  final mine = stack.toString().split('\n').where(_isOurs).take(errorFrames).toList();
 
   if (mine.isEmpty) return null;
   return StackTrace.fromString(mine.join('\n'));
@@ -166,6 +178,7 @@ void _toFile(LogRecord r) {
 
 /// Marks where a run begins, since the file now spans several of them.
 void logMarkRun(String appVersion) {
+  if (!_loggingEnabled || !fileEnabled) return;
   final now = DateTime.now().toIso8601String().split('.').first;
   writeLogLine('');
   writeLogLine('---- run started $now  ·  $appVersion ${'-' * 20}');
@@ -177,6 +190,8 @@ bool get fileEnabled => _fileSub != null;
 /// turned back on. Use [logFinish] to close it for good.
 void logSetFileEnabled(bool on) {
   if (on) {
+    if (!_loggingEnabled || _filePath == null) return;
+    if (!isLogFileOpen) openLogFile(_filePath!);
     if (_fileSub == null && isLogFileOpen) {
       _fileSub = Logger.root.onRecord.listen(_toFile);
     }
@@ -195,8 +210,7 @@ void _toRing(LogRecord r) => logRing.add(r);
 /// A phone in release keeps no log file — writing one continuously costs
 /// storage nobody reads. The history is in memory anyway, so it is written out
 /// only when the user actually asks to share it.
-Future<void> exportLogRing(String path) =>
-    writeLinesToFile(path, logRing.records.map(formatRecord));
+Future<void> exportLogRing(String path) => writeLinesToFile(path, logRing.records.map(formatRecord));
 
 // ------------------------------------------------ handles we may cancel later
 
@@ -224,7 +238,7 @@ void _printWhereTheLogsAre() {
 void logStart() {
   // ALL on purpose: this is the only gate before the sinks, and each sink
   // applies its own threshold. Anything dropped here is gone for good.
-  Logger.root.level = Level.ALL;
+  Logger.root.level = _loggingEnabled ? Level.ALL : Level.OFF;
   if (_consoleEnabled) {
     _consoleSub = Logger.root.onRecord.listen(_toConsole);
     _printWhereTheLogsAre();
@@ -235,10 +249,8 @@ void logStart() {
 
 /// phase 2 — the folders are ready, so the file can be opened
 void logAddFile(String path) {
-  openLogFile(path);
-  // on web the sink never opens, so no listener is attached at all
-  if (!isLogFileOpen) return;
-  _fileSub = Logger.root.onRecord.listen(_toFile);
+  _filePath = path;
+  if (_loggingEnabled && _keepFile) logSetFileEnabled(true);
 }
 
 /// phase 3 — the last word on whether the file stays at all
@@ -246,7 +258,12 @@ void logAddFile(String path) {
 /// The root level is not touched here. It stays ALL so the ring keeps every
 /// record; each sink decides for itself what it wants.
 void logFinish({required bool keepFile}) {
-  if (!keepFile) _dropFile();
+  _keepFile = keepFile;
+  if (_loggingEnabled && keepFile) {
+    logSetFileEnabled(true);
+  } else {
+    _dropFile();
+  }
 }
 
 // ------------------------------------------------- switch things at runtime

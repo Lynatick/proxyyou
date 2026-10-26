@@ -29,6 +29,9 @@ class PendingSelectionRepository implements ProxyRepository {
     ),
   );
   @override
+  Stream<Either<ProxyFailure, List<OutboundGroup>>> watchActiveProxies() =>
+      watchProxies().map((event) => event.map((group) => group == null ? <OutboundGroup>[] : [group]));
+  @override
   TaskEither<ProxyFailure, Unit> selectProxy(String groupTag, String outboundTag) =>
       TaskEither(() async => right(await selection.future));
   @override

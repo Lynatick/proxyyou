@@ -44,7 +44,7 @@ abstract class ConfigOptions {
   // static final blockAds = PreferencesNotifier.create<bool, bool>("block-ads", false);
   static final logLevel = PreferencesNotifier.create<LogLevel, String>(
     "log-level",
-    LogLevel.warn,
+    LogLevel.off,
     mapFrom: LogLevel.values.byName,
     mapTo: (value) => value.name,
   );
@@ -550,7 +550,7 @@ class ConfigOptionRepository with ExceptionHandler, InfraLogger {
   Either<ConfigOptionFailure, SingboxConfigOption> fullOptions() =>
       Either.tryCatch(() => _getConfigOptions(), ConfigOptionFailure.unexpected);
 
-  Either<ConfigOptionFailure, SingboxConfigOption> fullOptionsOverrided(String? profileOverride) =>
+  Either<ConfigOptionFailure, SingboxConfigOption> fullOptionsOverrided(Map<String, dynamic>? profileOverride) =>
       Either.tryCatch(() => _getConfigOptions(), ConfigOptionFailure.unexpected).flatMap(
         (options) => Either.tryCatch(() {
           final json = ProfileParser.applyProfileOverride(options.toJson(), profileOverride);

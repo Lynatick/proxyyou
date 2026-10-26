@@ -1,9 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:flutter/foundation.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/services.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:grpc/grpc.dart';
@@ -17,6 +16,7 @@ import 'package:hiddify/features/connection/model/connection_failure.dart';
 import 'package:hiddify/features/connection/model/connection_operations.dart';
 import 'package:hiddify/features/log/model/log_level.dart' as config_log_level;
 import 'package:hiddify/features/profile/data/atomic_config_writer.dart';
+import 'package:hiddify/features/proxy/data/configuration_catalog.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/hiddifycore/core_interface/core_interface_wrapper_stub.dart'
     if (dart.library.io) 'package:hiddify/hiddifycore/core_interface/core_interface_wrapper.dart';
@@ -50,6 +50,8 @@ class HiddifyCoreService with InfraLogger {
   static const _systemProxy = MethodChannel('dev.proxyyou/system-proxy');
   bool _macUseSystemProxy = false;
   int _macMixedPort = 12334;
+  Map<String, dynamic>? _lastOptionValues;
+  String? _lastSettingsLocation;
 
   // Bootstrap and window lifecycle events share the same desktop initialization.
   final _resumeHandler = CoreResumeHandler(isDesktop: PlatformUtils.isDesktop);
@@ -95,13 +97,28 @@ class HiddifyCoreService with InfraLogger {
       }
 
       try {
-        final error = PlatformUtils.isMacOS ? await validateAndReplaceConfig(path, validate) : await validate(path);
+        final error = PlatformUtils.isMacOS && !path.startsWith('proxyyou-db:')
+            ? await validateAndReplaceConfig(path, validate)
+            : await validate(path);
         return error == null ? right(unit) : left(error);
       } catch (error) {
         return left(error.toString());
       }
     });
   }
+
+  TaskEither<String, Unit> deleteDatabaseProfile(String location) => TaskEither(() async {
+    try {
+      if (!core.isInitialized()) {
+        final initialized = await setup().run();
+        if (initialized.isLeft()) return initialized;
+      }
+      final response = await core.fgClient.parseForValidation(ParseRequest(configPath: location));
+      return response.responseCode == ResponseCode.OK ? right(unit) : left(response.message);
+    } catch (error) {
+      return left(error.toString());
+    }
+  });
 
   TaskEither<String, String> generateFullConfigByPath(String path) {
     return TaskEither(() async {
@@ -117,7 +134,7 @@ class HiddifyCoreService with InfraLogger {
         // Setup also runs during profile validation retries. It must preserve
         // an active system proxy; launch recovery belongs to the native helper.
         final directories = ref.read(appDirectoriesProvider).requireValue;
-        final debug = kDebugMode || ref.read(ConfigOptions.logLevel).isVerbose;
+        final debug = ref.read(ConfigOptions.logLevel).isVerbose;
         final setupResponse = await core.setup(directories, debug, 3);
 
         if (setupResponse.isNotEmpty) {
@@ -142,6 +159,10 @@ class HiddifyCoreService with InfraLogger {
   TaskEither<String, Unit> changeOptions(SingboxConfigOption options) {
     return TaskEither(() async {
       loggy.debug("changing options");
+      if (!core.isInitialized()) {
+        final initialized = await setup().run();
+        if (initialized.isLeft()) return initialized;
+      }
       final coreOptions = PlatformUtils.isMacOS ? options.copyWith(setSystemProxy: false) : options;
       if (PlatformUtils.isMacOS) {
         if (ref.read(MacAppPreferences.enabled) && ref.read(macDiagnosticPortProvider) == null) {
@@ -156,43 +177,40 @@ class HiddifyCoreService with InfraLogger {
       }
       // latestOptions = options;
       try {
+        final values = <String, dynamic>{
+          ...coreOptions.toJson(),
+          if (PlatformUtils.isMacOS)
+            'proxyyou-app-routing': {
+              'enabled': ref.read(MacAppPreferences.enabled),
+              'mode': ref.read(MacAppPreferences.mode),
+              'bundles': ref.read(MacAppPreferences.bundles),
+              'diagnostic_port': ref.read(macDiagnosticPortProvider),
+            },
+          'connection-test-url': youtubeTestUrl,
+          'connection-test-urls': [youtubeTestUrl],
+        };
+        final settingsLocation =
+            _lastSettingsLocation != null && const DeepCollectionEquality().equals(_lastOptionValues, values)
+            ? _lastSettingsLocation!
+            : await ref.read(configurationCatalogProvider).saveCoreOptions(values);
         final res = await core.fgClient.changeHiddifySettings(
-          ChangeHiddifySettingsRequest(
-            hiddifySettingsJson: jsonEncode({
-              ...coreOptions.toJson(),
-              if (PlatformUtils.isMacOS)
-                'proxyyou-app-routing': {
-                  'enabled': ref.read(MacAppPreferences.enabled),
-                  'mode': ref.read(MacAppPreferences.mode),
-                  'bundles': ref.read(MacAppPreferences.bundles),
-                  'diagnostic_port': ref.read(macDiagnosticPortProvider),
-                },
-              'connection-test-url': youtubeTestUrl,
-              'connection-test-urls': [youtubeTestUrl],
-            }),
-          ),
+          ChangeHiddifySettingsRequest(hiddifySettingsJson: settingsLocation),
           options: CallOptions(timeout: const Duration(seconds: 10)),
         );
         if (res.messageType != MessageType.EMPTY) return left("${res.messageType} ${res.message}");
         if (!core.isSingleChannel()) {
-          await core.bgClient.changeHiddifySettings(
-            ChangeHiddifySettingsRequest(
-              hiddifySettingsJson: jsonEncode({
-                ...coreOptions.toJson(),
-                if (PlatformUtils.isMacOS)
-                  'proxyyou-app-routing': {
-                    'enabled': ref.read(MacAppPreferences.enabled),
-                    'mode': ref.read(MacAppPreferences.mode),
-                    'bundles': ref.read(MacAppPreferences.bundles),
-                    'diagnostic_port': ref.read(macDiagnosticPortProvider),
-                  },
-                'connection-test-url': youtubeTestUrl,
-                'connection-test-urls': [youtubeTestUrl],
-              }),
-            ),
+          final background = await core.bgClient.changeHiddifySettings(
+            ChangeHiddifySettingsRequest(hiddifySettingsJson: settingsLocation),
             options: CallOptions(timeout: const Duration(seconds: 10)),
           );
+          if (background.messageType != MessageType.EMPTY) {
+            return left('${background.messageType} ${background.message}');
+          }
         }
+        _lastOptionValues = Map<String, dynamic>.unmodifiable(
+          values.map((key, value) => MapEntry(key, _freezeOptions(value))),
+        );
+        _lastSettingsLocation = settingsLocation;
       } on GrpcError catch (e) {
         if (e.code == StatusCode.unavailable) {
           loggy.debug("background core is not started yet! $e");
@@ -353,7 +371,7 @@ class HiddifyCoreService with InfraLogger {
   TaskEither<String, Unit> restart(String path, String name, bool disableMemoryLimit) {
     return TaskEither(() async {
       loggy.debug("restarting");
-      if (PlatformUtils.isMacOS) {
+      if (PlatformUtils.isMacOS && !path.startsWith('proxyyou-db:')) {
         // Stop/start also applies changed proxy ports and restores previous network preferences.
         final stopped = await stop().run();
         if (stopped.isLeft()) return stopped;
@@ -570,6 +588,10 @@ class HiddifyCoreService with InfraLogger {
 
   Future<void> startListeningLogs(String key, CoreClient cc) async {
     final logLevel = ref.read(ConfigOptions.logLevel);
+    if (logLevel == config_log_level.LogLevel.off) {
+      await stopListenSingle('${key}LogListener');
+      return;
+    }
     final coreLogLevel = getCoreLogLevel(logLevel);
     final listenKey = "${key}LogListener";
     // await stopListenSingle(listenKey);
@@ -653,6 +675,7 @@ class HiddifyCoreService with InfraLogger {
       config_log_level.LogLevel.error => LogLevel.ERROR,
       config_log_level.LogLevel.fatal => LogLevel.FATAL,
       config_log_level.LogLevel.panic => LogLevel.FATAL,
+      config_log_level.LogLevel.off => LogLevel.FATAL,
       // ignore: unreachable_switch_case
       _ => LogLevel.INFO, // Default case
     };
@@ -697,3 +720,9 @@ Future<OutboundGroup?> decodeOutboundSnapshot(Uint8List bytes) => Isolate.run(()
   final groups = OutboundGroupList.fromBuffer(bytes).items;
   return groups.isEmpty ? null : groups.first;
 });
+
+Object? _freezeOptions(Object? value) => switch (value) {
+  Map() => Map<String, dynamic>.unmodifiable(value.map((key, item) => MapEntry(key as String, _freezeOptions(item)))),
+  List() => List<Object?>.unmodifiable(value.map(_freezeOptions)),
+  _ => value,
+};

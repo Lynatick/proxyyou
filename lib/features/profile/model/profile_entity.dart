@@ -41,7 +41,7 @@ sealed class ProfileEntity with _$ProfileEntity {
     @Default(false) bool pinned,
   }) = LocalProfileEntity;
 
-  String profileOverride() =>
+  Map<String, dynamic> profileOverride() =>
       ProfileParser.profileOverride(populatedHeaders: populatedHeaders, userOverride: userOverride);
 }
 

@@ -1,9 +1,10 @@
 // dart format width=80
 // ignore_for_file: unused_local_variable, unused_import
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift_dev/api/migrations_native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hiddify/core/db/db.dart';
+import 'package:hiddify/features/profile/data/profile_data_source.dart';
 
 import 'generated/schema.dart';
 import 'generated/schema_v1.dart' as v1;
@@ -69,6 +70,34 @@ void main() {
         );
       },
     );
+  });
+
+  test('v7 migration preserves subscription headers and explicit override choices as rows', () async {
+    final schema = await verifier.schemaAt(7);
+    addTearDown(() => schema.rawDatabase.close());
+    schema.rawDatabase.execute("""
+      INSERT INTO profile_entries(id,type,active,name,url,last_update,populated_headers,user_override,pinned)
+      VALUES('profile','remote',1,'Subscription','https://example.invalid/subscription','2026-10-26T12:00:00Z',
+      '{"etag":["first","second"],"extra-security":"warp","empty":[]}',
+      '{"version":1,"isAutoUpdateDisable":false,"enableWarp":true,"enableFragment":true,"name":"Custom"}',1)
+    """);
+    final database = Db(schema.newConnection());
+    await verifier.migrateAndValidate(database, 8);
+    final entry = await ProfileDao(database).getById('profile');
+    expect(entry?.pinned, isTrue);
+    expect(entry?.populatedHeaders, {
+      'etag': ['first', 'second'],
+      'extra-security': 'warp',
+      'empty': <String>[],
+    });
+    expect(entry?.userOverride?.extraSecurity, 'warp');
+    expect(entry?.userOverride?.isAutoUpdateDisable, isFalse);
+    expect(entry?.userOverride?.enableFragment, isTrue);
+    expect(entry?.userOverride?.name, 'Custom');
+    final row = await database.select(database.profileEntries).getSingle();
+    expect(row.userOverride, isNull);
+    expect(row.populatedHeaders, isNull);
+    await database.close();
   });
 
   group('_columnExists-backed migrations', () {

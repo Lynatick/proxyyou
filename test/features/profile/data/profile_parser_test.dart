@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/features/profile/data/profile_parser.dart';
@@ -39,10 +37,9 @@ void expectRemote(Either<ProfileFailure, ProfileEntity> either, void Function(Re
   });
 }
 
-/// Build and decode the profile-override JSON from raw headers / user override.
+/// Build typed override values from raw headers / user override.
 Map<String, dynamic> decodeOverride({Map<String, dynamic>? headers, UserOverride? userOverride}) {
-  return jsonDecode(ProfileParser.profileOverride(populatedHeaders: headers, userOverride: userOverride))
-      as Map<String, dynamic>;
+  return ProfileParser.profileOverride(populatedHeaders: headers, userOverride: userOverride);
 }
 
 void main() {

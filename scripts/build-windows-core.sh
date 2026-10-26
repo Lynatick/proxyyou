@@ -13,7 +13,7 @@ fi
 if grep -q "InterruptExistConnections: true," "$source_dir/v2/config/builder.go"; then
   patch -d "$source_dir" -p1 < "$root/native-patches/connection-continuity.patch"
 fi
-bash "$root/scripts/apply-native-stability.sh" "$source_dir"
+bash "$root/scripts/apply-native-sources.sh" "$source_dir"
 out="$root/hiddify-core/windows-x64"
 mkdir -p "$out"
 tags=with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_awg,tfogo_checklinkname0,with_naive_outbound,with_conntrack,with_purego

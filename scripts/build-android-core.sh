@@ -13,7 +13,7 @@ fi
 if grep -q 'InterruptExistConnections: true,' "$source_dir/v2/config/builder.go"; then
   patch -d "$source_dir" -p1 < "$root/native-patches/connection-continuity.patch"
 fi
-bash "$root/scripts/apply-native-stability.sh" "$source_dir"
+bash "$root/scripts/apply-native-sources.sh" "$source_dir"
 mkdir -p "$root/android/app/libs"
 export CGO_LDFLAGS='-O2 -g -s -w -Wl,-z,max-page-size=16384'
 cd "$source_dir"

@@ -166,7 +166,7 @@ class _CoreLevelChip extends ConsumerWidget {
       label: t.pages.logs.coreLogLevel,
       value: ref.watch(ConfigOptions.logLevel),
       options: engine.LogLevel.choices,
-      nameOf: (value) => value.name,
+      nameOf: (value) => value == engine.LogLevel.off ? 'Отключено' : value.name,
       onSelected: (value) async {
         if (value == null) return;
         // Read before the await: the status can change while it is in flight.
