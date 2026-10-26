@@ -25,10 +25,12 @@ class CatalogOverviewNotifier extends AsyncNotifier<CatalogOverviewState> {
   Timer? _timer;
   bool _refreshing = false;
   int _generation = 0;
+  Object? _orderingVersion;
 
   @override
   Future<CatalogOverviewState> build() async {
     final generation = ++_generation;
+    _orderingVersion = null;
     final connected = ref.watch(serviceRunningProvider);
     final sort = ref.watch(proxiesSortNotifierProvider);
     final profile = await ref.watch(activeProfileProvider.future);
@@ -53,7 +55,7 @@ class CatalogOverviewNotifier extends AsyncNotifier<CatalogOverviewState> {
 
   Future<void> loadMore() async {
     final previous = state.value;
-    if (previous == null || previous.loadingMore || !previous.hasMore) return;
+    if (previous == null || previous.loadingMore || _refreshing || !previous.hasMore) return;
     final generation = _generation;
     state = AsyncData(
       CatalogOverviewState(previous.view, previous.items, loadingMore: true, selected: previous.selected),
@@ -84,9 +86,18 @@ class CatalogOverviewNotifier extends AsyncNotifier<CatalogOverviewState> {
         ref.invalidateSelf();
         return;
       }
-      final items = await database.page(previous.view, offset: 0, limit: previous.items.length);
+      final sort = ref.read(proxiesSortNotifierProvider);
+      final orderingVersion = await database.orderingVersion(previous.view, sort);
+      if (!ref.mounted || generation != _generation) return;
+      final items = await database.refreshPage(
+        previous.view,
+        sort,
+        limit: previous.items.length,
+        reorder: orderingVersion != _orderingVersion,
+      );
       if (ref.mounted && generation == _generation && !(state.value?.loadingMore ?? false)) {
-        state = AsyncData(CatalogOverviewState(previous.view, items, selected: previous.selected));
+        _orderingVersion = orderingVersion;
+        state = AsyncData(CatalogOverviewState(previous.view, items, selected: state.value?.selected));
       }
     } catch (_) {
       // Keep the last page through a transient database lock. A later tick
