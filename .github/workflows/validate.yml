@@ -41,7 +41,9 @@ jobs:
         # the local release cores, not claimed by this CI job.
         run: |
           mkdir -p "$RUNNER_TEMP/unit-sqlite"
-          ln -s /usr/lib/libsqlite3.dylib "$RUNNER_TEMP/unit-sqlite/hiddify-core.dylib"
+          # System SQLite lives in dyld's shared cache, so a filesystem symlink
+          # cannot alias it. Re-export its symbols through a test-only library.
+          clang -dynamiclib -x c /dev/null -Wl,-reexport-lsqlite3 -o "$RUNNER_TEMP/unit-sqlite/hiddify-core.dylib"
           # Invoke the snapshot directly: macOS strips DYLD_* when launching
           # Flutter's /usr/bin/env shell entrypoint.
           DYLD_LIBRARY_PATH="$RUNNER_TEMP/unit-sqlite" "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" "$FLUTTER_ROOT/bin/cache/flutter_tools.snapshot" test --concurrency=1
