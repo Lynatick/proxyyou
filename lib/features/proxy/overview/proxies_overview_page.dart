@@ -60,6 +60,10 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
                   OutboundInfo(tag: 'lowest', tagDisplay: 'lowest', type: 'balancer', isGroup: true),
                 ]
               : const <OutboundInfo>[];
+          final indices = <String, int>{
+            for (var index = 0; index < modes.length; index++) modes[index].tag: index,
+            for (var index = 0; index < data.items.length; index++) data.items[index].tag: modes.length + index,
+          };
           return LayoutBuilder(
             builder: (context, constraints) {
               final columns = PlatformUtils.isMobile && constraints.maxWidth < 600
@@ -68,6 +72,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
               return GridView.builder(
                 padding: const EdgeInsets.only(bottom: 86),
                 itemCount: modes.length + data.items.length + (data.hasMore ? 1 : 0),
+                findChildIndexCallback: (key) => key is ValueKey<String> ? indices[key.value] : null,
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: columns, mainAxisExtent: 72),
                 itemBuilder: (context, index) {
                   if (index == modes.length + data.items.length) {

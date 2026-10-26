@@ -75,25 +75,7 @@ class ConfigurationCatalog extends GeneratedDatabase {
     if (revisionRow == null) return const CatalogView('', '', 0);
     final revision = revisionRow.read<String>('revision');
     try {
-      await customStatement(
-        'CREATE TEMP TABLE IF NOT EXISTS configuration_view_rows( '
-        'view_id TEXT NOT NULL,position INTEGER NOT NULL,revision TEXT NOT NULL,entry_id INTEGER NOT NULL, '
-        'PRIMARY KEY(view_id,position)) WITHOUT ROWID',
-      );
-      final order = switch (sort) {
-        ProxiesSort.unsorted => "CASE e.section WHEN 'outbounds' THEN 0 ELSE 1 END,e.ordinal,e.id",
-        ProxiesSort.name => 'e.tag,e.id',
-        ProxiesSort.delay => 'CASE WHEN $delay=0 THEN 2147483647 ELSE $delay END,e.tag,e.id',
-        ProxiesSort.usage => 'COALESCE(u.upload+u.download,0) DESC,e.tag,e.id',
-      };
-      await customStatement(
-        'INSERT INTO configuration_view_rows '
-        'SELECT ?,row_number() OVER(ORDER BY $order)-1,e.revision,e.id '
-        'FROM configuration_entries e $statusJoin '
-        "WHERE e.revision=? AND e.is_group=0 AND e.section<>'root' "
-        "AND e.type NOT IN ('direct','dns','block','custom') AND instr(e.tag,'§hide§')=0",
-        [view, revision],
-      );
+      await refreshOrder(CatalogView(view, revision, 0, profile: profile), sort);
       final count = await customSelect(
         'SELECT count(*) AS count FROM configuration_view_rows WHERE view_id=?',
         variables: [Variable(view)],
@@ -105,8 +87,71 @@ class ConfigurationCatalog extends GeneratedDatabase {
     }
   }
 
-  // Freeze ordering per view while checks run. Status values remain live, so
-  // pagination never duplicates/skips a node or moves TV focus after a ping.
+  // Replace the complete SQL ranking atomically, including rows beyond the
+  // currently loaded page. The notifier reloads its entire visible prefix
+  // before allowing another page request, so offsets cannot mix two rankings.
+  Future<void> refreshOrder(CatalogView view, ProxiesSort sort) async {
+    final order = switch (sort) {
+      ProxiesSort.unsorted => "CASE e.section WHEN 'outbounds' THEN 0 ELSE 1 END,e.ordinal,e.id",
+      ProxiesSort.name => 'e.tag,e.id',
+      ProxiesSort.delay => 'CASE WHEN $delay=0 THEN 2147483647 ELSE $delay END,e.tag,e.id',
+      ProxiesSort.usage => 'COALESCE(u.upload+u.download,0) DESC,e.tag,e.id',
+    };
+    await transaction(() async {
+      await customStatement(
+        'CREATE TEMP TABLE IF NOT EXISTS configuration_view_rows( '
+        'view_id TEXT NOT NULL,position INTEGER NOT NULL,revision TEXT NOT NULL,entry_id INTEGER NOT NULL, '
+        'PRIMARY KEY(view_id,position)) WITHOUT ROWID',
+      );
+      await customStatement('DELETE FROM configuration_view_rows WHERE view_id=?', [view.id]);
+      await customStatement(
+        'INSERT INTO configuration_view_rows '
+        'SELECT ?,row_number() OVER(ORDER BY $order)-1,e.revision,e.id '
+        'FROM configuration_entries e $statusJoin '
+        "WHERE e.revision=? AND e.is_group=0 AND e.section<>'root' "
+        "AND e.type NOT IN ('direct','dns','block','custom') AND instr(e.tag,'§hide§')=0 "
+        'AND EXISTS(SELECT 1 FROM configuration_revision_leases WHERE token=? AND revision=?)',
+        [view.id, view.revision, view.id, view.revision],
+      );
+    });
+  }
+
+  // Traffic changes must not re-sort a delay list every second. Sequence sums
+  // change when results are written, including results for unloaded pages;
+  // session/epoch also invalidate ordering when a new connection/network starts.
+  Future<Object?> orderingVersion(CatalogView view, ProxiesSort sort) async {
+    if (sort == ProxiesSort.delay) {
+      final row = await customSelect(
+        'SELECT r.session,r.network_epoch,COALESCE(sum(s.sequence),0) AS sequence '
+        'FROM configuration_runtime r LEFT JOIN configuration_status s '
+        'ON s.revision=r.revision AND s.session=r.session AND s.network_epoch=r.network_epoch '
+        'WHERE r.profile_id=? AND r.revision=?',
+        variables: [Variable(view.profile), Variable(view.revision)],
+      ).getSingle();
+      return (row.readNullable<String>('session'), row.readNullable<int>('network_epoch'), row.read<int>('sequence'));
+    }
+    if (sort == ProxiesSort.usage) {
+      final row = await customSelect(
+        'SELECT count(*) AS count,COALESCE(sum(upload),0) AS upload,COALESCE(sum(download),0) AS download '
+        'FROM configuration_usage WHERE revision=?',
+        variables: [Variable(view.revision)],
+      ).getSingle();
+      return (row.read<int>('count'), row.read<int>('upload'), row.read<int>('download'));
+    }
+    return null;
+  }
+
+  Future<List<OutboundInfo>> refreshPage(
+    CatalogView view,
+    ProxiesSort sort, {
+    required int limit,
+    required bool reorder,
+  }) => transaction(() async {
+    if (reorder) await refreshOrder(view, sort);
+    return page(view, offset: 0, limit: limit);
+  });
+
+  // Pages keep the current ranking until refreshOrder explicitly replaces it.
   Future<List<OutboundInfo>> page(CatalogView view, {required int offset, int limit = 100}) async {
     final rows = await customSelect(
       'SELECT e.tag,e.type,e.display,$delay AS delay,COALESCE(u.upload,0) AS upload,COALESCE(u.download,0) AS download '
@@ -133,11 +178,10 @@ class ConfigurationCatalog extends GeneratedDatabase {
 
   Future<void> dropView(CatalogView view) async {
     if (view.id.isEmpty) return;
-    try {
+    await transaction(() async {
       await customStatement('DELETE FROM configuration_view_rows WHERE view_id=?', [view.id]);
-    } finally {
       await customStatement('DELETE FROM configuration_revision_leases WHERE token=?', [view.id]);
-    }
+    });
   }
 
   Future<String?> currentRevision(String profile, {required bool connected}) async => (await customSelect(

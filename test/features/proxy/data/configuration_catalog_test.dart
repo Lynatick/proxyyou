@@ -122,4 +122,39 @@ void main() {
     expect(rows.any((row) => row.read<String>('kind') == 'json'), isFalse);
     expect(rows.any((row) => row.read<String>('text_value') == 'off'), isTrue);
   });
+
+  test('ranking refresh handles 50000 SQL configurations while returning only the loaded page', () async {
+    final database = memory();
+    addTearDown(database.close);
+    await database.customStatement(
+      "INSERT INTO subscription_revisions VALUES('revision','profile','ready',1,0,'hash')",
+    );
+    await database.customStatement("INSERT INTO subscription_active VALUES('profile','revision')");
+    await database.customStatement("INSERT INTO configuration_runtime VALUES('profile','revision','session',0,7)");
+    await database.customStatement(
+      'WITH RECURSIVE ids(id) AS (VALUES(0) UNION ALL SELECT id+1 FROM ids WHERE id<49999) '
+      "INSERT INTO configuration_entries SELECT 'revision',id,'outbounds',id,printf('server-%05d',id), "
+      "'socks','SOCKS',0,'hash-'||id FROM ids",
+    );
+    final timer = Stopwatch()..start();
+    final view = await database.createView('profile', ProxiesSort.delay, connected: true);
+    final openingMs = timer.elapsedMilliseconds;
+    final version = await database.orderingVersion(view, ProxiesSort.delay);
+    await database.customStatement("INSERT INTO configuration_status VALUES('revision',49999,'session',7,1,10,0,0)");
+    expect(await database.orderingVersion(view, ProxiesSort.delay), isNot(version));
+    timer.reset();
+    final page = await database.refreshPage(view, ProxiesSort.delay, limit: 100, reorder: true);
+    final refreshMs = timer.elapsedMilliseconds;
+    expect(view.count, 50000);
+    expect(page.length, 100);
+    expect(page.first.tag, 'server-49999');
+    expect(page.map((item) => item.tag).toSet().length, 100);
+    expect((await database.customSelect('PRAGMA integrity_check').getSingle()).data.values.single, 'ok');
+    await database.dropView(view);
+    final rows = await database.customSelect('SELECT count(*) AS n FROM configuration_view_rows').getSingle();
+    expect(rows.read<int>('n'), 0);
+    // Measurement only: correctness does not depend on the test host's speed.
+    // ignore: avoid_print
+    print('50000 SQL configurations: opening ${openingMs}ms, reranking and reading 100 rows ${refreshMs}ms');
+  });
 }
