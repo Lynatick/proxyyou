@@ -10,6 +10,7 @@ source = pathlib.Path(sys.argv[1]).resolve()
 if not (source / 'v2/hcore/start.go').is_file():
     raise SystemExit('Expected pinned native core checkout')
 for origin, destination in [(project / 'native/database', source / 'v2/configdb'),
+                            (project / 'native/db', source / 'v2/db'),
                             (project / 'native/hcore', source / 'v2/hcore'),
                             (project / 'native/singbox', source / 'hiddify-sing-box')]:
     for file in origin.rglob('*'):

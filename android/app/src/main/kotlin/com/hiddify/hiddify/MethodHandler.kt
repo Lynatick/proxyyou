@@ -83,7 +83,7 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                         Settings.debugMode = args["debug"] as Boolean? ?: false
                         val mode = args["mode"] as Int
                         val grpcPort = args["grpcPort"] as Int
-                        Log.d("debugmode","${Settings.debugMode}")
+                        if (Settings.debugMode) Log.d("debugmode", "${Settings.debugMode}")
                         runCatching {
                             Mobile.setup(
                                 SetupOptions().also {
@@ -98,7 +98,9 @@ class MethodHandler(private val scope: CoroutineScope) : FlutterPlugin,
                                 },null)
 
 //                            Libbox.setup(Settings.baseDir, Settings.workingDir, Settings.tempDir, false)
-                            Libbox.redirectStderr(File(Settings.workingDir, "stderr2.log").path)
+                            if (Settings.debugMode) {
+                                Libbox.redirectStderr(File(Settings.workingDir, "stderr2.log").path)
+                            }
 
                             success("")
                         }.onFailure {

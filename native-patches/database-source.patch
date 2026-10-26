@@ -1611,6 +1611,60 @@
  	clashObj := clash.Clash{}
  	if err := yaml.Unmarshal(content, &clashObj); err == nil && clashObj.Proxies != nil {
  		if len(clashObj.Proxies) == 0 {
+--- a/v2/db/hiddify_db.go
++++ b/v2/db/hiddify_db.go
+@@ -4,20 +4,25 @@
+ 	"bytes"
+ 	"encoding/gob"
+ 	"fmt"
+-	"log"
+ 	"os"
++	"path/filepath"
+ 	"reflect"
+ 	"time"
+ 
++	"github.com/sagernet/sing-box/log"
+ 	"github.com/syndtr/goleveldb/leveldb/opt"
+ 	tmdb "github.com/tendermint/tm-db"
+ )
+ 
+ // getDB initializes the database with retry logic. If it fails after 100 attempts, it returns nil.
+ func getDB(name string, readOnly bool) (tmdb.DB, error) {
+-	// Check if the database file exists; if not, set to readOnly
+-	dbPath := "data/" + name + ".db"
+-	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
++	// An abandoned first open can leave only LOCK, without a usable database.
++	directory, resolveErr := databaseDirectory(name)
++	if resolveErr != nil {
++		return nil, resolveErr
++	}
++	dbPath := filepath.Join(directory, name+".db")
++	if _, err := os.Stat(filepath.Join(dbPath, "CURRENT")); os.IsNotExist(err) {
+ 		readOnly = false
+ 	}
+ 	const retryAttempts = 100
+@@ -27,18 +32,18 @@
+ 	var err error
+ 	defer func() {
+ 		if r := recover(); r != nil {
+-			log.Printf("Recovered from panic: %v", r)
++			log.Warn(fmt.Sprintf("Recovered from panic: %v", r))
+ 		}
+ 	}()
+ 	for i := 0; i < retryAttempts; i++ {
+ 		// Set readOnly to true for the first 80 attempts
+ 		opts := &opt.Options{ReadOnly: readOnly && i < 80}
+ 
+-		db, err = tmdb.NewGoLevelDBWithOpts(name, "./data", opts)
++		db, err = tmdb.NewGoLevelDBWithOpts(name, directory, opts)
+ 		if err == nil {
+ 			return db, nil
+ 		}
+-		log.Printf("Failed attempt %d to initialize the database: %v", i, err)
++		log.Debug(fmt.Sprintf("Failed attempt %d to initialize the database: %v", i, err))
+ 		time.Sleep(retryDelay)
+ 	}
+ 	return nil, err
 --- a/v2/hcore/buildconfighelper.go
 +++ b/v2/hcore/buildconfighelper.go
 @@ -3,7 +3,11 @@
@@ -1854,7 +1908,7 @@
  	return &CoreInfoResponse{}, nil
 --- a/v2/hcore/grpc_server.go
 +++ b/v2/hcore/grpc_server.go
-@@ -12,9 +12,11 @@
+@@ -12,9 +12,12 @@
  	"io"
  	"net/http"
  
@@ -1863,10 +1917,11 @@
  	_ "net/http/pprof"
  	"os"
 +	"path/filepath"
++	"runtime"
  	"strconv"
  	"strings"
  	sync "sync"
-@@ -53,8 +55,11 @@
+@@ -53,8 +56,11 @@
  		Log(LogLevel_WARNING, LogType_CORE, "grpcServer already started")
  		return nil
  	}
@@ -1880,7 +1935,7 @@
  	static.globalPlatformInterface = platformInterface
  	tcpConn := true // runtime.GOOS == "windows" // TODO add TVOS
  	libbox.Setup(
-@@ -68,7 +73,9 @@
+@@ -68,15 +74,28 @@
  			Debug:           params.Debug,
  		})
  
@@ -1891,7 +1946,13 @@
  
  	Log(LogLevel_DEBUG, LogType_CORE, fmt.Sprintf("libbox.Setup success %s %s %s %v", params.BasePath, params.WorkingDir, params.TempDir, tcpConn))
  
-@@ -77,6 +84,12 @@
++	if runtime.GOOS == "android" {
++		if err := db.ConfigureDataDirectory(filepath.Join(params.BasePath, "core-data"), filepath.Join(params.WorkingDir, "data")); err != nil {
++			return fmt.Errorf("configure private service database: %w", err)
++		}
++	}
+ 	sWorkingPath = params.WorkingDir
+ 	os.Chdir(sWorkingPath)
  	sTempPath = params.TempDir
  	sUserID = os.Getuid()
  	sGroupID = os.Getgid()
@@ -1904,7 +1965,7 @@
  
  	var defaultWriter io.Writer
  	if !params.Debug {
-@@ -140,7 +153,7 @@
+@@ -140,7 +159,7 @@
  	if service == "core" {
  		// Setup("./tmp/", "./tmp", "./tmp", 11111, false)
  		RegisterCoreServer(s, &CoreService{})
