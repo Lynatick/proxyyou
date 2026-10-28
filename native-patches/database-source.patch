@@ -1713,7 +1713,7 @@
  	}
  	return config.ReadSingOptions(ctx, readOpt)
  
-@@ -47,18 +56,72 @@
+@@ -47,18 +56,73 @@
  	return Parse(libbox.FromContext(ctx, nil), in)
  }
  
@@ -1757,7 +1757,8 @@
 +			}
 +			return &ParseResponse{ResponseCode: hcommon.ResponseCode_OK, Message: revision}, nil
 +		}
-+		options, parseErr := config.ParseConfig(ctx, &config.ReadOptions{Content: in.Content, Path: in.TempPath}, false, snapshot, false)
++		source := &config.ReadOptions{Content: in.Content, Path: in.TempPath}
++		options, parseErr := config.ParseConfig(ctx, source, false, snapshot, false)
 +		if parseErr != nil {
 +			return nil, parseErr
 +		}
@@ -1769,7 +1770,7 @@
 +		for _, item := range metadata {
 +			descriptors[item.Tag] = configdb.Descriptor{Network: item.Network, Dependencies: item.Dependencies, Display: item.Display, IsGroup: item.IsGroup}
 +		}
-+		sourceBytes, readErr := config.ReadContent(ctx, &config.ReadOptions{Content: in.Content, Path: in.TempPath})
++		sourceBytes, readErr := config.ReadContent(ctx, source)
 +		if readErr != nil {
 +			return nil, readErr
 +		}
@@ -1789,7 +1790,7 @@
  	if err != nil {
  		return &ParseResponse{
  			ResponseCode: hcommon.ResponseCode_FAILED,
-@@ -85,54 +148,95 @@
+@@ -85,54 +149,95 @@
  	return ChangeHiddifySettings(in, true)
  }
  

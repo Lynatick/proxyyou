@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
 import 'package:hiddify/features/profile/data/subscription_fingerprint.dart';
 import 'package:hiddify/features/profile/data/subscription_revision_checker.dart';
+import 'package:hiddify/features/profile/data/subscription_source.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -46,18 +47,19 @@ void main() {
       DioHttpClient(timeout: const Duration(seconds: 2), userAgent: 'ProxyYou-test', debug: false),
       await SharedPreferences.getInstance(),
     );
-    profile =
-        ProfileEntity.remote(
-              id: 'one',
-              active: true,
-              name: 'Subscription',
-              url: 'http://127.0.0.1:${origin.port}/source',
-              lastUpdate: DateTime(2026),
-              populatedHeaders: {subscriptionSourceHash: originalHash},
-            )
-            as RemoteProfileEntity;
+    profile = ProfileEntity.remote(
+      id: 'one',
+      active: true,
+      name: 'Subscription',
+      url: 'http://127.0.0.1:${origin.port}/source',
+      lastUpdate: DateTime(2026),
+      populatedHeaders: {subscriptionSourceHash: originalHash},
+    ) as RemoteProfileEntity;
   });
-  tearDown(() => origin.close(force: true));
+  tearDown(() async {
+    await SubscriptionSourceCache.forClient(checker.client).clear();
+    await origin.close(force: true);
+  });
 
   test('changed source is indicated, 304 preserves it, successful import clears it', () async {
     expect((await checker.check(profile, CancelToken())).available, isFalse);

@@ -21,6 +21,9 @@ import (
 	"github.com/sagernet/sing/service/filemanager"
 )
 
+const ImportBatchSize = 1024
+const configurationFieldsInsert = "INSERT INTO configuration_fields VALUES(?,?,?,?,?,?,?,?,?)"
+
 const SchemaVersion = 1
 const Scheme = "proxyyou-db"
 
@@ -177,9 +180,10 @@ func (s *Store) Import(ctx context.Context, profile string, options *option.Opti
 		return "", err
 	}
 	completed := false
+	stagedRevision := revision
 	defer func() {
 		if !completed {
-			s.DB.Exec("DELETE FROM subscription_revisions WHERE id=? AND state='staging'", revision)
+			s.DB.Exec("DELETE FROM subscription_revisions WHERE id=? AND state='staging'", stagedRevision)
 		}
 	}()
 	header := *options
@@ -191,8 +195,12 @@ func (s *Store) Import(ctx context.Context, profile string, options *option.Opti
 	}
 	nextID := int64(1)
 	var batch *sql.Tx
+	var batchFields *sql.Stmt
 	var batchCount int
 	defer func() {
+		if batchFields != nil {
+			batchFields.Close()
+		}
 		if batch != nil {
 			batch.Rollback()
 		}
@@ -204,12 +212,20 @@ func (s *Store) Import(ctx context.Context, profile string, options *option.Opti
 			if beginErr != nil {
 				return beginErr
 			}
+			batchFields, beginErr = batch.PrepareContext(ctx, configurationFieldsInsert)
+			if beginErr != nil {
+				return beginErr
+			}
 		}
-		if writeErr := s.writeEntryTx(ctx, batch, revision, entry, value, descriptor); writeErr != nil {
+		if writeErr := s.writeEntryTx(ctx, batch, batchFields, revision, entry, value, descriptor); writeErr != nil {
 			return writeErr
 		}
 		batchCount++
-		if batchCount >= 128 {
+		if batchCount >= ImportBatchSize {
+			if closeErr := batchFields.Close(); closeErr != nil {
+				return closeErr
+			}
+			batchFields = nil
 			if commitErr := batch.Commit(); commitErr != nil {
 				return commitErr
 			}
@@ -249,6 +265,10 @@ func (s *Store) Import(ctx context.Context, profile string, options *option.Opti
 		nextID++
 	}
 	if batch != nil {
+		if err = batchFields.Close(); err != nil {
+			return "", err
+		}
+		batchFields = nil
 		if err = batch.Commit(); err != nil {
 			return "", err
 		}
@@ -290,12 +310,17 @@ func (s *Store) writeEntry(ctx context.Context, revision string, entry Entry, va
 		return err
 	}
 	defer tx.Rollback()
-	if err = s.writeEntryTx(ctx, tx, revision, entry, value, descriptor); err != nil {
+	statement, err := tx.PrepareContext(ctx, configurationFieldsInsert)
+	if err != nil {
+		return err
+	}
+	defer statement.Close()
+	if err = s.writeEntryTx(ctx, tx, statement, revision, entry, value, descriptor); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
-func (s *Store) writeEntryTx(ctx context.Context, tx *sql.Tx, revision string, entry Entry, value any, descriptor Descriptor) error {
+func (s *Store) writeEntryTx(ctx context.Context, tx *sql.Tx, statement *sql.Stmt, revision string, entry Entry, value any, descriptor Descriptor) error {
 	fields, err := s.codec.Encode(value)
 	if err != nil {
 		return err
@@ -303,11 +328,7 @@ func (s *Store) writeEntryTx(ctx context.Context, tx *sql.Tx, revision string, e
 	if _, err = tx.ExecContext(ctx, "INSERT INTO configuration_entries VALUES(?,?,?,?,?,?,?,?,?)", revision, entry.ID, entry.Section, entry.Ordinal, entry.Tag, entry.Type, entry.Display, entry.IsGroup, Fingerprint(fields)); err != nil {
 		return err
 	}
-	statement, err := tx.PrepareContext(ctx, "INSERT INTO configuration_fields VALUES(?,?,?,?,?,?,?,?,?)")
-	if err != nil {
-		return err
-	}
-	defer statement.Close()
+
 	for _, field := range fields {
 		if _, err = statement.ExecContext(ctx, revision, entry.ID, field.Path, field.Kind, field.Type, field.Text, field.Number, field.Real, field.Bytes); err != nil {
 			return err
