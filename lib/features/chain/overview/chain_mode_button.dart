@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/chain/model/chain_enum.dart';
 import 'package:hiddify/features/chain/overview/chain_mode_icon.dart';
 import 'package:hiddify/features/chain/overview/chain_mode_menu.dart';
@@ -53,7 +54,7 @@ class ChainModeButton extends HookConsumerWidget {
                   ),
                 ),
                 const Gap(4),
-                Icon(Icons.arrow_drop_down_rounded, size: 16, color: fColor),
+                PlatformIcon(Icons.arrow_drop_down_rounded, size: 16, color: fColor),
               ],
             ),
           ),

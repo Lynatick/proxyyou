@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/route_rules/widget/setting_detail_chips.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -39,7 +40,7 @@ class SettingGenericList<T extends Object> extends ConsumerWidget {
                       children: [
                         Row(
                           children: [
-                            const Icon(size: 16, Icons.warning_rounded, color: Colors.amber),
+                            const PlatformIcon(size: 16, Icons.warning_rounded, color: Colors.amber),
                             const Gap(2),
                             Text(
                               t.pages.settings.routing.routeRule.rule.notAvailableInThisPlatform,

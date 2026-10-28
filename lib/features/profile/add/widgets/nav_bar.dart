@@ -3,6 +3,7 @@ import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/profile/notifier/profile_notifier.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -17,9 +18,8 @@ class NavBar extends ConsumerWidget {
 
     final textColor = theme.colorScheme.onSurface;
     return Padding(
-      padding: const EdgeInsets.all(
-        AddProfileModalConst.navBarGap,
-      ).copyWith(bottom: AddProfileModalConst.navBarBottomGap),
+      padding: const EdgeInsets.all(AddProfileModalConst.navBarGap)
+          .copyWith(bottom: AddProfileModalConst.navBarBottomGap),
       child: Row(
         children: [
           Row(
@@ -34,7 +34,7 @@ class NavBar extends ConsumerWidget {
           ActionChip(
             key: const ValueKey("help"),
             label: Text(t.common.help, style: theme.textTheme.labelLarge!.copyWith(color: textColor)),
-            avatar: Icon(Icons.help_outline, color: theme.colorScheme.onSurfaceVariant),
+            avatar: PlatformIcon(Icons.help_outline, color: theme.colorScheme.onSurfaceVariant),
             onPressed: () async => await ref.read(dialogNotifierProvider.notifier).showNoActiveProfile(),
           ),
         ],

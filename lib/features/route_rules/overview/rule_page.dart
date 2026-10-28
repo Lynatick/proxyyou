@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/route_rules/notifier/rule_notifier.dart';
 import 'package:hiddify/features/route_rules/widget/setting_checkbox.dart';
 import 'package:hiddify/features/route_rules/widget/setting_divider.dart';
@@ -36,7 +37,7 @@ class RulePage extends HookConsumerWidget {
                     if (context.mounted) context.pop();
                   }
                 : null,
-            icon: const Icon(Icons.check),
+            icon: const PlatformIcon(Icons.check),
           ),
           const Gap(8),
         ],

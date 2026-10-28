@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/app_based_routing/model/app_package_info.dart';
 import 'package:hiddify/features/app_based_routing/overview/app_list_notifier.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
@@ -37,7 +38,7 @@ class AppListShareModal extends ConsumerWidget {
             dense: true,
             contentPadding: const EdgeInsetsDirectional.symmetric(horizontal: 24),
             leading: apps[pkg]?.icon == null
-                ? const Icon(Icons.android_rounded)
+                ? const PlatformIcon(Icons.android_rounded)
                 : Image.memory(apps[pkg]!.icon!, width: 32, height: 32, cacheWidth: iconPx, cacheHeight: iconPx),
             title: Text(apps[pkg]?.name ?? pkg),
             subtitle: Text(pkg),
@@ -82,7 +83,7 @@ class AppListShareModal extends ConsumerWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.public_rounded, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                      PlatformIcon(Icons.public_rounded, size: 18, color: theme.colorScheme.onSurfaceVariant),
                       const Gap(8),
                       Expanded(
                         child: Text(
@@ -101,7 +102,7 @@ class AppListShareModal extends ConsumerWidget {
                         Navigator.of(context).pop();
                         await appList.shareOnGithub(added: added, removed: removed);
                       },
-                      icon: const Icon(Icons.open_in_new_rounded),
+                      icon: const PlatformIcon(Icons.open_in_new_rounded),
                       label: Text(share.action),
                     ),
                   ),

@@ -1,7 +1,7 @@
 name: hiddify
 description: Cross Platform Multi Protocol Proxy Frontend.
 publish_to: "none"
-version: 4.1.28+40128
+version: 4.1.29+40129
 
 # Flutter and the core must share one SQLite implementation in each process.
 # Independent copies cannot coordinate POSIX locks and WAL lifetimes.
@@ -162,6 +162,7 @@ flutter:
     # - assets/core/geoip.db
     # - assets/core/geosite.db
     - assets/playback/proof.js
+    - assets/images/windows/
     - assets/images/logo.svg
     - assets/images/tray_icon.ico
     - assets/images/tray_icon.png

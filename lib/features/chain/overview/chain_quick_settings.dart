@@ -3,6 +3,7 @@ import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/chain/overview/chain_mode_button.dart';
 import 'package:hiddify/features/common/custom_text_scroll.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
@@ -31,7 +32,7 @@ class ChainQuickSettings extends HookConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Gap(4),
-                      Icon(ChainConst.iconByPlatform(), size: 20, color: onSurfaceVariant),
+                      PlatformIcon(ChainConst.iconByPlatform(), size: 20, color: onSurfaceVariant),
                       const Gap(4),
                       Text(
                         t.pages.settings.chain.levels.app.title,
@@ -41,7 +42,7 @@ class ChainQuickSettings extends HookConsumerWidget {
                     ],
                   ),
                   const Gap(4),
-                  Icon(Icons.arrow_downward_rounded, size: 20, color: theme.colorScheme.primary),
+                  PlatformIcon(Icons.arrow_downward_rounded, size: 20, color: theme.colorScheme.primary),
                   const Gap(4),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -86,7 +87,7 @@ class ChainQuickSettings extends HookConsumerWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               const Gap(4),
-                              Icon(Icons.webhook_rounded, size: 20, color: theme.colorScheme.primary),
+                              PlatformIcon(Icons.webhook_rounded, size: 20, color: theme.colorScheme.primary),
                               const Gap(4),
                               Text(
                                 t.pages.settings.chain.title,
@@ -104,7 +105,7 @@ class ChainQuickSettings extends HookConsumerWidget {
                     children: [
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Icon(Icons.arrow_forward_rounded, size: 20, color: theme.colorScheme.primary),
+                        child: PlatformIcon(Icons.arrow_forward_rounded, size: 20, color: theme.colorScheme.primary),
                       ),
                       Flexible(
                         child: Column(
@@ -141,7 +142,7 @@ class ChainQuickSettings extends HookConsumerWidget {
                       ),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Icon(Icons.arrow_forward_rounded, size: 20, color: theme.colorScheme.primary),
+                        child: PlatformIcon(Icons.arrow_forward_rounded, size: 20, color: theme.colorScheme.primary),
                       ),
                     ],
                   ),
@@ -156,7 +157,7 @@ class ChainQuickSettings extends HookConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Gap(4),
-                      Icon(Icons.wifi_rounded, size: 20, color: onSurfaceVariant),
+                      PlatformIcon(Icons.wifi_rounded, size: 20, color: onSurfaceVariant),
                       const Gap(4),
                       Text(
                         t.pages.settings.chain.levels.filtering.title,
@@ -166,7 +167,7 @@ class ChainQuickSettings extends HookConsumerWidget {
                     ],
                   ),
                   const Gap(4),
-                  Icon(Icons.arrow_upward_rounded, size: 20, color: theme.colorScheme.primary),
+                  PlatformIcon(Icons.arrow_upward_rounded, size: 20, color: theme.colorScheme.primary),
                   const Gap(4),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),

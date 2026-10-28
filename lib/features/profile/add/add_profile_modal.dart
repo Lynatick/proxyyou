@@ -5,6 +5,7 @@ import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/profile/add/widgets/free_btns.dart';
 import 'package:hiddify/features/profile/add/widgets/widgets.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
@@ -134,7 +135,7 @@ class AddProfileManual extends HookConsumerWidget {
               children: [
                 Expanded(child: Text(t.common.manually, style: theme.textTheme.headlineMedium)),
                 IconButton(
-                  icon: const Icon(Icons.close),
+                  icon: const PlatformIcon(Icons.close),
                   onPressed: () => ref.read(addProfilePageNotifierProvider.notifier).goOptions(),
                 ),
               ],

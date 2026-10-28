@@ -5,6 +5,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/app_based_routing/model/app_package_info.dart';
 import 'package:hiddify/features/app_based_routing/model/per_app_proxy_mode.dart';
 import 'package:hiddify/features/route_rules/notifier/rule_notifier.dart';
@@ -131,7 +132,7 @@ class PackageNamesPage extends HookConsumerWidget {
                   searchQuery.value = '';
                   isSearching.value = false;
                 },
-                icon: const Icon(Icons.close),
+                icon: const PlatformIcon(Icons.close),
                 tooltip: localizations.cancelButtonLabel,
               ),
               bottom: chips,
@@ -140,12 +141,12 @@ class PackageNamesPage extends HookConsumerWidget {
               title: Text(RuleEnum.packageName.present(t)),
               actions: [
                 IconButton(
-                  icon: const Icon(FluentIcons.search_24_regular),
+                  icon: const PlatformIcon(FluentIcons.search_24_regular),
                   onPressed: () => isSearching.value = true,
                   tooltip: localizations.searchFieldLabel,
                 ),
                 PopupMenuButton<void>(
-                  icon: const Icon(Icons.more_vert_rounded),
+                  icon: const PlatformIcon(Icons.more_vert_rounded),
                   itemBuilder: (_) => <PopupMenuEntry<void>>[
                     PopupMenuItem(
                       enabled: selected.isNotEmpty,
@@ -171,7 +172,7 @@ class PackageNamesPage extends HookConsumerWidget {
                   value: isSelected,
                   onChanged: (_) => save(isSelected ? [...selected.where((e) => e != pkg)] : [...selected, pkg]),
                   secondary: app?.icon == null
-                      ? const SizedBox.square(dimension: 48, child: Icon(Icons.android_rounded))
+                      ? const SizedBox.square(dimension: 48, child: PlatformIcon(Icons.android_rounded))
                       : Image.memory(app!.icon!, width: 48, height: 48, cacheWidth: 48, cacheHeight: 48),
                   title: Row(
                     children: [
@@ -180,7 +181,7 @@ class PackageNamesPage extends HookConsumerWidget {
                         const Gap(4),
                         Tooltip(
                           message: appBasedRouting.outsideVpn,
-                          child: Icon(Icons.remove_moderator_outlined, size: 16, color: markColor),
+                          child: PlatformIcon(Icons.remove_moderator_outlined, size: 16, color: markColor),
                         ),
                       ],
                     ],

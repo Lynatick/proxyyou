@@ -1,6 +1,7 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/core/widget/shimmer_skeleton.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/proxy/active/ip_widget.dart';
@@ -22,11 +23,15 @@ class ConnectionStatsCard extends HookConsumerWidget {
       stats: [
         switch (activeProxy) {
           AsyncData(value: final proxy) => (
-            label: const Icon(FluentIcons.arrow_routing_20_regular),
+            label: const PlatformIcon(FluentIcons.arrow_routing_20_regular),
             data: Text(proxy.tagDisplay),
             semanticLabel: null,
           ),
-          _ => (label: const Icon(FluentIcons.arrow_routing_20_regular), data: const Text("..."), semanticLabel: null),
+          _ => (
+            label: const PlatformIcon(FluentIcons.arrow_routing_20_regular),
+            data: const Text("..."),
+            semanticLabel: null,
+          ),
         },
         switch (activeProxy) {
           AsyncData(value: final proxy) when proxy.ipinfo.ip.isNotEmpty => (
@@ -47,7 +52,7 @@ class ConnectionStatsCard extends HookConsumerWidget {
             semanticLabel: null,
           ),
           _ => (
-            label: const Icon(FluentIcons.question_circle_20_regular),
+            label: const PlatformIcon(FluentIcons.question_circle_20_regular),
             data: const ShimmerSkeleton(widthFactor: .85, height: 14),
             semanticLabel: null,
           ),

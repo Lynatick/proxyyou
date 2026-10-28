@@ -1,5 +1,6 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 
 class TipCard extends StatelessWidget {
   const TipCard({required this.message, super.key});
@@ -12,7 +13,7 @@ class TipCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
         children: [
-          const Padding(padding: EdgeInsets.all(8.0), child: Icon(FluentIcons.lightbulb_24_regular)),
+          const Padding(padding: EdgeInsets.all(8.0), child: PlatformIcon(FluentIcons.lightbulb_24_regular)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,

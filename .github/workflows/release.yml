@@ -19,6 +19,10 @@ on:
         description: 'Включить обе сборки macOS; выключите для выпуска только Android и Windows'
         type: boolean
         default: true
+      windows_only:
+        description: 'Выпустить только Windows x64'
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -39,6 +43,7 @@ jobs:
       OPERATION: ${{ inputs.operation }}
       ARTIFACTS_VERIFIED: ${{ inputs.artifacts_verified }}
       INCLUDE_MACOS: ${{ inputs.include_macos }}
+      WINDOWS_ONLY: ${{ inputs.windows_only }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/settings/notifier/config_option/config_option_notifier.dart';
 import 'package:hiddify/features/settings/notifier/reset_tunnel/reset_tunnel_notifier.dart';
@@ -133,7 +134,7 @@ class SettingsPage extends HookConsumerWidget {
                   controller.open();
                 }
               },
-              icon: const Icon(Icons.more_vert_rounded),
+              icon: const PlatformIcon(Icons.more_vert_rounded),
             ),
           ),
           const Gap(8),
@@ -178,7 +179,7 @@ class SettingsPage extends HookConsumerWidget {
             Material(
               child: ListTile(
                 title: Text(t.pages.settings.resetTunnel),
-                leading: const Icon(Icons.autorenew_rounded),
+                leading: const PlatformIcon(Icons.autorenew_rounded),
                 onTap: () async {
                   await ref.read(resetTunnelNotifierProvider.notifier).run();
                 },
@@ -219,10 +220,10 @@ class SettingsSection extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return ListTile(
-      leading: Icon(icon),
+      leading: PlatformIcon(icon),
       title: Text(title),
       subtitle: subtitle,
-      trailing: const Icon(Icons.chevron_right_rounded),
+      trailing: const PlatformIcon(Icons.chevron_right_rounded),
       onTap: () => context.go(namedLocation),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/utils/platform_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:installed_apps/installed_apps.dart';
@@ -234,7 +235,7 @@ class ScrollBtn extends ConsumerWidget {
             borderRadius: borderRadius,
             boxShadow: [BoxShadow(color: theme.colorScheme.shadow, blurRadius: 12, offset: const Offset(0, 3))],
           ),
-          child: Icon(
+          child: PlatformIcon(
             isStart ? Icons.arrow_left_rounded : Icons.arrow_right_rounded,
             color: theme.colorScheme.onPrimaryContainer,
           ),

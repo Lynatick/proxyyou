@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hiddify/core/model/constants.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/app_update/notifier/app_update_notifier.dart';
 import 'package:hiddify/features/app_update/notifier/app_update_state.dart';
 import 'package:hiddify/utils/uri_utils.dart';
@@ -27,7 +28,7 @@ class AppUpdateCard extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.system_update_alt),
+                  const PlatformIcon(Icons.system_update_alt),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -42,7 +43,7 @@ class AppUpdateCard extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               FilledButton.icon(
-                icon: const Icon(Icons.download),
+                icon: const PlatformIcon(Icons.download),
                 label: const Text('Скачать обновление'),
                 onPressed: () async {
                   final launched = await UriUtils.tryLaunch(Uri.parse(Constants.downloadPageUrl));

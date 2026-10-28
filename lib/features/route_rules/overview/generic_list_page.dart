@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/route_rules/notifier/generic_list_notifier.dart';
 import 'package:hiddify/features/route_rules/notifier/rule_notifier.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -45,17 +46,17 @@ class GenericListPage extends HookConsumerWidget {
                         );
                     if (result == true) ref.read(provider.notifier).reset();
                   },
-            icon: const Icon(Icons.clear_all),
+            icon: const PlatformIcon(Icons.clear_all),
           ),
           const Gap(8),
         ],
       ),
       floatingActionButton: list.isNotEmpty
-          ? FloatingActionButton(onPressed: addNewValue, child: const Icon(Icons.add_rounded))
+          ? FloatingActionButton(onPressed: addNewValue, child: const PlatformIcon(Icons.add_rounded))
           : FloatingActionButton.extended(
               onPressed: addNewValue,
               label: Text(t.pages.settings.routing.routeRule.genericList.addNew),
-              icon: const Icon(Icons.add_rounded),
+              icon: const PlatformIcon(Icons.add_rounded),
             ),
       body: ListView.builder(
         itemBuilder: (context, index) => GenericListTile(
@@ -96,7 +97,7 @@ class GenericListTile extends ConsumerWidget {
         pauseOnBounce: const Duration(seconds: 2),
         pauseBetween: const Duration(seconds: 2),
       ),
-      trailing: IconButton(onPressed: onRemove, icon: const Icon(Icons.remove)),
+      trailing: IconButton(onPressed: onRemove, icon: const PlatformIcon(Icons.remove)),
     );
   }
 }

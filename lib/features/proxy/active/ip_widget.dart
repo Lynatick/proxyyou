@@ -5,6 +5,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hiddify/core/haptic/haptic_service.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/utils/ip_utils.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/gen/fonts.gen.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import "package:simple_icons/simple_icons.dart";
@@ -110,7 +111,7 @@ class IPCountryFlag extends HookConsumerWidget {
       child: Padding(
         padding: padding,
         child: (countryCode?.isEmpty ?? true)
-            ? Icon(FluentIcons.question_circle_20_regular, size: size)
+            ? PlatformIcon(FluentIcons.question_circle_20_regular, size: size)
             : SizedBox(
                 width: size,
                 height: size,
@@ -198,7 +199,7 @@ class OrganisationFlag extends HookConsumerWidget {
     for (final entry in organizationData.entries) {
       if (organization.toLowerCase().contains(entry.key)) {
         return getFlagWidget(
-          widget: Icon(entry.value.icon, color: Colors.white, size: size - 6),
+          widget: PlatformIcon(entry.value.icon, color: Colors.white, size: size - 6),
           color: entry.value.color,
           organization: organization,
           size: size,

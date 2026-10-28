@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/profile/notifier/profiles_update_notifier.dart';
 import 'package:hiddify/features/profile/notifier/subscription_updates_notifier.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -17,7 +18,7 @@ class SubscriptionUpdateButton extends ConsumerWidget {
         : () => ref.read(foregroundProfilesUpdateNotifierProvider.notifier).trigger();
     final icon = updating
         ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-        : Badge.count(count: count, isLabelVisible: count > 0, child: const Icon(Icons.sync));
+        : Badge.count(count: count, isLabelVisible: count > 0, child: const PlatformIcon(Icons.sync));
     if (extended) {
       return FilledButton.icon(
         onPressed: onPressed,

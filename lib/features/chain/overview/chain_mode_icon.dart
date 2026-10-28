@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/singbox/model/singbox_config_enum.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -10,6 +11,6 @@ class ChainModeIcon extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Icon(mode.icon(), color: mode.color(), size: size);
+    return PlatformIcon(mode.icon(), color: mode.color(), size: size);
   }
 }

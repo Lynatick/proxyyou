@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/chain/model/chain_enum.dart';
 import 'package:hiddify/features/chain/overview/chain_mode_button.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
@@ -29,7 +30,7 @@ class ChainTimelineHeader extends HookConsumerWidget {
       child: Row(
         children: [
           const Gap(4),
-          SizedBox(child: Icon(level.icon(), size: 20, color: theme.colorScheme.onSurfaceVariant)),
+          SizedBox(child: PlatformIcon(level.icon(), size: 20, color: theme.colorScheme.onSurfaceVariant)),
           const Gap(12),
           Expanded(
             child: Text(

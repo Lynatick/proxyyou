@@ -13,6 +13,8 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/model/region.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
+import 'package:hiddify/core/widget/windows_icon_assets.dart';
 import 'package:hiddify/features/common/general_pref_tiles.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/settings/widget/preference_tile.dart';
@@ -80,7 +82,9 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                           ? IntroConst.maxwidth
                           : constraints.maxWidth;
                       final size = width * 0.4;
-                      return Assets.images.logo.svg(width: size, height: size);
+                      return Theme.of(context).platform == TargetPlatform.windows
+                          ? Image.asset(WindowsIconAssets.appPng, width: size, height: size)
+                          : Assets.images.logo.svg(width: size, height: size);
                     },
                   ),
                   const Gap(16),
@@ -173,7 +177,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
       floatingActionButton: FloatingActionButton.extended(
         icon: isStarting.value
             ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator())
-            : const Icon(Icons.rocket_launch),
+            : const PlatformIcon(Icons.rocket_launch),
         label: Text(t.common.start, style: theme.textTheme.titleMedium),
         onPressed: () async {
           if (isStarting.value) return;

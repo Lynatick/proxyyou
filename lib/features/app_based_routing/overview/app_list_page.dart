@@ -8,6 +8,7 @@ import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/app_based_routing/data/selected_data_provider.dart';
 import 'package:hiddify/features/app_based_routing/model/app_package_info.dart';
 import 'package:hiddify/features/app_based_routing/model/pkg_flag.dart';
@@ -169,7 +170,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
               Center(
                 child: ActionChip(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  avatar: const Icon(Icons.undo_rounded),
+                  avatar: const PlatformIcon(Icons.undo_rounded),
                   label: Text(appBasedRouting.autoSelection.restore(n: removed.length)),
                   onPressed: restoreRemoved,
                 ),
@@ -231,7 +232,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
                   searchQuery.value = "";
                   isSearching.value = false;
                 },
-                icon: const Icon(Icons.close),
+                icon: const PlatformIcon(Icons.close),
                 tooltip: localizations.cancelButtonLabel,
               ),
               bottom: chips,
@@ -240,7 +241,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
               title: Text(mode?.listTitle(t) ?? t.pages.settings.routing.appBasedRouting.title),
               actions: [
                 IconButton(
-                  icon: const Icon(FluentIcons.search_24_regular),
+                  icon: const PlatformIcon(FluentIcons.search_24_regular),
                   onPressed: () => isSearching.value = true,
                   tooltip: localizations.searchFieldLabel,
                 ),
@@ -302,7 +303,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
                         controller.open();
                       }
                     },
-                    icon: const Icon(Icons.more_vert_rounded),
+                    icon: const PlatformIcon(Icons.more_vert_rounded),
                   ),
                 ),
               ],
@@ -312,7 +313,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
           ? FloatingActionButton(
               onPressed: () =>
                   scrollController.animateTo(0.0, duration: const Duration(milliseconds: 500), curve: Curves.easeOut),
-              child: const Icon(Icons.keyboard_arrow_up_rounded),
+              child: const PlatformIcon(Icons.keyboard_arrow_up_rounded),
             )
           : null,
       body: displayedApps.when(

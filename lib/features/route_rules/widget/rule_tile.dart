@@ -3,6 +3,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/route_rules/notifier/rules_notifier.dart';
 import 'package:hiddify/features/route_rules/widget/setting_detail_chips.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
@@ -101,7 +102,7 @@ class RuleTile extends HookConsumerWidget {
                 style: Theme.of(context).textTheme.labelMedium,
               ),
               subtitle: Text(builtin?.present(t, region) ?? rule.name, style: Theme.of(context).textTheme.bodyLarge),
-              leading: ReorderableDragStartListener(index: index, child: const Icon(Icons.drag_handle_rounded)),
+              leading: ReorderableDragStartListener(index: index, child: const PlatformIcon(Icons.drag_handle_rounded)),
               trailing: Switch(
                 value: rule.enabled,
                 onChanged: (value) async =>

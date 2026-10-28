@@ -7,6 +7,7 @@ import 'package:hiddify/core/logger/ring/log_ring.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/log/model/log_level.dart' as engine;
 import 'package:hiddify/features/log/overview/logs_overview_notifier.dart';
@@ -107,19 +108,19 @@ class _LogsPageState extends ConsumerState<LogsPage> with PresLogger {
           const SizedBox(width: 4),
           IconButton(
             onPressed: state.paused ? notifier.resume : notifier.pause,
-            icon: Icon(state.paused ? FluentIcons.play_20_regular : FluentIcons.pause_20_regular),
+            icon: PlatformIcon(state.paused ? FluentIcons.play_20_regular : FluentIcons.pause_20_regular),
             tooltip: state.paused ? t.common.resume : t.common.pause,
             iconSize: 20,
           ),
           IconButton(
             onPressed: notifier.clear,
-            icon: const Icon(FluentIcons.delete_lines_20_regular),
+            icon: const PlatformIcon(FluentIcons.delete_lines_20_regular),
             tooltip: t.common.clear,
             iconSize: 20,
           ),
           IconButton(
             onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showLogsShare(),
-            icon: const Icon(FluentIcons.share_20_regular),
+            icon: const PlatformIcon(FluentIcons.share_20_regular),
             tooltip: t.common.share,
             iconSize: 20,
           ),
@@ -335,7 +336,7 @@ class LogFilterBar extends ConsumerWidget {
         hintText: t.common.filter,
         hintStyle: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         contentPadding: const EdgeInsets.only(right: 10, top: 9, bottom: 9),
-        prefixIcon: Icon(FluentIcons.search_20_regular, size: 15, color: theme.colorScheme.onSurfaceVariant),
+        prefixIcon: PlatformIcon(FluentIcons.search_20_regular, size: 15, color: theme.colorScheme.onSurfaceVariant),
         prefixIconConstraints: const BoxConstraints(minWidth: 30),
       ),
     );
@@ -392,7 +393,7 @@ class _DropdownChip<T> extends StatelessWidget {
             Text(label, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             const SizedBox(width: 5),
             Text(current == null ? allLabel ?? '' : nameOf(current), style: theme.textTheme.labelSmall),
-            Icon(Icons.arrow_drop_down_rounded, size: 18, color: theme.colorScheme.onSurfaceVariant),
+            PlatformIcon(Icons.arrow_drop_down_rounded, size: 18, color: theme.colorScheme.onSurfaceVariant),
           ],
         ),
       ),
@@ -443,7 +444,7 @@ class _LogRow extends ConsumerWidget {
           value: true,
           child: Row(
             children: [
-              const Icon(FluentIcons.copy_20_regular, size: 18),
+              const PlatformIcon(FluentIcons.copy_20_regular, size: 18),
               const SizedBox(width: 10),
               Text(t.common.addToClipboard),
             ],
