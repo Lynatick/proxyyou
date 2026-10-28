@@ -1,15 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
 
-import 'package:hiddify/features/app_based_routing/mac_app_preferences.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
-import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/youtube/youtube_probe.dart';
-import 'package:hiddify/features/youtube/youtube_test_video.dart';
 import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -54,35 +49,3 @@ YoutubeReport decodeAvailabilityReport(String encoded, {required String expected
       ),
   ], configurationTag: expectedTag);
 }
-
-// Rendering the thumbnail never bypasses the local proxy. This image is only a
-// preview: the native, route-pinned report remains the source of availability.
-final youtubeThumbnailProvider = FutureProvider.autoDispose<Uint8List?>((ref) async {
-  final report = ref.watch(youtubeReportProvider).value;
-  final enabled = ref.watch(ConfigOptions.enableMixedPort);
-  final port = ref.watch(macDiagnosticPortProvider) ?? ref.watch(ConfigOptions.mixedPort);
-  if (!enabled || report == null || !report.checks.any((check) => check.isThumbnail && check.reachable)) return null;
-  final client = HttpClient()
-    ..connectionTimeout = const Duration(seconds: 12)
-    ..findProxy = (_) => 'PROXY 127.0.0.1:$port';
-  ref.onDispose(() => client.close(force: true));
-  try {
-    return await (() async {
-      final request = await client.getUrl(Uri.parse(youtubeTestThumbnailUrl));
-      request.followRedirects = false;
-      final response = await request.close();
-      if (response.statusCode != 200 || response.headers.contentType?.mimeType != 'image/jpeg') return null;
-      final bytes = BytesBuilder(copy: false);
-      await for (final block in response) {
-        bytes.add(block);
-        if (bytes.length > 256 * 1024) return null;
-      }
-      final image = bytes.takeBytes();
-      return image.length >= 3 && image[0] == 0xff && image[1] == 0xd8 && image[2] == 0xff ? image : null;
-    })().timeout(const Duration(seconds: 12));
-  } on Exception {
-    return null;
-  } finally {
-    client.close(force: true);
-  }
-});

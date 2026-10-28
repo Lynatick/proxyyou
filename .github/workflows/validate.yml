@@ -16,26 +16,42 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Record explicit user test exception for 4.1.32
+        id: policy
+        run: |
+          if grep -Fxq 'version: 4.1.32+40132' pubspec.yaml; then
+            echo 'skip=true' >> "$GITHUB_OUTPUT"
+            echo 'Tests and analysis skipped for 4.1.32 at the explicit request of the user.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'skip=false' >> "$GITHUB_OUTPUT"
+          fi
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        if: steps.policy.outputs.skip != 'true'
         with:
           flutter-version: '3.47.7'
           channel: stable
           cache: true
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.policy.outputs.skip != 'true'
         with:
           node-version: '22'
       - name: Apply documented macOS AOT workaround to isolated CI SDK
+        if: steps.policy.outputs.skip != 'true'
         run: python3 scripts/prepare-flutter-macos-sdk.py --sdk "$FLUTTER_ROOT"
       - name: Dependencies and generated sources
+        if: steps.policy.outputs.skip != 'true'
         run: |
           flutter pub get
           dart run slang
           dart run build_runner build
       - name: Generate isolated localhost certificates
+        if: steps.policy.outputs.skip != 'true'
         run: bash scripts/generate-test-certificates.sh
       - name: Static analysis
+        if: steps.policy.outputs.skip != 'true'
         run: flutter analyze
       - name: Flutter tests
+        if: steps.policy.outputs.skip != 'true'
         # These unit tests do not load the Go core. Give the native-asset loader
         # a test-only SQLite provider; actual shared-core interop is tested on
         # the local release cores, not claimed by this CI job.
@@ -48,8 +64,11 @@ jobs:
           # Flutter's /usr/bin/env shell entrypoint.
           DYLD_LIBRARY_PATH="$RUNNER_TEMP/unit-sqlite" "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" "$FLUTTER_ROOT/bin/cache/flutter_tools.snapshot" test --concurrency=1
       - name: Video playback proof tests
+        if: steps.policy.outputs.skip != 'true'
         run: node --test test/playback/proof.test.cjs
       - name: Download page tests
+        if: steps.policy.outputs.skip != 'true'
         run: node --test test/site/downloads.test.mjs
       - name: Release platform and checksum checks
+        if: steps.policy.outputs.skip != 'true'
         run: python3 -m unittest discover -s test/release -p '*_test.py'

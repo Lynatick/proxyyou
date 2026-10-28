@@ -38,7 +38,6 @@ void main() {
             const ProbeResult(label: 'YouTube', outcome: ProbeOutcome.reachable, elapsed: Duration(milliseconds: 50)),
           ]);
         }),
-        youtubeThumbnailProvider.overrideWith((ref) => Future.value()),
         youtubePlaybackSupportedProvider.overrideWithValue(true),
         youtubePlaybackProvider.overrideWith((ref) => playback),
       ],
@@ -83,7 +82,6 @@ void main() {
               ]),
             ),
           ),
-          youtubeThumbnailProvider.overrideWith((ref) => Future.value()),
           youtubePlaybackSupportedProvider.overrideWithValue(playbackSupported),
           youtubePlaybackProvider.overrideWith((ref) {
             if (!playbackSupported) throw StateError('Windows must not initialize a player');
@@ -104,14 +102,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('YouTube: 50 мс'), findsOneWidget);
       expect(find.byTooltip('Тестовое видео'), findsOneWidget);
-      expect(
-        tester.getTopLeft(find.byKey(const ValueKey('youtube-availability-result'))).dy,
-        greaterThan(tester.getBottomLeft(find.byKey(const ValueKey('youtube-thumbnail'))).dy),
-      );
+      expect(find.byKey(const ValueKey('youtube-thumbnail')), findsNothing);
+      for (final key in ['youtube-result', 'thumbnail-result', 'playback-result']) {
+        expect(find.byKey(ValueKey(key)), findsOneWidget);
+      }
       expect(find.text('Проверить воспроизведение'), findsNothing);
       expect(find.textContaining('5 секунд'), findsNothing);
       expect(find.textContaining('WebView2'), findsNothing);
-      expect(tester.widget<Text>(find.byKey(const ValueKey('youtube-availability-result'))).maxLines, 1);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('youtube-result'))).maxLines, 1);
       final button = tester.widget<TextButton>(
         find.ancestor(of: find.text('Доступность YouTube'), matching: find.byType(TextButton)),
       );
@@ -139,7 +137,6 @@ void main() {
         sharedPreferencesProvider.overrideWith((ref) => Future.value(preferences)),
         serviceRunningProvider.overrideWithValue(true),
         youtubeReportProvider.overrideWith((ref) => Future.value(report)),
-        youtubeThumbnailProvider.overrideWith((ref) => Future.value()),
         youtubePlaybackProvider.overrideWith((ref) => YoutubePlaybackController(port: 12334, enabled: false)),
       ],
     );
@@ -156,7 +153,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Миниатюры: тестовая миниатюра не найдена (HTTP 404)'), findsOneWidget);
     expect(find.textContaining('YouTube: 50 мс'), findsOneWidget);
-    expect(find.textContaining('Конфигурация недоступна'), findsOneWidget);
+    expect(find.bySemanticsLabel('Ошибка'), findsOneWidget);
+    expect(find.bySemanticsLabel('Успешно'), findsOneWidget);
     expect(find.text('Предварительная проверка сети не пройдена'), findsNothing);
     expect(find.textContaining('Воспроизведение подтверждено'), findsNothing);
   });
