@@ -18,34 +18,58 @@ class YoutubeCard extends ConsumerWidget {
     final enabled = ref.watch(ConfigOptions.enableMixedPort);
     // Watching the report starts a check on connection/route changes; no tap is required.
     final report = ref.watch(youtubeReportProvider);
-    final thumbnail = ref.watch(youtubeThumbnailProvider).value;
     final playbackSupported = ref.watch(youtubePlaybackSupportedProvider);
     final playback = playbackSupported ? ref.watch(youtubePlaybackProvider) : null;
-    final theme = Theme.of(context);
-    final status = !running
-        ? 'Нет подключения'
-        : report.isLoading
-        ? 'Проверяем доступность…'
-        : report.hasError
-        ? 'Не удалось завершить проверку'
-        : report.value == null
-        ? 'Ожидаем конфигурацию…'
-        : '${report.value!.reachable ? 'Сеть доступна' : 'Конфигурация недоступна'} · '
-              '${report.value!.checks.map((check) => '${check.label}: ${_describe(check)}').join(' · ')}';
-    final playbackResult = switch (playback?.status) {
-      PlaybackStatus.passed =>
-        'Воспроизведение подтверждено: ${playback!.seconds.toStringAsFixed(1)} с, ${playback.frames} кадров',
-      PlaybackStatus.checking => 'Проверяем воспроизведение…',
-      PlaybackStatus.failed => 'Воспроизведение не подтверждено',
-      PlaybackStatus.unsupported => 'Воспроизведение не поддерживается',
-      PlaybackStatus.cancelled => 'Проверка воспроизведения отменена',
-      _ => null,
+    ProbeResult? check(bool thumbnail) {
+      for (final item in report.value?.checks ?? const <ProbeResult>[]) {
+        if (item.isThumbnail == thumbnail) return item;
+      }
+      return null;
+    }
+
+    Widget networkRow(String label, bool thumbnail) {
+      final value = check(thumbnail);
+      final pending = !running || report.isLoading || (!report.hasError && value == null);
+      final state = pending
+          ? _ResultState.waiting
+          : report.hasError || !value!.reachable
+          ? _ResultState.failed
+          : _ResultState.passed;
+      final detail = !running
+          ? 'в ожидании подключения'
+          : report.isLoading
+          ? 'проверяем…'
+          : report.hasError
+          ? 'не удалось завершить проверку'
+          : value == null
+          ? 'в ожидании'
+          : _describe(value);
+      return _ResultRow(
+        text: '$label: $detail',
+        state: state,
+        rowKey: thumbnail ? 'thumbnail-result' : 'youtube-result',
+      );
+    }
+
+    final playbackState = !running ? PlaybackStatus.idle : playback?.status ?? PlaybackStatus.idle;
+    final playbackResult = switch (playbackState) {
+      PlaybackStatus.passed => 'подтверждено: ${playback!.seconds.toStringAsFixed(1)} с, ${playback.frames} кадров',
+      PlaybackStatus.checking => 'проверяем…',
+      PlaybackStatus.failed => 'не подтверждено',
+      PlaybackStatus.unsupported => 'не поддерживается',
+      PlaybackStatus.cancelled => 'проверка отменена',
+      PlaybackStatus.idle =>
+        !running
+            ? 'в ожидании подключения'
+            : playbackSupported
+            ? 'в ожидании'
+            : 'не проверяется',
     };
-    final result = playbackResult == null ? status : '$status · $playbackResult';
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
@@ -80,42 +104,18 @@ class YoutubeCard extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                key: const ValueKey('youtube-thumbnail'),
-                height: 160,
-                child: thumbnail == null
-                    ? ColoredBox(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        child: const Center(child: PlatformIcon(Icons.smart_display_outlined, size: 48)),
-                      )
-                    : Image.memory(
-                        thumbnail,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, _, _) =>
-                            const Center(child: PlatformIcon(Icons.smart_display_outlined, size: 48)),
-                      ),
-              ),
-            ),
+            networkRow('YouTube', false),
             const SizedBox(height: 8),
-            Tooltip(
-              message: result,
-              child: Text(
-                result,
-                key: const ValueKey('youtube-availability-result'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color:
-                      running &&
-                          (report.hasError ||
-                              report.value?.reachable == false ||
-                              playback?.status == PlaybackStatus.failed)
-                      ? theme.colorScheme.error
-                      : null,
-                ),
-              ),
+            networkRow('Миниатюры', true),
+            const SizedBox(height: 8),
+            _ResultRow(
+              text: 'Воспроизведение: $playbackResult',
+              state: switch (playbackState) {
+                PlaybackStatus.passed => _ResultState.passed,
+                PlaybackStatus.failed || PlaybackStatus.unsupported => _ResultState.failed,
+                _ => _ResultState.waiting,
+              },
+              rowKey: 'playback-result',
             ),
           ],
         ),
@@ -138,4 +138,45 @@ class YoutubeCard extends ConsumerWidget {
     },
     ProbeOutcome.networkFailure => 'ошибка сети или прокси',
   };
+}
+
+enum _ResultState { waiting, passed, failed }
+
+class _ResultRow extends StatelessWidget {
+  const _ResultRow({required this.text, required this.state, required this.rowKey});
+  final String text;
+  final _ResultState state;
+  final String rowKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = switch (state) {
+      _ResultState.passed => Colors.green,
+      _ResultState.failed => theme.colorScheme.error,
+      _ResultState.waiting => theme.colorScheme.onSurfaceVariant,
+    };
+    final icon = switch (state) {
+      _ResultState.passed => Icons.check_circle_outline,
+      _ResultState.failed => Icons.error_outline_rounded,
+      _ResultState.waiting => Icons.schedule_rounded,
+    };
+    final status = switch (state) {
+      _ResultState.passed => 'Успешно',
+      _ResultState.failed => 'Ошибка',
+      _ResultState.waiting => 'В ожидании',
+    };
+    return Tooltip(
+      message: text,
+      child: Row(
+        children: [
+          PlatformIcon(icon, size: 20, color: color, semanticLabel: status),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text, key: ValueKey(rowKey), maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
+    );
+  }
 }
