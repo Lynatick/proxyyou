@@ -167,3 +167,61 @@ func TestAbandonedStagingIsReclaimedWithoutTouchingLiveImporter(t *testing.T) {
 		t.Fatal("live import reclaimed", count, err)
 	}
 }
+
+// Failing after a complete 1024-entry transaction must not expose the partial
+// revision or alter a configuration held by the previous catalogue.
+func TestBatchImportFailureAfterCommittedBatchAndTail(t *testing.T) {
+	ctx := libbox.BaseContext(nil)
+	store, err := configdb.Open(ctx, filepath.Join(t.TempDir(), "batches.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	makeOptions := func(n int) (*option.Options, map[string]configdb.Descriptor) {
+		opts := &option.Options{}
+		metadata := make(map[string]configdb.Descriptor, n)
+		for i := 0; i < n; i++ {
+			tag := fmt.Sprintf("server-%d", i)
+			opts.Outbounds = append(opts.Outbounds, option.Outbound{Type: "socks", Tag: tag, Options: &option.SOCKSOutboundOptions{ServerOptions: option.ServerOptions{Server: "127.0.0.1", ServerPort: uint16(9000 + i%1000)}}})
+			metadata[tag] = configdb.Descriptor{Network: []string{"tcp"}, Display: "SOCKS"}
+		}
+		return opts, metadata
+	}
+	old, descriptors := makeOptions(1)
+	previous, err := store.Import(ctx, "profile", old, descriptors, "old")
+	if err != nil {
+		t.Fatal(err)
+	}
+	many, metadata := makeOptions(configdb.ImportBatchSize + 1)
+	if _, err = store.DB.Exec(fmt.Sprintf("CREATE TRIGGER fail_batch BEFORE INSERT ON configuration_entries WHEN NEW.tag='server-%d' BEGIN SELECT RAISE(ABORT,'injected batch failure'); END", configdb.ImportBatchSize)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.Import(ctx, "profile", many, metadata, "new"); err == nil {
+		t.Fatal("injected failure ignored")
+	}
+	active, err := store.Resolve(ctx, "profile", "")
+	if err != nil || active != previous {
+		t.Fatal("active revision changed on failure", err)
+	}
+	var staging int
+	if err = store.DB.QueryRow("SELECT count(*) FROM subscription_revisions WHERE state='staging'").Scan(&staging); err != nil || staging != 0 {
+		t.Fatal("partial revision leaked", staging, err)
+	}
+	if _, err = store.DB.Exec("DROP TRIGGER fail_batch"); err != nil {
+		t.Fatal(err)
+	}
+	next, err := store.Import(ctx, "profile", many, metadata, "new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := store.Entries(ctx, next)
+	if err != nil || len(entries) != configdb.ImportBatchSize+1 {
+		t.Fatal("tail batch lost", len(entries), err)
+	}
+	for _, index := range []int{0, configdb.ImportBatchSize - 1, configdb.ImportBatchSize} {
+		loaded, e := store.ReadOptions(ctx, next, entries[index])
+		if e != nil || !reflect.DeepEqual(loaded, many.Outbounds[index].Options) {
+			t.Fatal("batch boundary value changed", index, e)
+		}
+	}
+}

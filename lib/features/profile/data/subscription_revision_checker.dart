@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
 import 'package:hiddify/features/profile/data/subscription_fingerprint.dart';
+import 'package:hiddify/features/profile/data/subscription_source.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -68,6 +69,10 @@ class SubscriptionRevisionChecker {
     final observed = previous?.observed ?? applied;
     final etag = previous?.etag ?? (applied != null ? _header(profile, 'etag') : null);
     final modified = previous?.modified ?? (applied != null ? _header(profile, 'last-modified') : null);
+    final cache = SubscriptionSourceCache.forClient(client);
+    final agent = userAgent ?? client.userAgent;
+    final epoch = cache.epoch(profile.url, agent);
+    var retained = false;
     final directory = await Directory.systemTemp.createTemp('proxyyou-subscription-check-');
     final file = File('${directory.path}/source');
     try {
@@ -94,7 +99,18 @@ class SubscriptionRevisionChecker {
         );
       } else {
         if (await file.length() > maxBytes) throw StateError('Subscription exceeds size limit');
-        final digest = await subscriptionFingerprint(file.path);
+        final inspection = await inspectSubscriptionSource(file.path);
+        final digest = inspection.hash;
+        if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+        retained = cache.retain(
+          profile.url,
+          agent,
+          epoch,
+          directory,
+          file,
+          inspection,
+          response.headers.map.map((key, value) => MapEntry(key, value.length == 1 ? value.first : value)),
+        );
         result = SubscriptionRevision(
           // Old installations have no original source digest. Establish a
           // comparison baseline, without claiming an update or applying it.
@@ -108,7 +124,7 @@ class SubscriptionRevisionChecker {
       await preferences.setString(_key(profile), jsonEncode(result.toJson()));
       return result;
     } finally {
-      await directory.delete(recursive: true);
+      if (!retained) await directory.delete(recursive: true);
     }
   }
 }

@@ -21,7 +21,7 @@ for origin, destination in [(project / 'native/database', source / 'v2/configdb'
         shutil.copy2(file, target)
 patch = project / 'native-patches/database-source.patch'
 if patch.exists():
-    check = subprocess.run(['patch', '-p1', '--reverse', '--batch', '--dry-run', '-i', str(patch)],
+    check = subprocess.run(['patch', '-p1', '--reverse', '--force', '--batch', '--dry-run', '-i', str(patch)],
                            cwd=source, capture_output=True)
     if check.returncode:
         subprocess.run(['patch', '-p1', '--forward', '--batch', '-i', str(patch)], cwd=source, check=True)

@@ -8,6 +8,7 @@ import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
 import 'package:hiddify/core/model/optional_range.dart';
 import 'package:hiddify/features/profile/data/subscription_fingerprint.dart';
+import 'package:hiddify/features/profile/data/subscription_source.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/model/profile_failure.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
@@ -67,6 +68,7 @@ class ProfileParser {
   final DioHttpClient _httpClient;
 
   ProfileParser({required this._ref, required this._httpClient});
+  SubscriptionSourceCache get _sourceCache => SubscriptionSourceCache.forClient(_httpClient);
   TaskEither<ProfileFailure, ProfileEntity> addLocal({
     required String id,
     required String content,
@@ -104,6 +106,7 @@ class ProfileParser {
     (headers) => parseFileAsync(
       tempFilePath: tempFilePath,
       remoteHeaders: headers,
+      headersPrepared: true,
       profile: ProfileEntity.remote(
         id: id,
         active: true,
@@ -119,11 +122,9 @@ class ProfileParser {
     required RemoteProfileEntity rp,
     required String tempFilePath,
     CancelToken? cancelToken,
-  }) => _downloadProfile(
-    rp.url,
-    tempFilePath,
-    cancelToken,
-  ).flatMap((headers) => parseFileAsync(tempFilePath: tempFilePath, remoteHeaders: headers, profile: rp));
+  }) => _downloadProfile(rp.url, tempFilePath, cancelToken).flatMap(
+    (headers) => parseFileAsync(tempFilePath: tempFilePath, remoteHeaders: headers, profile: rp, headersPrepared: true),
+  );
 
   TaskEither<ProfileFailure, ProfileEntity> offlineUpdate({
     required ProfileEntity profile,
@@ -138,10 +139,14 @@ class ProfileParser {
     String? content,
     Map<String, dynamic>? remoteHeaders,
     bool refreshHeaders = true,
+    bool headersPrepared = false,
   }) => TaskEither.tryCatch(
     () async => (await Isolate.run(() {
       final headers = refreshHeaders
-          ? populateHeaders(content: content ?? File(tempFilePath).readAsStringSync(), remoteHeaders: remoteHeaders)
+          ? populateHeaders(
+              content: headersPrepared ? '' : content ?? File(tempFilePath).readAsStringSync(),
+              remoteHeaders: remoteHeaders,
+            )
           : Right<ProfileFailure, Map<String, dynamic>>(profile.populatedHeaders ?? {});
       return headers.flatMap(
         (headers) => parse(
@@ -157,48 +162,59 @@ class ProfileParser {
     String url,
     String tempFilePath,
     CancelToken? cancelToken,
-  ) => TaskEither.tryCatch(() async {
-    // if (url.startsWith("http://"))
-    //   throw const ProfileFailure.invalidUrl('HTTP is not supported. Please use HTTPS for secure connection.');
-
-    final rs = await _httpClient
-        .download(
+  ) => TaskEither.tryCatch(
+    () async {
+      final userAgent = _ref.read(ConfigOptions.useXrayCoreWhenPossible)
+          ? _httpClient.userAgent.replaceAll('HiddifyNext', 'HiddifyNextX')
+          : _httpClient.userAgent;
+      if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
+      final cached = await _sourceCache.take(url, userAgent, tempFilePath);
+      Map<String, dynamic> remoteHeaders;
+      SubscriptionInspection inspection;
+      if (cached != null) {
+        remoteHeaders = cached.headers;
+        inspection = cached.inspection;
+      } else {
+        final response = await _httpClient.download(
           url.trim(),
           tempFilePath,
           cancelToken: cancelToken,
-          userAgent: _ref.read(ConfigOptions.useXrayCoreWhenPossible)
-              ? _httpClient.userAgent.replaceAll("HiddifyNext", "HiddifyNextX")
-              : null,
-        )
-        .catchError((err) {
-          if (CancelToken.isCancel(err as DioException)) {
-            throw const ProfileFailure.cancelByUser('HTTP request for getting profile content canceled by user.');
-          }
-          throw err;
-        });
-    final sourceHash = await subscriptionFingerprint(tempFilePath);
-    await expandRemoteLinesInParallel(
-      tempFilePath: tempFilePath,
-      httpClient: _httpClient,
-      cancelToken: cancelToken ?? CancelToken(),
-      ref: _ref,
-    );
-    // fixing headers before return
-    final headers = rs.headers.map.map((key, value) {
-      if (value.length == 1) return MapEntry(key, value.first);
-      return MapEntry(key, value);
-    });
-    headers[subscriptionSourceHash] = sourceHash;
-    return headers;
-  }, (err, st) => err is ProfileFailure ? err : ProfileFailure.unexpected(err, st));
+          userAgent: userAgent,
+        );
+        remoteHeaders = response.headers.map.map(
+          (key, value) => MapEntry(key, value.length == 1 ? value.first : value),
+        );
+        inspection = await inspectSubscriptionSource(tempFilePath);
+      }
+      if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
+      final lines = inspection.remoteLines;
+      if (lines != null) {
+        await expandRemoteLinesInParallel(
+          tempFilePath: tempFilePath,
+          httpClient: _httpClient,
+          cancelToken: cancelToken ?? CancelToken(),
+          ref: _ref,
+          preparedLines: lines,
+        );
+      }
+      return {...inspection.headers, ...remoteHeaders, subscriptionSourceHash: inspection.hash};
+    },
+    (error, stack) => error is ProfileFailure
+        ? error
+        : error is DioException && CancelToken.isCancel(error)
+        ? const ProfileFailure.cancelByUser('Загрузка подписки отменена.')
+        : ProfileFailure.unexpected(error, stack),
+  );
+
   Future<void> expandRemoteLinesInParallel({
     required String tempFilePath,
     required DioHttpClient httpClient,
     required CancelToken cancelToken,
     required Ref ref,
     int parallelism = 4,
+    List<String>? preparedLines,
   }) async {
-    final lines = await readSubscriptionLines(tempFilePath, skipStructured: true);
+    final lines = preparedLines ?? await readSubscriptionLines(tempFilePath, skipStructured: true);
     // JSON/INI already contains structured configurations, not embedded URL lines.
     if (lines.isEmpty) return;
 
@@ -280,23 +296,7 @@ class ProfileParser {
     return headers;
   }
 
-  static Map<String, dynamic> _parseHeadersFromContent(String content) {
-    final headers = <String, dynamic>{};
-    final content_ = safeDecodeBase64(content);
-    final lines = content_.split("\n");
-    final linesToProcess = lines.length < 10 ? lines.length : 10;
-    for (int i = 0; i < linesToProcess; i++) {
-      final line = lines[i];
-      if (line.startsWith("#") || line.startsWith("//")) {
-        final index = line.indexOf(':');
-        if (index == -1) continue;
-        final key = line.substring(0, index).replaceFirst(RegExp("^#|//"), "").trim().toLowerCase();
-        final value = line.substring(index + 1).trim();
-        headers[key] = value;
-      }
-    }
-    return headers;
-  }
+  static Map<String, dynamic> _parseHeadersFromContent(String content) => subscriptionContentHeaders(content);
 
   /// Parse a `subscription-userinfo` header, e.g.
   /// `upload=0; download=1024; total=10240; expire=1704054600`.
