@@ -50,12 +50,20 @@ def verify_draft():
         require(api(f"repos/{repo}/commits/{tag}")["sha"] == os.environ["GITHUB_SHA"], "Existing release tag differs from the validated commit")
     include_macos = os.environ.get("INCLUDE_MACOS", "true")
     require(include_macos in {"true", "false"}, "INCLUDE_MACOS must be true or false")
-    expected = {f"ProxyYou-Android-{v}.apk", f"ProxyYou-Windows-x64-{v}-Setup.exe"}
-    if include_macos == "true":
-        expected |= {f"ProxyYou-macOS-AppleSilicon-{v}.zip", f"ProxyYou-macOS-Intel-{v}.zip"}
+    windows_only = os.environ.get("WINDOWS_ONLY", "false")
+    require(windows_only in {"true", "false"}, "WINDOWS_ONLY must be true or false")
+    expected = {f"ProxyYou-Windows-x64-{v}-Setup.exe"}
     names = {a["name"] for a in release["assets"]}
-    if include_macos == "false":
-        require(not any(name.startswith("ProxyYou-macOS-") for name in names), "macOS publication is paused: remove macOS assets from this draft")
+    if windows_only == "true":
+        require(not any(name.startswith(("ProxyYou-Android-", "ProxyYou-macOS-")) for name in names),
+                "Windows-only release must not contain Android or macOS packages")
+    else:
+        expected.add(f"ProxyYou-Android-{v}.apk")
+        if include_macos == "true":
+            expected |= {f"ProxyYou-macOS-AppleSilicon-{v}.zip", f"ProxyYou-macOS-Intel-{v}.zip"}
+        else:
+            require(not any(name.startswith("ProxyYou-macOS-") for name in names),
+                    "macOS publication is paused: remove macOS assets from this draft")
     require(expected | {"SHA256SUMS.txt"} <= names, "Missing platform packages or SHA256SUMS.txt")
     with tempfile.TemporaryDirectory() as tmp:
         subprocess.run(["gh", "release", "download", tag, "--dir", tmp, "--pattern", "SHA256SUMS.txt"], check=True)

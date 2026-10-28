@@ -39,3 +39,12 @@ test('Silicon and Intel macOS packages are independent downloads', () => {
  assert.equal(selected.macos.asset.name, mac.name);
  assert.equal(selected.macosIntel.asset.name, intel.name);
 });
+
+
+test('Windows-only release keeps both Mac downloads and Android from the preceding release', () => {
+ const previous = release([apk, mac, win, make('ProxyYou-macOS-Intel-4.1.18.zip')]);
+ const nextWin = make('ProxyYou-Windows-x64-4.1.19-Setup.exe');
+ const selected = selectDownloads([release([nextWin], { tag_name: 'v4.1.19' }), previous]);
+ assert.equal(selected.windows.release.tag_name, 'v4.1.19');
+ for (const platform of ['android', 'macos', 'macosIntel']) assert.equal(selected[platform].release.tag_name, 'v4.1.18');
+});
