@@ -1,6 +1,7 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 // TODO: improve
@@ -43,7 +44,7 @@ class SliverErrorBodyPlaceholder extends HookConsumerWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          if (icon != null) ...[Icon(icon), const Gap(16)],
+          if (icon != null) ...[PlatformIcon(icon), const Gap(16)],
           Text(msg),
         ],
       ),

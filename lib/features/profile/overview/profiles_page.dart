@@ -5,6 +5,7 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/profile/overview/profiles_notifier.dart';
 import 'package:hiddify/features/profile/widget/profile_tile.dart';
@@ -32,7 +33,7 @@ class ProfilesPage extends HookConsumerWidget {
           const SubscriptionUpdateButton(),
           IconButton(
             onPressed: () => ref.read(dialogNotifierProvider.notifier).showSortProfiles(),
-            icon: const Icon(Icons.sort_rounded),
+            icon: const PlatformIcon(Icons.sort_rounded),
             tooltip: t.common.sort,
           ),
           const Gap(8),
@@ -41,7 +42,7 @@ class ProfilesPage extends HookConsumerWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async => await ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(),
         label: Text(t.pages.profiles.add),
-        icon: const Icon(Icons.add_rounded),
+        icon: const PlatformIcon(Icons.add_rounded),
       ),
       body: asyncProfiles.when(
         data: (data) => ListView.separated(

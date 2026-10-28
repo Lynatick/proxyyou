@@ -14,6 +14,7 @@ import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/core/widget/adaptive_icon.dart';
 import 'package:hiddify/core/widget/adaptive_menu.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/profile_notifier.dart';
 import 'package:hiddify/features/profile/overview/profiles_notifier.dart';
@@ -181,9 +182,9 @@ class ProfileTile extends HookConsumerWidget {
     );
 
     final Widget? trailing = isMain
-        ? const Icon(Icons.arrow_drop_down_rounded)
+        ? const PlatformIcon(Icons.arrow_drop_down_rounded)
         : profile.pinned
-        ? Icon(Icons.push_pin, size: 16, color: theme.colorScheme.onSurfaceVariant)
+        ? PlatformIcon(Icons.push_pin, size: 16, color: theme.colorScheme.onSurfaceVariant)
         : null;
 
     if (trailing == null) return nameText;
@@ -268,7 +269,7 @@ class ProfileActionButton extends HookConsumerWidget {
           key: ValueKey(success),
           label: success ? t.pages.profiles.msg.update.success : t.pages.profiles.msg.update.failure,
           liveRegion: true,
-          child: Icon(
+          child: PlatformIcon(
             success ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded,
             color: success ? Colors.green : Theme.of(context).colorScheme.error,
           ),
@@ -286,7 +287,7 @@ class ProfileActionButton extends HookConsumerWidget {
               onTap: () => ref
                   .read(updateProfileNotifierProvider(profile.id).notifier)
                   .updateProfile(profile as RemoteProfileEntity),
-              child: const Icon(Icons.sync_rounded),
+              child: const PlatformIcon(Icons.sync_rounded),
             ),
           ),
         );
@@ -300,7 +301,7 @@ class ProfileActionButton extends HookConsumerWidget {
           child: InkWell(
             borderRadius: ProfileTileConst.startBorderRadius(Directionality.of(context), squareBottom: squareBottom),
             onTap: toggleVisibility,
-            child: Icon(AdaptiveIcon(context).more),
+            child: PlatformIcon(AdaptiveIcon(context).more),
           ),
         ),
       );
@@ -331,7 +332,7 @@ class _UpdatingIndicatorState extends State<_UpdatingIndicator> with SingleTicke
   Widget build(BuildContext context) {
     return RotationTransition(
       turns: ReverseAnimation(_controller),
-      child: Icon(Icons.sync_rounded, color: Theme.of(context).colorScheme.onSurface),
+      child: PlatformIcon(Icons.sync_rounded, color: Theme.of(context).colorScheme.onSurface),
     );
   }
 }
@@ -350,13 +351,13 @@ class ProfileActionsMenu extends HookConsumerWidget {
     final menuItems = [
       AdaptiveMenuItem(
         title: profile.pinned ? t.common.unpin : t.common.pin,
-        leadingIcon: Icon(profile.pinned ? Icons.push_pin : Icons.push_pin_outlined),
+        leadingIcon: PlatformIcon(profile.pinned ? Icons.push_pin : Icons.push_pin_outlined),
         onTap: () => ref.read(profilesNotifierProvider.notifier).togglePin(profile),
       ),
       if (profile case RemoteProfileEntity())
         AdaptiveMenuItem(
           title: t.common.update,
-          leadingIcon: const Icon(Icons.sync_rounded),
+          leadingIcon: const PlatformIcon(Icons.sync_rounded),
           onTap: () {
             if (ref.read(updateProfileNotifierProvider(profile.id)).isLoading) {
               return;
@@ -366,7 +367,7 @@ class ProfileActionsMenu extends HookConsumerWidget {
         ),
       AdaptiveMenuItem(
         title: t.common.share,
-        leadingIcon: Icon(AdaptiveIcon(context).share),
+        leadingIcon: PlatformIcon(AdaptiveIcon(context).share),
         subItems: [
           if (profile case RemoteProfileEntity(:final url, :final name)) ...[
             AdaptiveMenuItem(
@@ -396,7 +397,7 @@ class ProfileActionsMenu extends HookConsumerWidget {
         ],
       ),
       AdaptiveMenuItem(
-        leadingIcon: const Icon(Icons.edit_rounded),
+        leadingIcon: const PlatformIcon(Icons.edit_rounded),
         title: t.common.edit,
         onTap: () {
           if (Breakpoint(context).isMobile()) context.pop();
@@ -404,7 +405,7 @@ class ProfileActionsMenu extends HookConsumerWidget {
         },
       ),
       AdaptiveMenuItem(
-        leadingIcon: const Icon(Icons.delete_outline_rounded),
+        leadingIcon: const PlatformIcon(Icons.delete_outline_rounded),
         title: t.common.delete,
         onTap: () async => await ref
             .read(dialogNotifierProvider.notifier)
@@ -505,7 +506,7 @@ class ProfileLinkButtons extends HookConsumerWidget {
           child: Row(
             children: [
               if (_leadingIcon(url) case final icon?) ...[
-                Icon(icon, size: 24, color: theme.colorScheme.onSurfaceVariant),
+                PlatformIcon(icon, size: 24, color: theme.colorScheme.onSurfaceVariant),
                 const Gap(8),
               ],
               Expanded(
@@ -530,7 +531,7 @@ class ProfileLinkButtons extends HookConsumerWidget {
                 ),
               ),
               const Gap(4),
-              Icon(Icons.open_in_new_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
+              PlatformIcon(Icons.open_in_new_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
             ],
           ),
         ),

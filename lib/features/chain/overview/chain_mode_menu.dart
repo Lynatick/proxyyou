@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/widget/adaptive_menu.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/chain/model/chain_enum.dart';
 import 'package:hiddify/features/chain/overview/chain_mode_icon.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
@@ -22,7 +23,7 @@ class ChainModeMenu extends HookConsumerWidget {
 
     final menuItems = [
       AdaptiveMenuItem(
-        leadingIcon: const Icon(Icons.block, size: 16),
+        leadingIcon: const PlatformIcon(Icons.block, size: 16),
         title: t.common.disable,
         onTap: () async {
           final status = ref.read(ConfigOptions.chainStatus);
@@ -49,7 +50,7 @@ class ChainModeMenu extends HookConsumerWidget {
       if (showConfiguration)
         AdaptiveMenuItem(
           title: t.common.configuration,
-          trailingIcon: const Icon(Icons.arrow_right, size: 16),
+          trailingIcon: const PlatformIcon(Icons.arrow_right, size: 16),
           onTap: () {
             context.pop();
             context.goNamed('chainOptions');

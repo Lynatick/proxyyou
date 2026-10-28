@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/settings/widget/preference_tile.dart';
 import 'package:hiddify/singbox/model/singbox_config_enum.dart';
@@ -30,7 +31,7 @@ class DnsOptionsPage extends HookConsumerWidget {
           ),
           SwitchListTile.adaptive(
             title: Text(t.pages.settings.dns.enableFakeDns),
-            secondary: const Icon(Icons.private_connectivity_rounded),
+            secondary: const PlatformIcon(Icons.private_connectivity_rounded),
             value: ref.watch(ConfigOptions.enableFakeDns),
             onChanged: ref.read(ConfigOptions.enableFakeDns.notifier).update,
           ),

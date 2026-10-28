@@ -6,6 +6,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -70,7 +71,7 @@ class LanSharingPreferenceWidget extends HookConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SwitchListTile.adaptive(
-          secondary: showLeading ? const Icon(Icons.share_rounded) : null,
+          secondary: showLeading ? const PlatformIcon(Icons.share_rounded) : null,
           title: Text(t.pages.settings.inbound.lanSharing),
           value: enabled,
           onChanged: (value) async {
@@ -98,7 +99,7 @@ class LanSharingPreferenceWidget extends HookConsumerWidget {
                             .showSuccessToast(t.common.msg.export.clipboard.success);
                       }
                     },
-                    icon: Icon(Icons.link_rounded, color: theme.colorScheme.primary),
+                    icon: PlatformIcon(Icons.link_rounded, color: theme.colorScheme.primary),
                     label: Text(
                       t.pages.settings.inbound.copyLink,
                       style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary),
@@ -112,7 +113,7 @@ class LanSharingPreferenceWidget extends HookConsumerWidget {
                         await ref.read(dialogNotifierProvider.notifier).showQrCode(qrLink, message: link);
                       }
                     },
-                    icon: Icon(Icons.qr_code_rounded, color: theme.colorScheme.primary),
+                    icon: PlatformIcon(Icons.qr_code_rounded, color: theme.colorScheme.primary),
                     label: Text(
                       t.pages.settings.inbound.qrCode,
                       style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary),

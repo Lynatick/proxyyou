@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/model/failures.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/profile/details/profile_details_notifier.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/utils/utils.dart';
@@ -68,7 +69,7 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
                               });
                             }
                           },
-                    icon: const Icon(Icons.check),
+                    icon: const PlatformIcon(Icons.check),
                     label: Text(t.common.save),
                   ),
                   const Gap(8),
@@ -181,7 +182,7 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
                         ],
                         ListTile(
                           title: Text(t.pages.profileDetails.lastUpdate),
-                          leading: const Icon(FluentIcons.history_24_regular),
+                          leading: const PlatformIcon(FluentIcons.history_24_regular),
                           subtitle: Text(data.profile.lastUpdate.format()),
                           dense: true,
                         ),
@@ -250,7 +251,7 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(FluentIcons.error_circle_12_filled),
+                  const PlatformIcon(FluentIcons.error_circle_12_filled),
                   Text(t.presentShortError(error)),
                   Text(error.toString()),
                 ],
@@ -267,7 +268,7 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
   InlineSpan _buildSubProp(IconData icon, String text, String semanticLabel) {
     return TextSpan(
       children: [
-        WidgetSpan(child: Icon(icon, size: 16, semanticLabel: semanticLabel)),
+        WidgetSpan(child: PlatformIcon(icon, size: 16, semanticLabel: semanticLabel)),
         const TextSpan(text: " "),
         TextSpan(text: text),
       ],

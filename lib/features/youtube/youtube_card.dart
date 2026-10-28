@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/youtube/youtube_playback.dart';
@@ -25,13 +26,13 @@ class YoutubeCard extends ConsumerWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.smart_display_outlined),
+                const PlatformIcon(Icons.smart_display_outlined),
                 const SizedBox(width: 12),
                 Expanded(child: Text('Доступность YouTube', style: theme.textTheme.titleMedium)),
                 IconButton(
                   tooltip: 'Проверить ещё раз',
                   onPressed: running && !report.isLoading ? () => ref.invalidate(youtubeReportProvider) : null,
-                  icon: const Icon(Icons.refresh),
+                  icon: const PlatformIcon(Icons.refresh),
                 ),
               ],
             ),
@@ -69,7 +70,7 @@ class YoutubeCard extends ConsumerWidget {
                               padding: const EdgeInsets.symmetric(vertical: 4),
                               child: Row(
                                 children: [
-                                  Icon(
+                                  PlatformIcon(
                                     check.reachable ? Icons.check_circle_outline : Icons.info_outline,
                                     size: 18,
                                     color: check.reachable ? Colors.teal : theme.colorScheme.error,
@@ -100,7 +101,7 @@ class YoutubeCard extends ConsumerWidget {
                 onPressed: running && enabled && playback.status != PlaybackStatus.checking
                     ? () => ref.read(youtubePlaybackProvider.notifier).start()
                     : null,
-                icon: const Icon(Icons.play_arrow),
+                icon: const PlatformIcon(Icons.play_arrow),
                 label: const Text('Проверить воспроизведение'),
               ),
               const SizedBox(height: 8),

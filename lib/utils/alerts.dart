@@ -1,5 +1,6 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:toastification/toastification.dart';
 
 enum AlertType {
@@ -43,7 +44,7 @@ class CustomToast extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (icon != null) ...[Icon(icon, color: color), const SizedBox(width: 8)],
+          if (icon != null) ...[PlatformIcon(icon, color: color), const SizedBox(width: 8)],
           Flexible(child: Text(message)),
         ],
       ),

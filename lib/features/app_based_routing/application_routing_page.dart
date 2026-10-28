@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/app_based_routing/mac_app_preferences.dart';
 import 'package:hiddify/features/app_based_routing/model/per_app_proxy_mode.dart';
 import 'package:hiddify/features/app_based_routing/overview/app_list_page.dart';
@@ -115,7 +116,7 @@ class ApplicationRoutingPage extends HookConsumerWidget {
                         : () => ref
                               .read(ConfigOptions.serviceMode.notifier)
                               .update(mac ? ServiceMode.systemProxy : ServiceMode.tun),
-                    icon: const Icon(Icons.settings_ethernet),
+                    icon: const PlatformIcon(Icons.settings_ethernet),
                     label: Text(mac ? 'Включить системный прокси' : 'Включить режим VPN'),
                   ),
                 if (mac) ...[
@@ -187,7 +188,7 @@ class ApplicationRoutingPage extends HookConsumerWidget {
             padding: const EdgeInsets.all(16),
             child: FilledButton.icon(
               onPressed: saving.value || switching ? null : apply,
-              icon: const Icon(Icons.check),
+              icon: const PlatformIcon(Icons.check),
               label: Text(saving.value ? 'Применение…' : 'Применить'),
             ),
           ),

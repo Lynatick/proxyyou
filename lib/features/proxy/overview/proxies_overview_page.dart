@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/proxy/overview/catalog_overview_notifier.dart';
 import 'package:hiddify/features/proxy/overview/proxies_overview_notifier.dart';
@@ -32,12 +33,12 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
           IconButton(
             tooltip: 'Обновить порядок списка',
             onPressed: () => ref.invalidate(catalogOverviewProvider),
-            icon: const Icon(Icons.refresh),
+            icon: const PlatformIcon(Icons.refresh),
           ),
           PopupMenuButton<ProxiesSort>(
             initialValue: sortBy,
             onSelected: ref.read(proxiesSortNotifierProvider.notifier).update,
-            icon: const Icon(FluentIcons.arrow_sort_24_regular),
+            icon: const PlatformIcon(FluentIcons.arrow_sort_24_regular),
             tooltip: t.pages.proxies.sort,
             itemBuilder: (context) => [
               ...ProxiesSort.values.map((value) => PopupMenuItem(value: value, child: Text(value.present(t)))),
@@ -49,7 +50,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
       floatingActionButton: FloatingActionButton(
         onPressed: connected ? () => ref.read(proxiesOverviewNotifierProvider.notifier).urlTest('select') : null,
         tooltip: t.pages.proxies.testDelay,
-        child: const Icon(FluentIcons.flash_24_filled),
+        child: const PlatformIcon(FluentIcons.flash_24_filled),
       ),
       body: catalog.when(
         data: (data) {

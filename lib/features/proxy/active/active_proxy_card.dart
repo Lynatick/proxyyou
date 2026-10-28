@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/proxy/active/balance_strategy_presentation.dart';
@@ -58,7 +59,7 @@ class ConnectedConfigurationButton extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              const Icon(Icons.route_outlined),
+              const PlatformIcon(Icons.route_outlined),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -83,7 +84,7 @@ class ConnectedConfigurationButton extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(Icons.chevron_right),
+              const PlatformIcon(Icons.chevron_right),
             ],
           ),
         ),

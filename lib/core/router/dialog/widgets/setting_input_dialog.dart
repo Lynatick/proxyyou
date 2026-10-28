@@ -5,6 +5,7 @@ import 'package:flutter_typeahead/flutter_typeahead.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -54,7 +55,7 @@ class SettingInputDialog<T> extends HookConsumerWidget with PresLogger {
 
     return AlertDialog(
       title: Text(title),
-      icon: icon != null ? Icon(icon) : null,
+      icon: icon != null ? PlatformIcon(icon) : null,
       // material: (context, platform) => MaterialAlertDialogData(
       //   icon: icon != null ? Icon(icon) : null,
       // ),

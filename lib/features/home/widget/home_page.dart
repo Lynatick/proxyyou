@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/app_based_routing/application_routing_page.dart';
 import 'package:hiddify/features/app_update/widget/app_update_card.dart';
 import 'package:hiddify/features/home/widget/connection_controls.dart';
@@ -27,20 +28,20 @@ class HomePage extends ConsumerWidget {
           if (PlatformUtils.isMacOS || PlatformUtils.isAndroid)
             IconButton(
               tooltip: 'Проксирование программ',
-              icon: const Icon(Icons.apps),
+              icon: const PlatformIcon(Icons.apps),
               onPressed: () =>
                   Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ApplicationRoutingPage())),
             ),
           IconButton(
             tooltip: 'Добавить подписку',
             onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(),
-            icon: const Icon(Icons.add),
+            icon: const PlatformIcon(Icons.add),
           ),
           const SubscriptionUpdateButton(),
           IconButton(
             tooltip: 'Настройки соединения',
             onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showQuickSettings(),
-            icon: const Icon(Icons.tune),
+            icon: const PlatformIcon(Icons.tune),
           ),
         ],
       ),

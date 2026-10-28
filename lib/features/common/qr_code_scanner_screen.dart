@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -447,7 +448,7 @@ class QrCodeScannerDialog extends ConsumerWidget {
                 margin: const EdgeInsets.all(8),
                 child: IconButton(
                   onPressed: () => context.pop(),
-                  icon: Icon(Icons.close, color: Theme.of(context).colorScheme.onPrimaryContainer),
+                  icon: PlatformIcon(Icons.close, color: Theme.of(context).colorScheme.onPrimaryContainer),
                   splashRadius: 24,
                 ),
               ),

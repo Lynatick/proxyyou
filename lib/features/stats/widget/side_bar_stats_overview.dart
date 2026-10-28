@@ -5,6 +5,7 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
 import 'package:hiddify/core/widget/animated_text.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/stats/notifier/stats_notifier.dart';
 import 'package:hiddify/features/stats/widget/stats_card.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
@@ -41,7 +42,7 @@ class SideBarStatsOverview extends HookConsumerWidget {
               icon: AnimatedRotation(
                 turns: showAll ? 1 : 0.5,
                 duration: kAnimationDuration,
-                child: const Icon(FluentIcons.chevron_down_16_regular, size: 16),
+                child: const PlatformIcon(FluentIcons.chevron_down_16_regular, size: 16),
               ),
               label: AnimatedText(showAll ? t.common.showLess : t.common.showMore),
             ),
@@ -55,12 +56,12 @@ class SideBarStatsOverview extends HookConsumerWidget {
               title: t.components.stats.traffic,
               stats: [
                 (
-                  label: const Icon(FluentIcons.arrow_download_16_regular),
+                  label: const PlatformIcon(FluentIcons.arrow_download_16_regular),
                   data: Text(stats.downlink.toInt().speed()),
                   semanticLabel: t.components.stats.speed,
                 ),
                 (
-                  label: const Icon(FluentIcons.arrow_bidirectional_up_down_16_regular),
+                  label: const PlatformIcon(FluentIcons.arrow_bidirectional_up_down_16_regular),
                   data: Text(stats.downlinkTotal.toInt().size()),
                   semanticLabel: t.components.stats.totalTransferred,
                 ),

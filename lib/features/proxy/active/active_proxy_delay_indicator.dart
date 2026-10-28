@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/core/widget/shimmer_skeleton.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
@@ -41,7 +42,7 @@ class ActiveProxyDelayIndicator extends HookConsumerWidget with InfraLogger {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(FluentIcons.wifi_1_24_regular),
+              const PlatformIcon(FluentIcons.wifi_1_24_regular),
               const Gap(8),
               if (delay > 0)
                 Text.rich(

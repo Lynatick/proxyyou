@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/region.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/core/widget/shimmer_skeleton.dart';
 import 'package:hiddify/features/app_based_routing/application_routing_page.dart';
 import 'package:hiddify/features/app_based_routing/data/auto_selection_repository.dart';
@@ -45,7 +46,7 @@ class RoutingOptionsPage extends HookConsumerWidget {
         actions: [
           const _RegionChip(),
           PopupMenuButton(
-            icon: const Icon(Icons.more_vert_rounded),
+            icon: const PlatformIcon(Icons.more_vert_rounded),
             itemBuilder: (_) {
               final notifier = ref.read(rulesNotifierProvider.notifier);
               final options = t.pages.settings.routing.routeRule.options;
@@ -75,7 +76,7 @@ class RoutingOptionsPage extends HookConsumerWidget {
             if (PlatformUtils.isMacOS)
               ListTile(
                 title: const Text('Проксирование программ'),
-                leading: const Icon(Icons.apps),
+                leading: const PlatformIcon(Icons.apps),
                 onTap: () =>
                     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ApplicationRoutingPage())),
               ),
@@ -89,7 +90,7 @@ class RoutingOptionsPage extends HookConsumerWidget {
       floatingActionButton: FloatingActionButton(
         tooltip: t.pages.settings.routing.routeRule.add,
         onPressed: () => context.goNamed('rule', pathParameters: {'orderId': 'new'}),
-        child: const Icon(Icons.add_rounded),
+        child: const PlatformIcon(Icons.add_rounded),
       ),
     );
   }
@@ -122,7 +123,7 @@ class _RegionChip extends ConsumerWidget {
                 _RegionFlag(option),
                 const Gap(12),
                 Expanded(child: Text(option.presentName(t))),
-                if (option == region) const Icon(Icons.check_rounded),
+                if (option == region) const PlatformIcon(Icons.check_rounded),
               ],
             ),
           ),
@@ -147,7 +148,7 @@ class _RegionChip extends ConsumerWidget {
               t.pages.settings.routing.region,
               style: theme.textTheme.labelLarge?.copyWith(color: colorScheme.onSurface),
             ),
-            Icon(Icons.arrow_drop_down_rounded, size: 20, color: colorScheme.onSurfaceVariant),
+            PlatformIcon(Icons.arrow_drop_down_rounded, size: 20, color: colorScheme.onSurfaceVariant),
             const Gap(4),
           ],
         ),
@@ -173,7 +174,7 @@ class _RegionFlag extends StatelessWidget {
         height: size,
         // a tint of the text color, so it shows on any background
         decoration: BoxDecoration(color: colorScheme.onSurface.withValues(alpha: 0.1), borderRadius: borderRadius),
-        child: Icon(Icons.public_rounded, size: size * 2 / 3, color: colorScheme.onSurfaceVariant),
+        child: PlatformIcon(Icons.public_rounded, size: size * 2 / 3, color: colorScheme.onSurfaceVariant),
       );
     }
     return CircleFlag(
@@ -295,7 +296,7 @@ class _AppListRow extends ConsumerWidget {
       titleTextStyle: theme.textTheme.bodyMedium,
       leading: leading,
       title: title,
-      trailing: const Icon(Icons.chevron_right_rounded),
+      trailing: const PlatformIcon(Icons.chevron_right_rounded),
       onTap: onChooseApps ?? () => context.goNamed('appList'),
     );
 
@@ -327,7 +328,7 @@ class _AppListRow extends ConsumerWidget {
                 shape: BoxShape.circle,
                 border: Border.all(color: color, width: 1.5),
               ),
-              child: Icon(Icons.add_rounded, size: 16, color: color),
+              child: PlatformIcon(Icons.add_rounded, size: 16, color: color),
             ),
           ],
         ),
@@ -347,7 +348,7 @@ class _AppListRow extends ConsumerWidget {
                 child: Image.memory(icon, width: 24, height: 24, cacheWidth: logoPx, cacheHeight: logoPx),
               ),
               AsyncLoading() => _loadingLogo,
-              _ => const Icon(Icons.android_rounded),
+              _ => const PlatformIcon(Icons.android_rounded),
             },
         ],
       ),
@@ -448,7 +449,7 @@ class _AutoSelection extends ConsumerWidget {
             IconButton(
               tooltip: autoSelection.performNow,
               onPressed: loading ? null : service.updateAutoSelection,
-              icon: const Icon(Icons.sync_rounded),
+              icon: const PlatformIcon(Icons.sync_rounded),
             ),
           // the bar takes the switch's place and keeps its space, so nothing moves
           Stack(
@@ -485,7 +486,7 @@ class _AutoSelectionIssue extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 14, color: color),
+        PlatformIcon(icon, size: 14, color: color),
         const Gap(4),
         Flexible(
           child: Text(text, style: TextStyle(color: color)),
@@ -572,7 +573,7 @@ class _MenuOption<T> extends HookWidget {
                 child: Row(
                   children: [
                     Expanded(child: Text(present(choice))),
-                    if (choice == selected) const Icon(Icons.check_rounded),
+                    if (choice == selected) const PlatformIcon(Icons.check_rounded),
                   ],
                 ),
               ),
@@ -581,7 +582,7 @@ class _MenuOption<T> extends HookWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(present(selected), style: theme.textTheme.bodyMedium?.copyWith(color: color)),
-              Icon(Icons.arrow_drop_down_rounded, color: color),
+              PlatformIcon(Icons.arrow_drop_down_rounded, color: color),
             ],
           ),
         ),

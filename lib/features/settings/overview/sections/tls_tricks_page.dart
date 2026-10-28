@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/optional_range.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/settings/widget/preference_tile.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -29,7 +30,7 @@ class TlsTricksPage extends HookConsumerWidget {
           SwitchListTile.adaptive(
             title: Text(t.pages.settings.tlsTricks.enable),
             value: ref.watch(ConfigOptions.enableTlsFragment),
-            secondary: const Icon(Icons.content_cut_rounded),
+            secondary: const PlatformIcon(Icons.content_cut_rounded),
             onChanged: ref.read(ConfigOptions.enableTlsFragment.notifier).update,
           ),
           ChoicePreferenceWidget(
@@ -64,13 +65,13 @@ class TlsTricksPage extends HookConsumerWidget {
           SwitchListTile.adaptive(
             title: Text(t.pages.settings.tlsTricks.mixedSniCase.enable),
             value: ref.watch(ConfigOptions.enableTlsMixedSniCase),
-            secondary: const Icon(Icons.text_fields_rounded),
+            secondary: const PlatformIcon(Icons.text_fields_rounded),
             onChanged: canChangeOption ? ref.read(ConfigOptions.enableTlsMixedSniCase.notifier).update : null,
           ),
           SwitchListTile.adaptive(
             title: Text(t.pages.settings.tlsTricks.padding.enable),
             value: ref.watch(ConfigOptions.enableTlsPadding),
-            secondary: const Icon(Icons.expand_rounded),
+            secondary: const PlatformIcon(Icons.expand_rounded),
             onChanged: canChangeOption ? ref.read(ConfigOptions.enableTlsPadding.notifier).update : null,
           ),
           ValuePreferenceWidget(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hiddify/core/model/constants.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
@@ -88,7 +89,7 @@ class _ConnectionControlsState extends ConsumerState<ConnectionControls> {
                         foregroundColor: buttonColor == null ? null : Colors.white,
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                       ),
-                      icon: Icon(running ? Icons.shield_outlined : Icons.power_settings_new, size: 22),
+                      icon: PlatformIcon(running ? Icons.shield_outlined : Icons.power_settings_new, size: 22),
                       label: Text(
                         busy
                             ? 'Подождите…'
@@ -112,7 +113,7 @@ class _ConnectionControlsState extends ConsumerState<ConnectionControls> {
                       style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
                       icon: _testing
                           ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.network_check, size: 20),
+                          : const PlatformIcon(Icons.network_check, size: 20),
                       label: Text(
                         _testing ? (compact ? '…' : 'Проверка…') : ping,
                         maxLines: 1,

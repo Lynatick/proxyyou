@@ -4,6 +4,7 @@ import 'package:hiddify/core/haptic/haptic_service.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/auto_start/notifier/auto_start_notifier.dart';
 import 'package:hiddify/features/common/general_pref_tiles.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
@@ -27,19 +28,19 @@ class GeneralPage extends HookConsumerWidget {
           SwitchListTile.adaptive(
             title: Text(t.pages.settings.general.autoIpCheck),
             value: ref.watch(Preferences.autoCheckIp),
-            secondary: const Icon(Icons.flag_rounded),
+            secondary: const PlatformIcon(Icons.flag_rounded),
             onChanged: ref.read(Preferences.autoCheckIp.notifier).update,
           ),
           if (PlatformUtils.isAndroid) ...[
             SwitchListTile.adaptive(
               title: Text(t.pages.settings.general.dynamicNotification),
-              secondary: const Icon(Icons.speed_rounded),
+              secondary: const PlatformIcon(Icons.speed_rounded),
               value: ref.watch(Preferences.dynamicNotification),
               onChanged: ref.read(Preferences.dynamicNotification.notifier).update,
             ),
             SwitchListTile.adaptive(
               title: Text(t.pages.settings.general.hapticFeedback),
-              secondary: const Icon(Icons.vibration_rounded),
+              secondary: const PlatformIcon(Icons.vibration_rounded),
               value: ref.watch(hapticServiceProvider),
               onChanged: ref.read(hapticServiceProvider.notifier).updatePreference,
             ),
@@ -48,7 +49,7 @@ class GeneralPage extends HookConsumerWidget {
             const ClosingPrefTile(),
             SwitchListTile.adaptive(
               title: Text(t.pages.settings.general.autoStart),
-              secondary: const Icon(Icons.auto_mode_rounded),
+              secondary: const PlatformIcon(Icons.auto_mode_rounded),
               value: ref.watch(autoStartNotifierProvider).asData!.value,
               onChanged: (value) async => value
                   ? await ref.read(autoStartNotifierProvider.notifier).enable()
@@ -56,7 +57,7 @@ class GeneralPage extends HookConsumerWidget {
             ),
             SwitchListTile.adaptive(
               title: Text(t.pages.settings.general.silentStart),
-              secondary: const Icon(Icons.visibility_off_rounded),
+              secondary: const PlatformIcon(Icons.visibility_off_rounded),
               value: ref.watch(Preferences.silentStart),
               onChanged: ref.read(Preferences.silentStart.notifier).update,
             ),
@@ -65,7 +66,7 @@ class GeneralPage extends HookConsumerWidget {
           SwitchListTile.adaptive(
             title: Text(t.pages.settings.general.memoryLimit),
             subtitle: Text(t.pages.settings.general.memoryLimitMsg),
-            secondary: const Icon(Icons.memory_rounded),
+            secondary: const PlatformIcon(Icons.memory_rounded),
             value: !ref.watch(Preferences.disableMemoryLimit),
             onChanged: (value) async => await ref.read(Preferences.disableMemoryLimit.notifier).update(!value),
           ),
@@ -75,12 +76,12 @@ class GeneralPage extends HookConsumerWidget {
           const ListTile(
             title: Text('Адрес проверки подключения'),
             subtitle: Text('https://www.youtube.com/generate_204'),
-            leading: Icon(Icons.link_rounded),
+            leading: PlatformIcon(Icons.link_rounded),
           ),
           ListTile(
             title: Text(t.pages.settings.general.urlTestInterval),
             subtitle: Text(ref.watch(ConfigOptions.urlTestInterval).toApproximateTime(isRelativeToNow: false)),
-            leading: const Icon(Icons.timer_rounded),
+            leading: const PlatformIcon(Icons.timer_rounded),
             onTap: () async => await ref
                 .read(dialogNotifierProvider.notifier)
                 .showSettingSlider(
@@ -109,7 +110,7 @@ class GeneralPage extends HookConsumerWidget {
           SwitchListTile.adaptive(
             title: Text(t.pages.settings.general.useXrayCoreWhenPossible),
             subtitle: Text(t.pages.settings.general.useXrayCoreWhenPossibleMsg),
-            secondary: const Icon(Icons.extension_rounded),
+            secondary: const PlatformIcon(Icons.extension_rounded),
             value: ref.watch(ConfigOptions.useXrayCoreWhenPossible),
             onChanged: ref.read(ConfigOptions.useXrayCoreWhenPossible.notifier).update,
           ),

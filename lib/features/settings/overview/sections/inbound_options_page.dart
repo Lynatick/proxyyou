@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/settings/widget/lan_sharing_tile.dart';
 import 'package:hiddify/features/settings/widget/preference_tile.dart';
@@ -27,7 +28,7 @@ class InboundOptionsPage extends HookConsumerWidget with AppLogger {
           ),
           SwitchListTile.adaptive(
             title: Text(t.pages.settings.inbound.strictRoute),
-            secondary: const Icon(Icons.merge_rounded),
+            secondary: const PlatformIcon(Icons.merge_rounded),
             value: ref.watch(ConfigOptions.strictRoute),
             onChanged: ref.read(ConfigOptions.strictRoute.notifier).update,
           ),
