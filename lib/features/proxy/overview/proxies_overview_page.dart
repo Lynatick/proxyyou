@@ -35,6 +35,12 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
             onPressed: () => ref.invalidate(catalogOverviewProvider),
             icon: const PlatformIcon(Icons.refresh),
           ),
+          IconButton(
+            tooltip: ref.watch(proxiesSortReversedProvider) ? 'Обратный порядок' : 'Прямой порядок',
+            onPressed: () =>
+                ref.read(proxiesSortReversedProvider.notifier).update(!ref.read(proxiesSortReversedProvider)),
+            icon: PlatformIcon(ref.watch(proxiesSortReversedProvider) ? Icons.arrow_downward : Icons.arrow_upward),
+          ),
           PopupMenuButton<ProxiesSort>(
             initialValue: sortBy,
             onSelected: ref.read(proxiesSortNotifierProvider.notifier).update,

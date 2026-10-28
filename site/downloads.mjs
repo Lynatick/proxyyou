@@ -2,7 +2,6 @@ const REPOSITORY = 'lynatick/proxyyou';
 const RELEASES_URL = `https://github.com/${REPOSITORY}/releases`;
 const PATTERNS = {
   macos: /^ProxyYou-macOS-AppleSilicon-\d+\.\d+\.\d+\.zip$/i,
-  macosIntel: /^ProxyYou-macOS-Intel-\d+\.\d+\.\d+\.zip$/i,
   android: /^ProxyYou-Android-\d+\.\d+\.\d+\.apk$/i,
   windows: /^ProxyYou-Windows-x64-\d+\.\d+\.\d+-Setup\.exe$/i,
 };

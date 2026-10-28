@@ -59,7 +59,12 @@ class ConfigurationCatalog extends GeneratedDatabase {
     ).toString();
   }
 
-  Future<CatalogView> createView(String profile, ProxiesSort sort, {required bool connected}) async {
+  Future<CatalogView> createView(
+    String profile,
+    ProxiesSort sort, {
+    required bool connected,
+    bool reversed = false,
+  }) async {
     final view = const Uuid().v4();
     await customStatement(
       'INSERT INTO configuration_revision_leases(token,revision,owner_pid,created) '
@@ -75,7 +80,7 @@ class ConfigurationCatalog extends GeneratedDatabase {
     if (revisionRow == null) return const CatalogView('', '', 0);
     final revision = revisionRow.read<String>('revision');
     try {
-      await refreshOrder(CatalogView(view, revision, 0, profile: profile), sort);
+      await refreshOrder(CatalogView(view, revision, 0, profile: profile), sort, reversed: reversed);
       final count = await customSelect(
         'SELECT count(*) AS count FROM configuration_view_rows WHERE view_id=?',
         variables: [Variable(view)],
@@ -90,7 +95,7 @@ class ConfigurationCatalog extends GeneratedDatabase {
   // Replace the complete SQL ranking atomically, including rows beyond the
   // currently loaded page. The notifier reloads its entire visible prefix
   // before allowing another page request, so offsets cannot mix two rankings.
-  Future<void> refreshOrder(CatalogView view, ProxiesSort sort) async {
+  Future<void> refreshOrder(CatalogView view, ProxiesSort sort, {bool reversed = false}) async {
     final order = switch (sort) {
       ProxiesSort.unsorted => "CASE e.section WHEN 'outbounds' THEN 0 ELSE 1 END,e.ordinal,e.id",
       ProxiesSort.name => 'e.tag,e.id',
@@ -100,13 +105,14 @@ class ConfigurationCatalog extends GeneratedDatabase {
     await transaction(() async {
       await customStatement(
         'CREATE TEMP TABLE IF NOT EXISTS configuration_view_rows( '
-        'view_id TEXT NOT NULL,position INTEGER NOT NULL,revision TEXT NOT NULL,entry_id INTEGER NOT NULL, '
+        'view_id TEXT NOT NULL,position INTEGER NOT NULL,revision TEXT NOT NULL,entry_id INTEGER NOT NULL,number INTEGER NOT NULL, '
         'PRIMARY KEY(view_id,position)) WITHOUT ROWID',
       );
       await customStatement('DELETE FROM configuration_view_rows WHERE view_id=?', [view.id]);
       await customStatement(
         'INSERT INTO configuration_view_rows '
-        'SELECT ?,row_number() OVER(ORDER BY $order)-1,e.revision,e.id '
+        'SELECT ?,${reversed ? 'count(*) OVER()-' : ''}row_number() OVER(ORDER BY $order)${reversed ? '' : '-1'},e.revision,e.id, '
+        "row_number() OVER(ORDER BY CASE e.section WHEN 'outbounds' THEN 0 ELSE 1 END,e.ordinal,e.id) "
         'FROM configuration_entries e $statusJoin '
         "WHERE e.revision=? AND e.is_group=0 AND e.section<>'root' "
         "AND e.type NOT IN ('direct','dns','block','custom') AND instr(e.tag,'§hide§')=0 "
@@ -146,15 +152,16 @@ class ConfigurationCatalog extends GeneratedDatabase {
     ProxiesSort sort, {
     required int limit,
     required bool reorder,
+    bool reversed = false,
   }) => transaction(() async {
-    if (reorder) await refreshOrder(view, sort);
+    if (reorder) await refreshOrder(view, sort, reversed: reversed);
     return page(view, offset: 0, limit: limit);
   });
 
   // Pages keep the current ranking until refreshOrder explicitly replaces it.
   Future<List<OutboundInfo>> page(CatalogView view, {required int offset, int limit = 100}) async {
     final rows = await customSelect(
-      'SELECT e.tag,e.type,e.display,$delay AS delay,COALESCE(u.upload,0) AS upload,COALESCE(u.download,0) AS download '
+      'SELECT v.number,e.tag,e.type,e.display,$delay AS delay,COALESCE(u.upload,0) AS upload,COALESCE(u.download,0) AS download '
       'FROM configuration_view_rows v JOIN configuration_entries e '
       'ON e.revision=v.revision AND e.id=v.entry_id $statusJoin '
       'WHERE v.view_id=? AND v.position>=? AND v.position<? ORDER BY v.position',
@@ -165,7 +172,7 @@ class ConfigurationCatalog extends GeneratedDatabase {
           final tag = row.read<String>('tag');
           return OutboundInfo(
             tag: tag,
-            tagDisplay: tag.split('§').first.trim(),
+            tagDisplay: '${row.read<int>('number')}. ${tag.split('§').first.trim()}',
             type: row.read<String>('display').isEmpty ? row.read<String>('type') : row.read<String>('display'),
             upload: Int64(row.read<int>('upload')),
             download: Int64(row.read<int>('download')),
@@ -174,6 +181,22 @@ class ConfigurationCatalog extends GeneratedDatabase {
           );
         })
         .toList(growable: false);
+  }
+
+  Future<String?> numberedName(String profile, String tag, {required bool connected}) async {
+    final revision = await currentRevision(profile, connected: connected);
+    if (revision == null) return null;
+    final row = await customSelect(
+      'WITH visible AS (SELECT e.* FROM configuration_entries e WHERE e.revision=? '
+      "AND e.is_group=0 AND e.section<>'root' AND e.type NOT IN ('direct','dns','block','custom') "
+      "AND instr(e.tag,'§hide§')=0) "
+      'SELECT 1+(SELECT count(*) FROM visible p WHERE '
+      "(CASE p.section WHEN 'outbounds' THEN 0 ELSE 1 END,p.ordinal,p.id)< "
+      "(CASE e.section WHEN 'outbounds' THEN 0 ELSE 1 END,e.ordinal,e.id)) AS number "
+      'FROM visible e WHERE e.tag=? LIMIT 1',
+      variables: [Variable(revision), Variable(tag)],
+    ).getSingleOrNull();
+    return row == null ? null : '${row.read<int>('number')}. ${tag.split('§').first.trim()}';
   }
 
   Future<void> dropView(CatalogView view) async {

@@ -60,7 +60,9 @@ def verify_draft():
     else:
         expected.add(f"ProxyYou-Android-{v}.apk")
         if include_macos == "true":
-            expected |= {f"ProxyYou-macOS-AppleSilicon-{v}.zip", f"ProxyYou-macOS-Intel-{v}.zip"}
+            expected.add(f"ProxyYou-macOS-AppleSilicon-{v}.zip")
+            require(not any(name.startswith("ProxyYou-macOS-Intel-") for name in names),
+                    "macOS Intel packages are no longer published")
         else:
             require(not any(name.startswith("ProxyYou-macOS-") for name in names),
                     "macOS publication is paused: remove macOS assets from this draft")

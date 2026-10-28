@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/proxy/data/configuration_catalog.dart';
@@ -10,6 +11,7 @@ import 'package:hiddify/features/proxy/overview/catalog_overview_notifier.dart';
 import 'package:hiddify/features/proxy/overview/proxies_overview_notifier.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../connection/notifier/connection_lifecycle_test.dart' show LifecycleProfile;
 
@@ -32,9 +34,9 @@ class ObservedCatalog extends ConfigurationCatalog {
   bool failRefresh = false;
 
   @override
-  Future<void> refreshOrder(CatalogView view, ProxiesSort sort) {
+  Future<void> refreshOrder(CatalogView view, ProxiesSort sort, {bool reversed = false}) {
     rankings++;
-    return super.refreshOrder(view, sort);
+    return super.refreshOrder(view, sort, reversed: reversed);
   }
 
   @override
@@ -43,11 +45,12 @@ class ObservedCatalog extends ConfigurationCatalog {
     ProxiesSort sort, {
     required int limit,
     required bool reorder,
+    bool reversed = false,
   }) async {
     refreshStarted?.complete();
     await resumeRefresh?.future;
     return transaction(() async {
-      final items = await super.refreshPage(view, sort, limit: limit, reorder: reorder);
+      final items = await super.refreshPage(view, sort, limit: limit, reorder: reorder, reversed: reversed);
       if (failRefresh) throw StateError('simulated database read error');
       return items;
     });
@@ -59,6 +62,8 @@ void main() {
   late ProviderContainer container;
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
     database = ObservedCatalog();
     await database.customStatement(
       "INSERT INTO subscription_revisions VALUES('revision','profile','ready',1,0,'hash')",
@@ -87,13 +92,30 @@ void main() {
         serviceRunningProvider.overrideWithValue(true),
         activeProfileProvider.overrideWith(LifecycleProfile.new),
         proxiesSortNotifierProvider.overrideWith(DelaySort.new),
+        sharedPreferencesProvider.overrideWith((ref) => Future.value(preferences)),
       ],
     );
+    await container.read(sharedPreferencesProvider.future);
   });
 
   tearDown(() async {
     container.dispose();
     await database.close();
+  });
+
+  test('reverse direction rebuilds the catalog without renaming selections or losing numbers', () async {
+    container.listen(catalogOverviewProvider, (_, _) {});
+    final initial = await container.read(catalogOverviewProvider.future);
+    expect(initial.items.first.tagDisplay, '1. server-000');
+    await container.read(proxiesSortReversedProvider.notifier).update(true);
+    await container.pump();
+    final reversed = await container.read(catalogOverviewProvider.future);
+    expect(reversed.items.first.tag, 'server-200');
+    expect(reversed.items.first.tagDisplay, '201. server-200');
+    expect(reversed.selected, 'server-100');
+    await container.read(proxiesSortReversedProvider.notifier).update(false);
+    await container.pump();
+    expect((await container.read(catalogOverviewProvider.future)).items.first.tagDisplay, '1. server-000');
   });
 
   test('ping refresh ranks the whole subscription, retains selection and pages without duplicates', () async {

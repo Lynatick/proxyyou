@@ -53,6 +53,19 @@ void main() {
     expect(view.count, 1201);
     final first = await database.page(view, offset: 0);
     expect(first.length, 100);
+    expect(first.first.tagDisplay, '1. server-0');
+    expect(await database.numberedName('profile', 'server-1200', connected: true), '1201. server-1200');
+    final reverse = await database.createView('profile', ProxiesSort.unsorted, connected: true, reversed: true);
+    final reversedTags = <String>[];
+    for (var offset = 0; offset < reverse.count; offset += 100) {
+      reversedTags.addAll((await database.page(reverse, offset: offset)).map((item) => item.tag));
+    }
+    expect(reversedTags.length, 1201);
+    expect(reversedTags.toSet().length, 1201);
+    expect(reversedTags.first, 'server-1200');
+    expect(reversedTags.last, 'server-0');
+    expect((await database.page(reverse, offset: 0)).first.tagDisplay, '1201. server-1200');
+    await database.dropView(reverse);
     expect(first.first.urlTestDelay, 65535);
     expect(first[1].urlTestDelay, 0); // previous network, not a current result
     expect(first[2].download.toInt(), 250);
@@ -68,6 +81,9 @@ void main() {
     expect(await database.selectedTag('profile'), 'balance');
     final usage = await database.createView('profile', ProxiesSort.usage, connected: true);
     expect((await database.page(usage, offset: 0)).first.tag, 'server-2');
+    expect((await database.page(usage, offset: 0)).first.tagDisplay, '3. server-2');
+    await database.refreshOrder(usage, ProxiesSort.usage, reversed: true);
+    expect((await database.page(usage, offset: 1200)).single.tag, 'server-2');
     await database.dropView(usage);
     await database.customStatement("DELETE FROM subscription_active WHERE profile_id='profile'");
     await database.customStatement("UPDATE subscription_revisions SET state='deleted' WHERE id='revision'");

@@ -23,6 +23,7 @@ class ProxyTile extends HookConsumerWidget with PresLogger {
       // shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       title: Text(
         proxy.tagDisplay,
+        maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: PlatformUtils.isWindows ? const TextStyle(fontFamily: FontFamily.emoji) : null,
       ),

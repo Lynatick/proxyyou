@@ -1,10 +1,46 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_card.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
+import 'package:hiddify/features/proxy/widget/proxy_tile.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 void main() {
+  testWidgets('long configuration names stay on one line in the grid and connected button', (tester) async {
+    final name = '12345. ${List.filled(30, 'Длинное название сервера').join(' ')}';
+    final translations = (await tester.runAsync(() => AppLocale.ru.build()))!;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [translationsProvider.overrideWithValue(AsyncData(translations))],
+        child: MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 260,
+              child: Column(
+                children: [
+                  ProxyTile(
+                    OutboundInfo(tag: 'server', tagDisplay: name, type: 'VLESS'),
+                    selected: false,
+                    onTap: () {},
+                  ),
+                  ConnectedConfigurationButton(name: name, protocol: 'VLESS', onPressed: () {}),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    for (final text in tester.widgetList<Text>(find.text(name))) {
+      expect(text.maxLines, 1);
+      expect(text.overflow, TextOverflow.ellipsis);
+    }
+    expect(find.text(name), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
   test('mode comes only from the selected automatic group', () {
     for (final mode in ['balance', 'lowest']) {
       expect(
@@ -49,6 +85,8 @@ void main() {
       ),
     );
     expect(find.text('lowest'), findsOneWidget);
+    expect(tester.widget<Text>(find.text('Сервер')).maxLines, 1);
+    expect(tester.widget<Text>(find.text('Сервер')).overflow, TextOverflow.ellipsis);
     expect(tester.getTopLeft(find.text('lowest')).dy, lessThan(tester.getTopLeft(find.text('Сервер')).dy));
     expect(find.textContaining('IP'), findsNothing);
     await tester.pumpWidget(
