@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { selectDownloads, trustedAsset } from '../../site/downloads.mjs';
 const make = (name, overrides = {}) => ({ name, size: 1234, browser_download_url: `https://github.com/Lynatick/proxyyou/releases/download/v4.1.18/${name}`, ...overrides });
 const apk = make('ProxyYou-Android-4.1.18.apk');
@@ -33,18 +34,25 @@ test('empty releases produce no download links', () => assert.deepEqual(selectDo
 
 test('file version must match its release tag', () => assert.deepEqual(selectDownloads([release([apk], { tag_name: 'v4.1.17' })]), {}));
 
-test('Silicon and Intel macOS packages are independent downloads', () => {
+test('only Apple Silicon is offered even when older releases include Intel', () => {
  const intel = make('ProxyYou-macOS-Intel-4.1.18.zip');
  const selected = selectDownloads([release([mac, intel])]);
  assert.equal(selected.macos.asset.name, mac.name);
- assert.equal(selected.macosIntel.asset.name, intel.name);
+ assert.equal(selected.macosIntel, undefined);
 });
 
 
-test('Windows-only release keeps both Mac downloads and Android from the preceding release', () => {
+test('Windows-only release keeps Silicon and Android from the preceding release', () => {
  const previous = release([apk, mac, win, make('ProxyYou-macOS-Intel-4.1.18.zip')]);
  const nextWin = make('ProxyYou-Windows-x64-4.1.19-Setup.exe');
  const selected = selectDownloads([release([nextWin], { tag_name: 'v4.1.19' }), previous]);
  assert.equal(selected.windows.release.tag_name, 'v4.1.19');
- for (const platform of ['android', 'macos', 'macosIntel']) assert.equal(selected[platform].release.tag_name, 'v4.1.18');
+ for (const platform of ['android', 'macos']) assert.equal(selected[platform].release.tag_name, 'v4.1.18');
+});
+
+test('the download page contains exactly three supported platform cards', () => {
+ const html = readFileSync(new URL('../../site/index.html', import.meta.url), 'utf8');
+ assert.equal((html.match(/data-platform=/g) || []).length, 3);
+ assert.equal(html.includes('macosIntel'), false);
+ assert.equal(html.includes('Intel x86_64'), false);
 });

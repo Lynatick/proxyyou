@@ -33,10 +33,11 @@ class CatalogOverviewNotifier extends AsyncNotifier<CatalogOverviewState> {
     _orderingVersion = null;
     final connected = ref.watch(serviceRunningProvider);
     final sort = ref.watch(proxiesSortNotifierProvider);
+    final reversed = ref.watch(proxiesSortReversedProvider);
     final profile = await ref.watch(activeProfileProvider.future);
     if (profile == null) return const CatalogOverviewState(CatalogView('', '', 0), []);
     final database = ref.watch(configurationCatalogProvider);
-    final view = await database.createView(profile.id, sort, connected: connected);
+    final view = await database.createView(profile.id, sort, connected: connected, reversed: reversed);
     if (!ref.mounted || generation != _generation) {
       await database.dropView(view);
       return const CatalogOverviewState(CatalogView('', '', 0), []);
@@ -94,6 +95,7 @@ class CatalogOverviewNotifier extends AsyncNotifier<CatalogOverviewState> {
         sort,
         limit: previous.items.length,
         reorder: orderingVersion != _orderingVersion,
+        reversed: ref.read(proxiesSortReversedProvider),
       );
       if (ref.mounted && generation == _generation && !(state.value?.loadingMore ?? false)) {
         _orderingVersion = orderingVersion;

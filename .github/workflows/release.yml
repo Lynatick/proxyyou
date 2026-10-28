@@ -16,7 +16,7 @@ on:
         type: boolean
         default: false
       include_macos:
-        description: 'Включить обе сборки macOS; выключите для выпуска только Android и Windows'
+        description: 'Включить macOS Apple Silicon; выключите для выпуска только Android и Windows'
         type: boolean
         default: true
       windows_only:

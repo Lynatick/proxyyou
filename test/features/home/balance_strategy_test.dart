@@ -96,12 +96,13 @@ void main() {
             activeRoutingModeProvider.overrideWith((ref) => mode == 'b' ? null : mode),
             balanceStrategyLabelProvider.overrideWith((ref) => 'Поочерёдно'),
             activeProxyNotifierProvider.overrideWith(TestLeaf.new),
+            activeConfigurationNameProvider.overrideWith((ref) => '2. Сервер Б'),
           ],
           child: const MaterialApp(home: Scaffold(body: ActiveProxyFooter())),
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Сервер Б'), findsOneWidget);
+      expect(find.text('2. Сервер Б'), findsOneWidget);
       expect(find.text('VLESS'), findsOneWidget);
       expect(find.text('Поочерёдно'), findsNothing);
     }

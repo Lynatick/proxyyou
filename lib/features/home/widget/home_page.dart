@@ -20,7 +20,6 @@ class HomePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(activeProfileProvider).value;
     final isTv = ref.watch(televisionProvider).value ?? false;
-    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('ProxyYou'),
@@ -65,12 +64,6 @@ class HomePage extends ConsumerWidget {
               const ActiveProxyFooter(),
               const SizedBox(height: 12),
               const YoutubeCard(),
-              const SizedBox(height: 20),
-              Text(
-                'На основе открытого проекта Hiddify • локальная версия для тестирования',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall,
-              ),
             ],
           ),
         ),

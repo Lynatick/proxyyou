@@ -16,6 +16,8 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'proxies_overview_notifier.g.dart';
 
+final proxiesSortReversedProvider = PreferencesNotifier.create<bool, bool>('proxies_sort_reversed', false);
+
 enum ProxiesSort {
   unsorted,
   name,
@@ -23,7 +25,7 @@ enum ProxiesSort {
   usage;
 
   String present(TranslationsEn t) => switch (this) {
-    ProxiesSort.unsorted => t.pages.proxies.sortOptions.unsorted,
+    ProxiesSort.unsorted => 'По номеру',
     ProxiesSort.name => t.pages.proxies.sortOptions.name,
     ProxiesSort.delay => t.pages.proxies.sortOptions.delay,
     ProxiesSort.usage => t.pages.proxies.sortOptions.usage,

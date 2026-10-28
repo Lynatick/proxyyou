@@ -2,10 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
+import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/proxy/active/balance_strategy_presentation.dart';
+import 'package:hiddify/features/proxy/data/configuration_catalog.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+
+final activeConfigurationNameProvider = FutureProvider.autoDispose<String?>((ref) {
+  final tag = ref.watch(activeProxyNotifierProvider.select((value) => value.value?.tag));
+  final profile = ref.watch(activeProfileProvider.select((value) => value.value?.id));
+  final running = ref.watch(serviceRunningProvider);
+  if (!running || tag == null || tag.isEmpty || profile == null) return null;
+  return ref.watch(configurationCatalogProvider).numberedName(profile, tag, connected: true);
+});
 
 class ActiveProxyFooter extends ConsumerWidget {
   const ActiveProxyFooter({super.key});
@@ -27,7 +37,7 @@ class ActiveProxyFooter extends ConsumerWidget {
     final active = ref.watch(activeProxyNotifierProvider).value;
     if (active == null) return const SizedBox.shrink();
     return ConnectedConfigurationButton(
-      name: active.tagDisplay,
+      name: ref.watch(activeConfigurationNameProvider).value ?? active.tagDisplay,
       protocol: active.type,
       mode: mode,
       onPressed: () => context.goNamed('proxies'),
@@ -75,7 +85,7 @@ class ConnectedConfigurationButton extends StatelessWidget {
                     ],
                     Text(
                       name.isEmpty ? 'Сервер ещё не выбран' : name,
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleSmall,
                     ),
