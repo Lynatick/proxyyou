@@ -77,6 +77,8 @@ final class YoutubePlaybackProbe: NSObject, WKNavigationDelegate, NSWindowDelega
   private var evaluating = false
   private var script = ""
   private var videoID = ""
+  private var acceptedProof: [String: Any]?
+  private var closingPlayer = false
 
   init(messenger: FlutterBinaryMessenger) {
     super.init()
@@ -113,7 +115,8 @@ final class YoutubePlaybackProbe: NSObject, WKNavigationDelegate, NSWindowDelega
     pending = result
     session = token
     videoID = id
-    script = "window.__proxyyouExpectedId = '\(id)';\n" + source
+    let sessionJSON = String(data: (try? JSONSerialization.data(withJSONObject: [token])) ?? Data("[]".utf8), encoding: .utf8) ?? "[]"
+    script = "window.__proxyyouExpectedSession = \(sessionJSON)[0];\nwindow.__proxyyouExpectedId = '\(id)';\n" + source
     let store = WKWebsiteDataStore.nonPersistent()
     let endpoint = NWEndpoint.hostPort(
       host: .ipv4(IPv4Address("127.0.0.1")!), port: NWEndpoint.Port(rawValue: UInt16(port))!)
@@ -141,9 +144,10 @@ final class YoutubePlaybackProbe: NSObject, WKNavigationDelegate, NSWindowDelega
     deadline = Timer.scheduledTimer(withTimeInterval: 90, repeats: false) { [weak self] _ in
       self?.finish(["status": "failed"])
     }
-    poll = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+    poll = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
       self?.sample()
     }
+    if let timer = poll { RunLoop.main.add(timer, forMode: .common) }
     browser.load(
       URLRequest(
         url: URL(string: "https://www.youtube.com/watch?v=\(id)")!,
@@ -162,16 +166,56 @@ final class YoutubePlaybackProbe: NSObject, WKNavigationDelegate, NSWindowDelega
         self.finish(["status": "unsupported"])
         return
       }
-      guard proof["status"] as? String == "passed", proof["videoId"] as? String == self.videoID,
-        let seconds = proof["seconds"] as? Double, seconds >= 5,
-        let frames = proof["frames"] as? Int, frames >= 10
-      else { return }
-      self.finish(proof)
+      self.accept(proof)
+    }
+  }
+
+  private func accept(_ proof: [String: Any]) {
+    guard proof["status"] as? String == "passed", proof["videoId"] as? String == videoID,
+      proof["session"] as? String == session,
+      let seconds = proof["seconds"] as? Double, seconds >= 12,
+      let frames = proof["frames"] as? Int, frames >= 10
+    else { return }
+    acceptedProof = proof
+    poll?.invalidate()
+    poll = nil
+    if !closingPlayer {
+      deadline?.invalidate()
+      deadline = nil
+    }
+    // Publish once, leaving the video open for the user to finish watching.
+    let result = pending
+    pending = nil
+    result?(proof)
+  }
+
+  private func closePlayer() {
+    guard !closingPlayer else { return }
+    guard acceptedProof == nil, let browser = webView, let token = session else {
+      finish(["status": "cancelled"])
+      return
+    }
+    closingPlayer = true
+    poll?.invalidate()
+    poll = nil
+    deadline?.invalidate()
+    deadline = Timer.scheduledTimer(withTimeInterval: 1, repeats: false) { [weak self] _ in
+      guard self?.session == token else { return }
+      self?.finish(["status": "cancelled"])
+    }
+    // Read the latched proof before destroying the page; a poll may still be in flight.
+    browser.evaluateJavaScript(script) { [weak self] value, _ in
+      guard let self = self, self.session == token else { return }
+      if let proof = value as? [String: Any] { self.accept(proof) }
+      self.finish(["status": "cancelled"])
     }
   }
 
   private func finish(_ response: [String: Any]) {
-    guard let result = pending else { return }
+    let result = pending
+    let finalResponse = acceptedProof ?? response
+    acceptedProof = nil
+    closingPlayer = false
     pending = nil
     session = nil
     poll?.invalidate()
@@ -185,10 +229,10 @@ final class YoutubePlaybackProbe: NSObject, WKNavigationDelegate, NSWindowDelega
     window?.close()
     window = nil
     evaluating = false
-    result(response)
+    result?(finalResponse)
   }
 
-  func windowWillClose(_ notification: Notification) { finish(["status": "cancelled"]) }
+  func windowWillClose(_ notification: Notification) { closePlayer() }
 
   func webView(
     _ webView: WKWebView, decidePolicyFor action: WKNavigationAction,

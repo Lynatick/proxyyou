@@ -15,7 +15,7 @@ void main() {
   setUp(() {
     calls = 0;
     delayed = null;
-    response = {'status': 'passed', 'seconds': 5.5, 'frames': 120, 'videoId': 'jNQXAC9IVRw'};
+    response = {'status': 'passed', 'seconds': 12.5, 'frames': 120, 'videoId': 'jNQXAC9IVRw'};
     messenger.setMockMessageHandler(
       'flutter/assets',
       (_) async => ByteData.sublistView(Uint8List.fromList(utf8.encode('/* fixture proof */'))),
@@ -62,6 +62,18 @@ void main() {
     await value.start(playbackRunner: (_) async => {...response, 'frames': 0});
     expect(value.state.status, PlaybackStatus.failed);
     expect(calls, 0);
+  });
+  test('eleven seconds cannot confirm playback', () async {
+    response['seconds'] = 11.99;
+    final value = controller();
+    await value.start();
+    expect(value.state.status, PlaybackStatus.failed);
+  });
+  test('twelve seconds of decoded playback confirms success', () async {
+    response['seconds'] = 12;
+    final value = controller();
+    await value.start();
+    expect(value.state.status, PlaybackStatus.passed);
   });
   test('a passed flag without sufficient playback duration cannot pass', () async {
     response['seconds'] = 0;

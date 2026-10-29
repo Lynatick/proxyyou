@@ -68,7 +68,8 @@ class YoutubePlaybackController extends StateNotifier<PlaybackState> {
       final seconds = (response?['seconds'] as num?)?.toDouble() ?? 0;
       final frames = (response?['frames'] as num?)?.toInt() ?? 0;
       // A native "passed" flag alone cannot give the UI a successful status.
-      final passed = response?['status'] == 'passed' && response?['videoId'] == videoId && seconds >= 5 && frames >= 10;
+      final passed =
+          response?['status'] == 'passed' && response?['videoId'] == videoId && seconds >= 12 && frames >= 10;
       final status = passed
           ? PlaybackStatus.passed
           : switch (response?['status']) {
