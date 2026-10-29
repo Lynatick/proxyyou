@@ -153,8 +153,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Миниатюры: тестовая миниатюра не найдена (HTTP 404)'), findsOneWidget);
     expect(find.textContaining('YouTube: 50 мс'), findsOneWidget);
-    expect(find.bySemanticsLabel('Ошибка'), findsOneWidget);
-    expect(find.bySemanticsLabel('Успешно'), findsOneWidget);
+    expect(find.byIcon(Icons.error_outline_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
     expect(find.text('Предварительная проверка сети не пройдена'), findsNothing);
     expect(find.textContaining('Воспроизведение подтверждено'), findsNothing);
   });

@@ -26,6 +26,9 @@ class YoutubePlaybackProbe(private val activity: Activity, channel: MethodChanne
     private var script = ""
     private var videoId = ""
     private var evaluating = false
+    private var acceptedProof: Map<String, Any>? = null
+    private var closingPlayer = false
+    private val closeTimeout = Runnable { finish(mapOf("status" to "cancelled")) }
     private val timeout = Runnable { finish(mapOf("status" to "failed")) }
     private val poll = object : Runnable {
         override fun run() {
@@ -40,15 +43,13 @@ class YoutubePlaybackProbe(private val activity: Activity, channel: MethodChanne
                         val proof = JSONObject(raw)
                         if (proof.optString("status") == "unsupported") {
                             finish(mapOf("status" to "unsupported"))
-                        } else if (proof.optString("status") == "passed" && proof.optString("videoId") == videoId &&
-                            proof.optDouble("seconds") >= 5 && proof.optInt("frames") >= 10) {
-                            finish(mapOf("status" to "passed", "seconds" to proof.getDouble("seconds"),
-                                "frames" to proof.getInt("frames"), "videoId" to videoId))
+                        } else {
+                            accept(proof)
                         }
                     } catch (_: Exception) { /* The page may be navigating or waiting for its player. */ }
                 }
             }
-            if (pending != null) handler.postDelayed(this, 500)
+            if (pending != null && !closingPlayer) handler.postDelayed(this, 500)
         }
     }
 
@@ -81,7 +82,7 @@ class YoutubePlaybackProbe(private val activity: Activity, channel: MethodChanne
         pending = result
         session = token
         videoId = id
-        script = "window.__proxyyouExpectedId = '$id';\n$source"
+        script = "window.__proxyyouExpectedSession = ${JSONObject.quote(token)};\nwindow.__proxyyouExpectedId = '$id';\n$source"
         val config = ProxyConfig.Builder().addProxyRule("http://127.0.0.1:$port").removeImplicitRules().build()
         // Load only after the override is active: the app itself is excluded from VpnService.
         ProxyController.getInstance().setProxyOverride(config, ContextCompat.getMainExecutor(activity)) {
@@ -105,7 +106,7 @@ class YoutubePlaybackProbe(private val activity: Activity, channel: MethodChanne
             val player = Dialog(activity)
             player.setTitle("ProxyYou — нажмите Play для проверки")
             player.setContentView(view)
-            player.setOnDismissListener { finish(mapOf("status" to "cancelled")) }
+            player.setOnDismissListener { closePlayer() }
             dialog = player
             player.show()
             player.window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT,
@@ -116,14 +117,51 @@ class YoutubePlaybackProbe(private val activity: Activity, channel: MethodChanne
         }
     }
 
+    private fun accept(proof: JSONObject) {
+        val seconds = proof.optDouble("seconds")
+        if (proof.optString("status") != "passed" || proof.optString("videoId") != videoId ||
+            proof.optString("session") != session || !seconds.isFinite() || seconds < 12 || proof.optInt("frames") < 10) return
+        val response = mapOf("status" to "passed", "seconds" to proof.getDouble("seconds"),
+            "frames" to proof.getInt("frames"), "videoId" to videoId)
+        acceptedProof = response
+        handler.removeCallbacks(timeout)
+        handler.removeCallbacks(poll)
+        val result = pending
+        pending = null
+        result?.success(response)
+    }
+
+    private fun closePlayer() {
+        if (closingPlayer) return
+        val view = browser
+        val token = session
+        if (acceptedProof != null || view == null || token == null) {
+            finish(mapOf("status" to "cancelled"))
+            return
+        }
+        closingPlayer = true
+        handler.removeCallbacks(timeout)
+        handler.removeCallbacks(poll)
+        handler.postDelayed(closeTimeout, 1000)
+        view.evaluateJavascript(script) { raw ->
+            if (token != session) return@evaluateJavascript
+            try { accept(JSONObject(raw)) } catch (_: Exception) { }
+            finish(mapOf("status" to "cancelled"))
+        }
+    }
+
     fun close() { finish(mapOf("status" to "cancelled")) }
 
     private fun finish(response: Map<String, Any>) {
-        val result = pending ?: return
+        val result = pending
+        val finalResponse = acceptedProof ?: response
+        acceptedProof = null
+        closingPlayer = false
         pending = null
         session = null
         handler.removeCallbacks(timeout)
         handler.removeCallbacks(poll)
+        handler.removeCallbacks(closeTimeout)
         browser?.stopLoading()
         browser?.loadUrl("about:blank")
         browser?.destroy()
@@ -133,6 +171,6 @@ class YoutubePlaybackProbe(private val activity: Activity, channel: MethodChanne
         dialog = null
         evaluating = false
         // Keep the override until the next session so an async clear cannot expose a new player to DIRECT.
-        result.success(response)
+        result?.success(finalResponse)
     }
 }
