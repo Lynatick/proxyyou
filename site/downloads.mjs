@@ -1,5 +1,4 @@
-const REPOSITORY = 'lynatick/proxyyou';
-const RELEASES_URL = `https://github.com/${REPOSITORY}/releases`;
+const RELEASES_URL = 'https://github.com/lynatick/proxyyou/releases';
 const PATTERNS = {
   macos: /^ProxyYou-macOS-AppleSilicon-\d+\.\d+\.\d+\.zip$/i,
   android: /^ProxyYou-Android-\d+\.\d+\.\d+\.apk$/i,
@@ -33,6 +32,11 @@ export function selectDownloads(releases) {
   return selected;
 }
 
+function hasDownload(card) {
+  const href = card.querySelector('[data-download]').getAttribute('href');
+  return !!href && trustedAsset({ browser_download_url: href, size: 1 });
+}
+
 function updateCard(card, match, failed) {
   const button = card.querySelector('[data-download]');
   const version = card.querySelector('[data-version]');
@@ -64,16 +68,20 @@ export async function loadDownloads(fetcher = fetch, root = document) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12000);
   try {
-    const response = await fetcher(`https://api.github.com/repos/${REPOSITORY}/releases?per_page=30`, {
-      headers: { Accept: 'application/vnd.github+json' }, signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`GitHub ${response.status}`);
+    const snapshotURL = new URL('releases.json', import.meta.url);
+    snapshotURL.search = new URL(import.meta.url).search;
+    const response = await fetcher(snapshotURL, { signal: controller.signal, cache: 'no-cache' });
+    if (!response.ok) throw new Error(`Release snapshot ${response.status}`);
     const selected = selectDownloads(await response.json());
-    for (const card of cards) updateCard(card, selected[card.dataset.platform], false);
-    status.textContent = Object.keys(selected).length ? 'Доступные стабильные сборки' : 'Первый релиз готовится. Загрузки появятся здесь после публикации.';
+    for (const card of cards) {
+      if (selected[card.dataset.platform] || !hasDownload(card)) updateCard(card, selected[card.dataset.platform], false);
+    }
+    status.textContent = [...cards].some(hasDownload) ? 'Доступные стабильные сборки' : 'Первый релиз готовится. Загрузки появятся здесь после публикации.';
   } catch {
-    for (const card of cards) updateCard(card, null, true);
-    status.textContent = 'Не удалось получить список загрузок. Откройте страницу релизов GitHub.';
+    for (const card of cards) if (!hasDownload(card)) updateCard(card, null, true);
+    status.textContent = [...cards].some(hasDownload)
+      ? 'Доступные опубликованные сборки'
+      : 'Не удалось получить список загрузок. Откройте страницу релизов GitHub.';
   } finally { clearTimeout(timeout); }
 }
 
