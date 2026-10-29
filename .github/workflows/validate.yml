@@ -68,7 +68,7 @@ jobs:
         run: node --test test/playback/proof.test.cjs
       - name: Download page tests
         if: steps.policy.outputs.skip != 'true'
-        run: node --test test/site/downloads.test.mjs
+        run: node --test test/site/*.test.mjs
       - name: Release platform and checksum checks
         if: steps.policy.outputs.skip != 'true'
         run: python3 -m unittest discover -s test/release -p '*_test.py'

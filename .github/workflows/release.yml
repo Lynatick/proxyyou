@@ -36,6 +36,7 @@ jobs:
     permissions:
       contents: write
       checks: read
+      actions: write
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -60,3 +61,6 @@ jobs:
         run: |
           python3 scripts/github_release.py verify-draft
           gh release edit "$RELEASE_TAG" --draft=false --latest
+      - name: Refresh published download page
+        if: inputs.operation == 'publish'
+        run: gh workflow run pages.yml --ref main

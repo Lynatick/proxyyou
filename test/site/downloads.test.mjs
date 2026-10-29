@@ -56,3 +56,46 @@ test('the download page contains exactly three supported platform cards', () => 
  assert.equal(html.includes('macosIntel'), false);
  assert.equal(html.includes('Intel x86_64'), false);
 });
+
+function pageFixture(withLinks = false) {
+ const status = {textContent: ''};
+ const cards = ['macos','android','windows'].map(platform => {
+  const attributes = new Map();
+  if (withLinks) attributes.set('href', {macos: mac, android: apk, windows: win}[platform].browser_download_url);
+  const button = {textContent: '', getAttribute: key => attributes.get(key) ?? null, setAttribute: (key,value) => attributes.set(key,value), removeAttribute: key => attributes.delete(key)};
+  Object.defineProperty(button, 'href', {get: () => attributes.get('href') ?? '', set: value => attributes.set('href',value)});
+  const nodes = {'[data-download]':button,'[data-version]':{textContent:'existing version'},'.checksum':{hidden:true},'[data-checksum]':{textContent:''},h3:{textContent:platform}};
+  return {dataset:{platform},querySelector:selector=>nodes[selector]};
+ });
+ return {status,cards,getElementById:()=>status,querySelectorAll:()=>cards};
+}
+test('downloads load from the same site rather than the GitHub API', async () => {
+ const {loadDownloads}=await import('../../site/downloads.mjs');const root=pageFixture();
+ await loadDownloads(async url => {assert.equal(url.pathname.endsWith('/site/releases.json'),true);assert.equal(String(url).includes('api.github.com'),false);return {ok:true,json:async()=>[release([apk,mac,win])]};},root);
+ for(const card of root.cards)assert.match(card.querySelector('[data-download]').href,/github\.com\/Lynatick\/proxyyou\/releases\/download/);
+ assert.equal(root.status.textContent,'Доступные стабильные сборки');
+});
+for(const [label,fetcher] of Object.entries({offline:async()=>{throw new Error('offline')},http403:async()=>({ok:false,status:403}),invalid:async()=>({ok:true,json:async()=>({error:'invalid'})}),timeout:async()=>{throw new DOMException('timeout','AbortError')}})) {
+ test(`existing direct download links survive ${label}`,async()=>{
+  const {loadDownloads}=await import('../../site/downloads.mjs');const root=pageFixture(true);const before=root.cards.map(card=>card.querySelector('[data-download]').href);
+  await loadDownloads(fetcher,root);
+  assert.deepEqual(root.cards.map(card=>card.querySelector('[data-download]').href),before);
+  assert.equal(root.status.textContent,'Доступные опубликованные сборки');
+ });
+}
+test('a failed refresh without existing links offers the release page',async()=>{
+ const {loadDownloads}=await import('../../site/downloads.mjs');const root=pageFixture();
+ await loadDownloads(async()=>{throw new Error('offline')},root);
+ for(const card of root.cards)assert.equal(card.querySelector('[data-download]').href,'https://github.com/lynatick/proxyyou/releases');
+});
+test('static HTML contains direct links and permits same-origin snapshot requests',()=>{
+ const html=readFileSync(new URL('../../site/index.html',import.meta.url),'utf8');
+ assert.match(html,/connect-src 'self'/);assert.equal((html.match(/data-download href="https:\/\/github.com\//g)||[]).length,3);
+});
+
+test('an empty snapshot preserves existing links and a usable availability message',async()=>{
+ const {loadDownloads}=await import('../../site/downloads.mjs');const root=pageFixture(true);
+ await loadDownloads(async()=>({ok:true,json:async()=>[]}),root);
+ assert.equal(root.status.textContent,'Доступные стабильные сборки');
+ for(const card of root.cards)assert.ok(card.querySelector('[data-download]').href.includes('/releases/download/'));
+});
