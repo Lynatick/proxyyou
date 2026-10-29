@@ -68,7 +68,9 @@ export async function loadDownloads(fetcher = fetch, root = document) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12000);
   try {
-    const response = await fetcher(new URL('releases.json', import.meta.url), { signal: controller.signal });
+    const snapshotURL = new URL('releases.json', import.meta.url);
+    snapshotURL.search = new URL(import.meta.url).search;
+    const response = await fetcher(snapshotURL, { signal: controller.signal, cache: 'no-cache' });
     if (!response.ok) throw new Error(`Release snapshot ${response.status}`);
     const selected = selectDownloads(await response.json());
     for (const card of cards) {

@@ -99,3 +99,8 @@ test('an empty snapshot preserves existing links and a usable availability messa
  assert.equal(root.status.textContent,'Доступные стабильные сборки');
  for(const card of root.cards)assert.ok(card.querySelector('[data-download]').href.includes('/releases/download/'));
 });
+
+test('published HTML versions the download module to avoid cached API-dependent scripts',()=>{
+ const html=readFileSync(new URL('../../site/index.html',import.meta.url),'utf8');
+ assert.match(html,/src="downloads\.mjs\?v=[a-f0-9]{16}"/);
+});

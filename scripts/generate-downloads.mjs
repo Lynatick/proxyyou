@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { selectDownloads, trustedAsset } from '../site/downloads.mjs';
@@ -45,7 +46,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     releases = await response.json();
   }
   const snapshot = releaseSnapshot(releases);
-  const html = renderDownloads(await readFile(new URL('../site/index.html', import.meta.url), 'utf8'), snapshot);
+  const contentVersion = createHash('sha256').update(await readFile(new URL('../site/downloads.mjs', import.meta.url))).update(JSON.stringify(snapshot)).digest('hex').slice(0, 16);
+  const html = renderDownloads(await readFile(new URL('../site/index.html', import.meta.url), 'utf8'), snapshot).replace(/src="downloads\.mjs(?:\?[^"]*)?"/, `src="downloads.mjs?v=${contentVersion}"`);
   await writeFile(new URL('../site/releases.json', import.meta.url), JSON.stringify(snapshot) + '\n');
   await writeFile(new URL('../site/index.html', import.meta.url), html);
   console.log('Generated same-origin release snapshot and three ready-to-use HTML download links');
