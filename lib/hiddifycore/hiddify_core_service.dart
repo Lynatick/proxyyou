@@ -45,7 +45,6 @@ class HiddifyCoreService with InfraLogger {
   final statusController = BehaviorSubject<CoreStatus>();
   final CallOptions? grpcOptions = null; //CallOptions(timeout: const Duration(milliseconds: 10000));
   final Map<String, StreamSubscription?> subscriptions = {};
-  List<OutboundGroup> latest = [];
 
   static const _systemProxy = MethodChannel('dev.proxyyou/system-proxy');
   bool _macUseSystemProxy = false;
@@ -457,12 +456,9 @@ class HiddifyCoreService with InfraLogger {
     }
 
     try {
-      yield* core.bgClient
-          .mainOutboundsInfo(Empty())
-          .map((event) {
-            return latest = event.items.toList();
-          })
-          .startWith(latest);
+      yield* core.bgClient.mainOutboundsInfo(Empty()).map((event) {
+        return event.items.toList();
+      });
     } catch (e) {
       loggy.error("error watching active groups: $e");
       rethrow;
@@ -488,7 +484,7 @@ class HiddifyCoreService with InfraLogger {
       try {
         final res = await core.bgClient.selectOutbound(
           SelectOutboundRequest(groupTag: groupTag, outboundTag: outboundTag),
-          options: CallOptions(timeout: const Duration(seconds: 1)),
+          options: CallOptions(timeout: const Duration(seconds: 10)),
         );
         if (res.code != ResponseCode.OK) return left("${res.code} ${res.message}");
 

@@ -71,6 +71,7 @@ final class YoutubePlaybackProbe: NSObject, WKNavigationDelegate, NSWindowDelega
   private var pending: FlutterResult?
   private var session: String?
   private var window: NSWindow?
+  private var renderingHost: NSWindow?
   private var webView: WKWebView?
   private var poll: Timer?
   private var deadline: Timer?
@@ -79,6 +80,9 @@ final class YoutubePlaybackProbe: NSObject, WKNavigationDelegate, NSWindowDelega
   private var videoID = ""
   private var acceptedProof: [String: Any]?
   private var closingPlayer = false
+  private var background = false
+  private var latestProof: [String: Any] = [:]
+  private var controlsScript = ""
 
   init(messenger: FlutterBinaryMessenger) {
     super.init()
@@ -88,6 +92,14 @@ final class YoutubePlaybackProbe: NSObject, WKNavigationDelegate, NSWindowDelega
       if call.method == "cancel" {
         if let args = call.arguments as? [String: Any], args["session"] as? String == self.session {
           self.finish(["status": "cancelled"])
+        }
+        result(nil)
+      } else if call.method == "progress" {
+        let args = call.arguments as? [String: Any]
+        result(args?["session"] as? String == self.session ? self.latestProof : nil)
+      } else if call.method == "show" {
+        if let args = call.arguments as? [String: Any], args["session"] as? String == self.session {
+          self.showPlayer()
         }
         result(nil)
       } else if call.method == "start" {
@@ -106,7 +118,8 @@ final class YoutubePlaybackProbe: NSObject, WKNavigationDelegate, NSWindowDelega
     guard let args = args, let port = args["port"] as? Int, (1...65535).contains(port),
       let id = args["videoId"] as? String,
       id.range(of: "^[a-zA-Z0-9_-]{11}$", options: .regularExpression) != nil,
-      let source = args["script"] as? String, let token = args["session"] as? String
+      let source = args["script"] as? String, let controls = args["controls"] as? String,
+      let token = args["session"] as? String
     else {
       result(["status": "failed"])
       return
@@ -115,8 +128,10 @@ final class YoutubePlaybackProbe: NSObject, WKNavigationDelegate, NSWindowDelega
     pending = result
     session = token
     videoID = id
+    background = args["background"] as? Bool ?? false
+    controlsScript = controls
     let sessionJSON = String(data: (try? JSONSerialization.data(withJSONObject: [token])) ?? Data("[]".utf8), encoding: .utf8) ?? "[]"
-    script = "window.__proxyyouExpectedSession = \(sessionJSON)[0];\nwindow.__proxyyouExpectedId = '\(id)';\n" + source
+    script = "window.__proxyyouDecodedProbe = true;\nwindow.__proxyyouExpectedSession = \(sessionJSON)[0];\nwindow.__proxyyouExpectedId = '\(id)';\n" + source
     let store = WKWebsiteDataStore.nonPersistent()
     let endpoint = NWEndpoint.hostPort(
       host: .ipv4(IPv4Address("127.0.0.1")!), port: NWEndpoint.Port(rawValue: UInt16(port))!)
@@ -125,40 +140,64 @@ final class YoutubePlaybackProbe: NSObject, WKNavigationDelegate, NSWindowDelega
     store.proxyConfigurations = [proxy]
     let configuration = WKWebViewConfiguration()
     configuration.websiteDataStore = store
-    configuration.mediaTypesRequiringUserActionForPlayback = .all
+    installControls(configuration.userContentController)
+    configuration.mediaTypesRequiringUserActionForPlayback = background ? [] : .all
     let browser = WKWebView(frame: .zero, configuration: configuration)
     browser.navigationDelegate = self
     browser.customUserAgent =
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15"
     webView = browser
-    let playerWindow = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 900, height: 650),
-      styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-    playerWindow.title = "ProxyYou — нажмите Play для проверки видео"
-    playerWindow.isReleasedWhenClosed = false
-    playerWindow.delegate = self
-    playerWindow.contentView = browser
-    playerWindow.center()
-    playerWindow.makeKeyAndOrderFront(nil)
-    window = playerWindow
-    deadline = Timer.scheduledTimer(withTimeInterval: 90, repeats: false) { [weak self] _ in
-      self?.finish(["status": "failed"])
+    browser.frame = NSRect(x: 0, y: 0, width: 900, height: 650)
+    if background {
+      // A never-shown host gives WebKit a rendering surface, without a player window.
+      let host = NSWindow(contentRect: browser.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+      host.isReleasedWhenClosed = false
+      host.isExcludedFromWindowsMenu = true
+      host.collectionBehavior = [.transient, .ignoresCycle]
+      host.contentView = browser
+      renderingHost = host
+    } else {
+      showPlayer()
     }
+    scheduleDeadline(90, token: token, response: ["status": "failed"])
     poll = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
       self?.sample()
     }
     if let timer = poll { RunLoop.main.add(timer, forMode: .common) }
     browser.load(
       URLRequest(
-        url: URL(string: "https://www.youtube.com/watch?v=\(id)")!,
+        url: URL(string: "https://www.youtube.com/watch?v=\(id)" + (background ? "&autoplay=1&mute=1" : "&autoplay=0&mute=1"))!,
         cachePolicy: .reloadIgnoringLocalCacheData))
+  }
+
+  private func installControls(_ controller: WKUserContentController) {
+    controller.removeAllUserScripts()
+    controller.addUserScript(WKUserScript(
+      source: "window.__proxyyouAutomaticPlayback = \(background ? "true" : "false");\n" + controlsScript,
+      injectionTime: .atDocumentStart, forMainFrameOnly: false))
+  }
+
+  private func scheduleDeadline(_ seconds: TimeInterval, token: String, response: [String: Any]) {
+    deadline?.invalidate()
+    let timer = Timer(timeInterval: seconds, repeats: false) { [weak self] _ in
+      guard let self = self, self.session == token else { return }
+      self.finish(response)
+    }
+    deadline = timer
+    // Also expire during tracking / modal interaction, not only the default run loop.
+    RunLoop.main.add(timer, forMode: .common)
   }
 
   private func sample() {
     guard !evaluating, pending != nil, let browser = webView else { return }
     evaluating = true
     let token = session
-    browser.evaluateJavaScript(script) { [weak self] value, _ in
+    let autoplay = background ? """
+      (() => { const v = document.querySelector('video');
+        if (v) { v.muted = true; if (v.paused && !v.ended) v.play().catch(() => {}); }
+      })();
+      """ : ""
+    browser.evaluateJavaScript(autoplay + script) { [weak self] value, _ in
       guard let self = self, self.session == token else { return }
       self.evaluating = false
       guard let proof = value as? [String: Any] else { return }
@@ -166,17 +205,58 @@ final class YoutubePlaybackProbe: NSObject, WKNavigationDelegate, NSWindowDelega
         self.finish(["status": "unsupported"])
         return
       }
+      self.recordProgress(proof)
       self.accept(proof)
+    }
+  }
+
+  private func showPlayer() {
+    guard let browser = webView else { return }
+    background = false
+    renderingHost?.contentView = nil
+    renderingHost?.close()
+    renderingHost = nil
+    installControls(browser.configuration.userContentController)
+    if window == nil {
+      let playerWindow = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 900, height: 650),
+        styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+      playerWindow.title = "ProxyYou — нажмите Play для проверки видео"
+      playerWindow.isReleasedWhenClosed = false
+      playerWindow.delegate = self
+      playerWindow.contentView = browser
+      playerWindow.center()
+      window = playerWindow
+    }
+    window?.makeKeyAndOrderFront(nil)
+    browser.evaluateJavaScript("window.__proxyyouRequireManualStart?.()", completionHandler: nil)
+  }
+
+  private func recordProgress(_ proof: [String: Any]) {
+    // Waiting/navigation resets must reset the displayed continuous-playback percentage.
+    latestProof = ["session": session ?? "", "videoId": videoID, "seconds": 0.0, "frames": 0]
+    guard proof["videoId"] as? String == videoID, proof["session"] as? String == session,
+      let seconds = proof["seconds"] as? Double, seconds.isFinite, seconds >= 0,
+      let frames = proof["frames"] as? Int, frames >= 0 else { return }
+    latestProof = proof
+    if !background {
+      let percent = proof["status"] as? String == "passed" && seconds >= 12 && frames >= 10
+        ? 100 : (frames > 0 ? Int(min(99, seconds / 12 * 100)) : 0)
+      window?.title = "ProxyYou — воспроизведение: \(percent)%"
     }
   }
 
   private func accept(_ proof: [String: Any]) {
     guard proof["status"] as? String == "passed", proof["videoId"] as? String == videoID,
       proof["session"] as? String == session,
-      let seconds = proof["seconds"] as? Double, seconds >= 12,
+      let seconds = proof["seconds"] as? Double, seconds.isFinite, seconds >= 12,
       let frames = proof["frames"] as? Int, frames >= 10
     else { return }
     acceptedProof = proof
+    if background {
+      finish(proof)
+      return
+    }
     poll?.invalidate()
     poll = nil
     if !closingPlayer {
@@ -198,11 +278,7 @@ final class YoutubePlaybackProbe: NSObject, WKNavigationDelegate, NSWindowDelega
     closingPlayer = true
     poll?.invalidate()
     poll = nil
-    deadline?.invalidate()
-    deadline = Timer.scheduledTimer(withTimeInterval: 1, repeats: false) { [weak self] _ in
-      guard self?.session == token else { return }
-      self?.finish(["status": "cancelled"])
-    }
+    scheduleDeadline(1, token: token, response: ["status": "cancelled"])
     // Read the latched proof before destroying the page; a poll may still be in flight.
     browser.evaluateJavaScript(script) { [weak self] value, _ in
       guard let self = self, self.session == token else { return }
@@ -215,6 +291,8 @@ final class YoutubePlaybackProbe: NSObject, WKNavigationDelegate, NSWindowDelega
     let result = pending
     let finalResponse = acceptedProof ?? response
     acceptedProof = nil
+    latestProof = [:]
+    background = false
     closingPlayer = false
     pending = nil
     session = nil
@@ -228,6 +306,9 @@ final class YoutubePlaybackProbe: NSObject, WKNavigationDelegate, NSWindowDelega
     window?.delegate = nil
     window?.close()
     window = nil
+    renderingHost?.contentView = nil
+    renderingHost?.close()
+    renderingHost = nil
     evaluating = false
     result?(finalResponse)
   }
@@ -253,7 +334,23 @@ final class YoutubePlaybackProbe: NSObject, WKNavigationDelegate, NSWindowDelega
     _ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
     withError error: Error
   ) {
+    guard webView === self.webView else { return }
     if (error as NSError).code != NSURLErrorCancelled { finish(["status": "failed"]) }
+  }
+
+  func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+    guard webView === self.webView else { return }
+    if (error as NSError).code != NSURLErrorCancelled { finish(["status": "failed"]) }
+  }
+
+  func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+    guard webView === self.webView, !background else { return }
+    webView.evaluateJavaScript("window.__proxyyouRequireManualStart?.()", completionHandler: nil)
+  }
+
+  func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+    guard webView === self.webView else { return }
+    finish(["status": "failed"])
   }
 }
 

@@ -4,7 +4,9 @@ import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/settings/notifier/config_option/config_option_notifier.dart';
+import 'package:hiddify/features/youtube/youtube_playback.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
+import 'package:hiddify/utils/platform_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class ConnectionWrapper extends StatefulHookConsumerWidget {
@@ -20,6 +22,8 @@ class _ConnectionWrapperState extends ConsumerState<ConnectionWrapper> with AppL
   @override
   Widget build(BuildContext context) {
     ref.listen(connectionNotifierProvider, (_, _) {});
+    // Keep automatic macOS playback proof alive when navigating away from Home.
+    if (PlatformUtils.isMacOS || PlatformUtils.isAndroid) ref.watch(youtubePlaybackProvider.select((_) => null));
 
     ref.listen(configOptionNotifierProvider, (previous, next) async {
       if (next case AsyncData(value: true)) {

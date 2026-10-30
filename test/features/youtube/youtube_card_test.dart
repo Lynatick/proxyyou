@@ -12,9 +12,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 class RecordingPlayback extends YoutubePlaybackController {
   RecordingPlayback() : super(port: 12334, enabled: true);
   int starts = 0;
+  void checking(double seconds, int frames) {
+    state = PlaybackState(PlaybackStatus.checking, seconds: seconds, frames: frames);
+  }
+
   @override
   Future<void> start({
     String videoId = 'jNQXAC9IVRw',
+    bool background = false,
     Future<Map<String, dynamic>?> Function(Map<String, dynamic>)? playbackRunner,
   }) {
     starts++;
@@ -28,6 +33,7 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     final playback = RecordingPlayback();
     var checks = 0;
+    var controllers = 0;
     final container = ProviderContainer(
       overrides: [
         sharedPreferencesProvider.overrideWith((ref) => Future.value(preferences)),
@@ -39,7 +45,7 @@ void main() {
           ]);
         }),
         youtubePlaybackSupportedProvider.overrideWithValue(true),
-        youtubePlaybackProvider.overrideWith((ref) => playback),
+        youtubePlaybackProvider.overrideWith((ref) => controllers++ == 0 ? playback : RecordingPlayback()),
       ],
     );
     addTearDown(container.dispose);
@@ -157,5 +163,37 @@ void main() {
     expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
     expect(find.text('Предварительная проверка сети не пройдена'), findsNothing);
     expect(find.textContaining('Воспроизведение подтверждено'), findsNothing);
+  });
+  testWidgets('playback row shows live percentage and remains clickable during a background test', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final playback = RecordingPlayback();
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWith((ref) => Future.value(preferences)),
+        serviceRunningProvider.overrideWithValue(true),
+        youtubeReportProvider.overrideWith((ref) => Future.value()),
+        youtubePlaybackSupportedProvider.overrideWithValue(true),
+        youtubePlaybackProvider.overrideWith((ref) => playback),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(sharedPreferencesProvider.future);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: YoutubeCard())),
+      ),
+    );
+    playback.checking(6, 180);
+    await tester.pumpAndSettle();
+    expect(find.text('Воспроизведение: в процессе тестирования — 50%'), findsOneWidget);
+    await tester.tap(find.text('Доступность YouTube'));
+    await tester.pumpAndSettle();
+    expect(playback.starts, 1);
+    playback.checking(0, 0);
+    await tester.pumpAndSettle();
+    expect(find.text('Воспроизведение: в процессе тестирования — 0%'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

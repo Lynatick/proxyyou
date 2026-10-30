@@ -5,7 +5,7 @@ import 'package:hiddify/features/youtube/youtube_test_video.dart';
 
 /// Checks origin connectivity through the core's HTTP CONNECT inbound.
 /// A successful probe does not certify that a particular video can be played.
-enum ProbeOutcome { reachable, rejected, unexpectedResponse, timeout, tlsFailure, networkFailure }
+enum ProbeOutcome { skipped, reachable, rejected, unexpectedResponse, timeout, tlsFailure, networkFailure }
 
 enum TlsFailureReason { certificateExpired, hostnameMismatch, untrustedCertificate, connectionClosed, handshake }
 
@@ -44,13 +44,17 @@ class ProbeResult {
 }
 
 class YoutubeReport {
-  YoutubeReport(List<ProbeResult> checks, {this.configurationTag})
+  YoutubeReport(List<ProbeResult> checks, {this.configurationTag, this.ping, this.interval, this.ticket})
     : checks = List.unmodifiable(checks),
       checkedAt = DateTime.now();
   final String? configurationTag;
+  final ProbeResult? ping;
+  final Duration? interval;
+  final String? ticket;
   final List<ProbeResult> checks;
   final DateTime checkedAt;
-  bool get reachable => checks.isNotEmpty && checks.every((check) => check.reachable);
+  bool get reachable =>
+      (ping == null || ping!.reachable) && checks.length == 2 && checks.every((check) => check.reachable);
   bool get onlyThumbnailMissing =>
       checks.any((check) => check.missingThumbnail) &&
       checks.every((check) => check.reachable || check.missingThumbnail);
@@ -81,7 +85,15 @@ class YoutubeProbe {
     ProbeTarget('Миниатюры', youtubeTestThumbnailUrl, expectedStatus: 200, jpeg: true),
   ];
 
-  Future<YoutubeReport> check() async => YoutubeReport(await Future.wait(targets.map(checkTarget)));
+  Future<YoutubeReport> check() async {
+    final results = <ProbeResult>[];
+    for (final target in targets) {
+      final result = await checkTarget(target);
+      results.add(result);
+      if (!result.reachable) break;
+    }
+    return YoutubeReport(results);
+  }
 
   /// No DIRECT fallback, no global proxy mutation, normal TLS verification.
   Future<ProbeResult> checkTarget(ProbeTarget target) async {

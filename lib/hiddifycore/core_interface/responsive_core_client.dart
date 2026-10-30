@@ -51,6 +51,28 @@ class ResponsiveCoreClient extends CoreClient {
     Response.fromBuffer,
   );
 
+  static final _verification = ClientMethod<UrlTestRequest, Response>(
+    '/proxyyou.Availability/Verify',
+    (request) => request.writeToBuffer(),
+    Response.fromBuffer,
+  );
+
+  ResponseFuture<Response> completeVerification(String tag, String ticket, {required bool passed}) => $createUnaryCall(
+    ClientMethod<SelectOutboundRequest, Response>(
+      '/proxyyou.Availability/${passed ? 'Passed' : 'Failed'}',
+      (request) => request.writeToBuffer(),
+      Response.fromBuffer,
+    ),
+    SelectOutboundRequest(groupTag: ticket, outboundTag: tag),
+    options: CallOptions(timeout: const Duration(seconds: 10)),
+  );
+
+  ResponseFuture<Response> verifyAvailability(String tag) => $createUnaryCall(
+    _verification,
+    UrlTestRequest(tag: tag),
+    options: CallOptions(timeout: const Duration(seconds: 24)),
+  );
+
   ResponseFuture<Response> checkAvailability(String tag) => $createUnaryCall(
     _availability,
     UrlTestRequest(tag: tag),

@@ -104,3 +104,15 @@ test('published HTML versions the download module to avoid cached API-dependent 
  const html=readFileSync(new URL('../../site/index.html',import.meta.url),'utf8');
  assert.match(html,/src="downloads\.mjs\?v=[a-f0-9]{16}"/);
 });
+
+test('Mac and Android update to34 while Windows remains on the published33 package', () => {
+ const asset = (name, version) => make(name, {browser_download_url:`https://github.com/Lynatick/proxyyou/releases/download/v${version}/${name}`});
+ const releases = [
+  {tag_name:'v4.1.34',assets:[asset('ProxyYou-Android-4.1.34.apk','4.1.34'),asset('ProxyYou-macOS-AppleSilicon-4.1.34.zip','4.1.34')]},
+  {tag_name:'v4.1.33',assets:[asset('ProxyYou-Windows-x64-4.1.33-Setup.exe','4.1.33')]},
+ ];
+ const selected=selectDownloads(releases);
+ assert.equal(selected.macos.release.tag_name,'v4.1.34');
+ assert.equal(selected.android.release.tag_name,'v4.1.34');
+ assert.equal(selected.windows.release.tag_name,'v4.1.33');
+});

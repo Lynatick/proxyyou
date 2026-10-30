@@ -1,0 +1,12 @@
+--- a/hiddify-sing-box/common/monitoring/outbound_monitoring.go
++++ b/hiddify-sing-box/common/monitoring/outbound_monitoring.go
+@@ -1044,6 +1044,9 @@
+ 	from_cache           bool
+ 	availabilityFailed   bool
+ 	availabilitySequence uint64
++	verificationSequence uint64
++	verificationReady bool
++	proofFailed bool
+ 
+ 	history adapter.URLTestHistory
+ }

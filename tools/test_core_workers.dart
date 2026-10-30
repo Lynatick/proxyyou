@@ -198,6 +198,44 @@ Future<void> main(List<String> arguments) async {
       ),
     );
     if (started.messageType != MessageType.EMPTY) throw StateError('start ${started.messageType}');
+    if (arguments.contains('--verification')) {
+      await core.selectOutbound(SelectOutboundRequest(groupTag: 'select', outboundTag: 'test-0'));
+      final response = await core.verifyAvailability('test-0');
+      final report = jsonDecode(response.message) as Map<String, dynamic>;
+      final ping = report['ping'] as Map<String, dynamic>;
+      if (report['tag'] != 'test-0' ||
+          report['reachable'] != false ||
+          ping['outcome'] == 'reachable' ||
+          (report['checks'] as List).isNotEmpty ||
+          (report['interval_ms'] as num) <= 0) {
+        throw StateError('Failed ping advanced a later stage of the verification RPC');
+      }
+      try {
+        await core.verifyAvailability('select');
+        throw StateError('A group was accepted as a concrete verification route');
+      } on GrpcError catch (error) {
+        if (error.code != StatusCode.failedPrecondition) rethrow;
+      }
+      final ticket = report['ticket'] as String;
+      final switched = await core.completeVerification('test-0', ticket, passed: false);
+      if (switched.message.isEmpty || switched.message == 'test-0') {
+        throw StateError('Failed verification did not select a different configuration');
+      }
+      final snapshot = await core.outboundsInfo(Empty()).first;
+      if (snapshot.items.firstWhere((group) => group.tag == 'select').selected != switched.message) {
+        throw StateError('Main selector did not publish the fallback');
+      }
+      try {
+        await core.completeVerification('test-0', ticket, passed: true);
+        throw StateError('Consumed failure ticket cleared unavailable state');
+      } on GrpcError catch (error) {
+        if (error.code != StatusCode.cancelled) rethrow;
+      }
+      stdout.writeln(
+        'PASS: failed configuration recorded, fallback selected and replayed proof rejected by compiled core',
+      );
+      stdout.writeln('PASS: compiled Verify RPC gates later requests on ping success and retains effective interval');
+    }
     if (arguments.contains('--availability')) {
       final response = await core.checkAvailability('test-0');
       final report = jsonDecode(response.message) as Map<String, dynamic>;
@@ -260,7 +298,8 @@ Future<void> main(List<String> arguments) async {
       } else {
         await Future<void>.delayed(const Duration(seconds: 2));
       }
-      final expectedHosts = {'www.youtube.com', if (arguments.contains('--availability')) 'i.ytimg.com'};
+      // Rejected YouTube requests cannot advance to a thumbnail request.
+      final expectedHosts = {'www.youtube.com'};
       if (peak != 20 || hosts.length != expectedHosts.length || !hosts.containsAll(expectedHosts)) {
         throw StateError('Unexpected concurrency or destinations: peak=$peak hosts=$hosts');
       }

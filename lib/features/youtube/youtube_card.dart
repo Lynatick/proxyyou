@@ -28,8 +28,11 @@ class YoutubeCard extends ConsumerWidget {
     }
 
     Widget networkRow(String label, bool thumbnail) {
-      final value = check(thumbnail);
-      final pending = !running || report.isLoading || (!report.hasError && value == null);
+      final ping = report.value?.ping;
+      final pingFailed = !thumbnail && ping != null && !ping.reachable;
+      final value = check(thumbnail) ?? (pingFailed ? ping : null);
+      final pending =
+          !running || report.isLoading || value?.outcome == ProbeOutcome.skipped || (!report.hasError && value == null);
       final state = pending
           ? _ResultState.waiting
           : report.hasError || !value!.reachable
@@ -41,8 +44,10 @@ class YoutubeCard extends ConsumerWidget {
           ? 'проверяем…'
           : report.hasError
           ? 'не удалось завершить проверку'
+          : pingFailed
+          ? 'не выполнялась: пинг — ${_describe(ping)}'
           : value == null
-          ? 'в ожидании'
+          ? 'в ожидании предыдущей проверки'
           : _describe(value);
       return _ResultRow(
         text: '$label: $detail',
@@ -54,7 +59,7 @@ class YoutubeCard extends ConsumerWidget {
     final playbackState = !running ? PlaybackStatus.idle : playback?.status ?? PlaybackStatus.idle;
     final playbackResult = switch (playbackState) {
       PlaybackStatus.passed => 'подтверждено: ${playback!.seconds.toStringAsFixed(1)} с, ${playback.frames} кадров',
-      PlaybackStatus.checking => 'проверяем…',
+      PlaybackStatus.checking => 'в процессе тестирования — ${playback!.percent}%',
       PlaybackStatus.failed => 'не подтверждено',
       PlaybackStatus.unsupported => 'не поддерживается',
       PlaybackStatus.cancelled => 'проверка отменена',
@@ -78,8 +83,7 @@ class YoutubeCard extends ConsumerWidget {
                   child: Tooltip(
                     message: 'Тестовое видео',
                     child: TextButton.icon(
-                      onPressed:
-                          running && (!playbackSupported || enabled) && playback?.status != PlaybackStatus.checking
+                      onPressed: running && (!playbackSupported || enabled)
                           ? () async {
                               if (playbackSupported) {
                                 await ref.read(youtubePlaybackProvider.notifier).start();
@@ -98,7 +102,13 @@ class YoutubeCard extends ConsumerWidget {
                 ),
                 IconButton(
                   tooltip: 'Проверить ещё раз',
-                  onPressed: running && !report.isLoading ? () => ref.invalidate(youtubeReportProvider) : null,
+                  onPressed: running && !report.isLoading
+                      ? () {
+                          ref.invalidate(youtubeVerificationCacheProvider);
+                          ref.invalidate(youtubeReportProvider);
+                          ref.invalidate(youtubePlaybackProvider);
+                        }
+                      : null,
                   icon: const PlatformIcon(Icons.refresh),
                 ),
               ],
@@ -124,6 +134,7 @@ class YoutubeCard extends ConsumerWidget {
   }
 
   String _describe(ProbeResult check) => switch (check.outcome) {
+    ProbeOutcome.skipped => 'в ожидании предыдущей проверки',
     ProbeOutcome.reachable => '${check.elapsed.inMilliseconds} мс',
     ProbeOutcome.rejected when check.missingThumbnail => 'тестовая миниатюра не найдена (HTTP 404)',
     ProbeOutcome.rejected => 'HTTP ${check.statusCode}',

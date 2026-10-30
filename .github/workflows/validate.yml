@@ -65,7 +65,7 @@ jobs:
           DYLD_LIBRARY_PATH="$RUNNER_TEMP/unit-sqlite" "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" "$FLUTTER_ROOT/bin/cache/flutter_tools.snapshot" test --concurrency=1
       - name: Video playback proof tests
         if: steps.policy.outputs.skip != 'true'
-        run: node --test test/playback/proof.test.cjs
+        run: node --test test/playback/*.test.cjs
       - name: Download page tests
         if: steps.policy.outputs.skip != 'true'
         run: node --test test/site/*.test.mjs

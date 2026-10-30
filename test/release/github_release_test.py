@@ -13,8 +13,8 @@ spec.loader.exec_module(release_gate)
 
 
 class ReleaseGateTest(unittest.TestCase):
-    def verify(self, include_macos=None, mac_assets=False, corrupt=False, windows_only=None, android_assets=True, intel_assets=False):
-        names = ['ProxyYou-Windows-x64-4.1.21-Setup.exe']
+    def verify(self, include_macos=None, mac_assets=False, corrupt=False, windows_only=None, android_assets=True, intel_assets=False, include_windows=None, win_assets=True):
+        names = ['ProxyYou-Windows-x64-4.1.21-Setup.exe'] if win_assets else []
         if android_assets:
             names.insert(0, 'ProxyYou-Android-4.1.21.apk')
         if mac_assets:
@@ -52,6 +52,8 @@ class ReleaseGateTest(unittest.TestCase):
 
         env = {'ARTIFACTS_VERIFIED': 'true', 'GH_REPO': 'test/repo',
                'RELEASE_TAG': 'v4.1.21', 'GITHUB_SHA': 'validated-sha'}
+        if include_windows is not None:
+            env['INCLUDE_WINDOWS'] = include_windows
         if include_macos is not None:
             env['INCLUDE_MACOS'] = include_macos
         if windows_only is not None:
@@ -110,3 +112,12 @@ class ReleaseGateTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class MacAndroidReleaseTest(ReleaseGateTest):
+    def test_mac_android_only_release(self):
+        downloaded = self.verify(mac_assets=True, win_assets=False, include_windows='false')
+        self.assertEqual(downloaded, ['SHA256SUMS.txt', 'ProxyYou-Android-4.1.21.apk', 'ProxyYou-macOS-AppleSilicon-4.1.21.zip'])
+    def test_excluded_windows_rejected(self):
+        with self.assertRaisesRegex(SystemExit, 'Windows excluded'):
+            self.verify(mac_assets=True, include_windows='false')
