@@ -7,5 +7,8 @@ import "v2/hcommon/common.proto";
 // generated upstream Core service. tag must identify a concrete outbound.
 // Response.message is the JSON AvailabilityReport, including individual checks.
 service Availability {
+  rpc Passed(hcore.SelectOutboundRequest) returns (hcommon.Response);
+  rpc Failed(hcore.SelectOutboundRequest) returns (hcommon.Response);
+  rpc Verify(hcore.UrlTestRequest) returns (hcommon.Response);
   rpc Check(hcore.UrlTestRequest) returns (hcommon.Response);
 }

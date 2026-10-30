@@ -180,11 +180,7 @@ void main() {
       statusCode: 404,
       isThumbnail: true,
     );
-    const failed = ProbeResult(
-      label: 'YouTube',
-      outcome: ProbeOutcome.networkFailure,
-      elapsed: Duration.zero,
-    );
+    const failed = ProbeResult(label: 'YouTube', outcome: ProbeOutcome.networkFailure, elapsed: Duration.zero);
     expect(YoutubeReport([failed, missing]).onlyThumbnailMissing, isFalse);
     expect(
       const ProbeResult(

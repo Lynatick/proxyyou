@@ -38,4 +38,25 @@ void main() {
       throwsFormatException,
     );
   });
+  test('sequential reports accept stopped stages and reject false completion', () {
+    final full = jsonDecode(report()) as Map<String, dynamic>;
+    full['ping'] = {'outcome': 'reachable', 'elapsed_ms': 25};
+    full['interval_ms'] = 1020000;
+    expect(
+      decodeAvailabilityReport(jsonEncode(full), expectedTag: 'server-a', sequential: true).interval,
+      const Duration(minutes: 17),
+    );
+    full['checks'] = [((full['checks'] as List).first as Map<String, dynamic>)..['outcome'] = 'timeout'];
+    expect(decodeAvailabilityReport(jsonEncode(full), expectedTag: 'server-a', sequential: true).reachable, isFalse);
+    full['checks'] = [];
+    expect(
+      () => decodeAvailabilityReport(jsonEncode(full), expectedTag: 'server-a', sequential: true),
+      throwsFormatException,
+    );
+    full['ping'] = {'outcome': 'timeout', 'elapsed_ms': 5000};
+    final stopped = decodeAvailabilityReport(jsonEncode(full), expectedTag: 'server-a', sequential: true);
+    expect(stopped.reachable, isFalse);
+    expect(stopped.ping!.outcome, ProbeOutcome.timeout);
+    expect(stopped.checks, isEmpty);
+  });
 }

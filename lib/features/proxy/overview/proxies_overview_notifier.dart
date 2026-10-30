@@ -7,6 +7,7 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
+import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
 import 'package:hiddify/features/proxy/model/proxy_failure.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
@@ -70,31 +71,40 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     });
   }
 
-  Future<void> changeProxy(String groupTag, String outboundTag) async {
-    loggy.debug("changing proxy, group: [$groupTag] - outbound: [$outboundTag]");
+  Future<void> _selectionTail = Future<void>.value();
+  int _selectionGeneration = 0;
+
+  Future<void> changeProxy(String groupTag, String outboundTag) {
+    final generation = ++_selectionGeneration;
     final repository = ref.read(proxyRepositoryProvider);
-    await ref.read(hapticServiceProvider.notifier).lightImpact();
-    await repository.selectProxy(groupTag, outboundTag).getOrElse((err) {
-      loggy.warning("error selecting outbound", err);
-      throw err;
-    }).run();
-    // The user may have left the list or disconnected while the RPC ran.
-    if (!ref.mounted) return;
-    final outbounds = state.value;
-    if (outbounds == null || outbounds.tag != groupTag) return;
-    final newselected = outbounds.items.where((e) => e.tag == outboundTag).firstOrNull;
-    if (newselected != null) {
+    // Never let concurrent database writes acknowledge an older user choice last.
+    final operation = _selectionTail.then((_) async {
+      if (!ref.mounted || generation != _selectionGeneration) return;
+      await ref.read(hapticServiceProvider.notifier).lightImpact();
+      try {
+        await repository.selectProxy(groupTag, outboundTag).getOrElse((err) => throw err).run();
+      } finally {
+        // A selection may already have been applied even when its RPC times out.
+        // Re-read the actual route; do not leave Home/list on a stale lowest snapshot.
+        if (ref.mounted) ref.invalidate(activeProxyGroupsProvider);
+      }
+      if (!ref.mounted || generation != _selectionGeneration) return;
+      final outbounds = state.value;
+      if (outbounds == null || outbounds.tag != groupTag) return;
       state = AsyncValue.data(
         OutboundGroup(
           tag: outbounds.tag,
           type: outbounds.type,
-          selected: newselected.tag,
+          selected: outboundTag,
           selectable: outbounds.selectable,
           isExpand: outbounds.isExpand,
           items: outbounds.items,
         ),
       );
-    }
+    });
+    // A failed attempt must not poison the queue for the next selection.
+    _selectionTail = operation.catchError((Object _) {});
+    return operation;
   }
 
   Future<void> urlTest(String groupTag) async {

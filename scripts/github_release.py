@@ -52,8 +52,13 @@ def verify_draft():
     require(include_macos in {"true", "false"}, "INCLUDE_MACOS must be true or false")
     windows_only = os.environ.get("WINDOWS_ONLY", "false")
     require(windows_only in {"true", "false"}, "WINDOWS_ONLY must be true or false")
-    expected = {f"ProxyYou-Windows-x64-{v}-Setup.exe"}
+    include_windows = os.environ.get("INCLUDE_WINDOWS", "true")
+    require(include_windows in {"true", "false"}, "INCLUDE_WINDOWS must be true or false")
+    require(not (windows_only == "true" and include_windows == "false"), "Windows-only release needs Windows")
+    expected = {f"ProxyYou-Windows-x64-{v}-Setup.exe"} if include_windows == "true" else set()
     names = {a["name"] for a in release["assets"]}
+    if include_windows == "false":
+        require(not any(name.startswith("ProxyYou-Windows-") for name in names), "Windows excluded from this release")
     if windows_only == "true":
         require(not any(name.startswith(("ProxyYou-Android-", "ProxyYou-macOS-")) for name in names),
                 "Windows-only release must not contain Android or macOS packages")

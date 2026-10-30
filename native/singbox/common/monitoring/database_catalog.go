@@ -111,6 +111,7 @@ func (m *OutboundMonitoring) ReloadDatabaseCatalog(source *option.DatabaseSource
 			old.mu.Lock()
 			state.history = old.history
 			state.availabilityFailed = old.availabilityFailed
+			state.proofFailed = old.proofFailed
 			state.from_cache = old.from_cache
 			state.invalid = old.invalid
 			state.lastURL = old.lastURL
