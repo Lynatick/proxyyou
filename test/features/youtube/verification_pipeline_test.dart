@@ -106,6 +106,9 @@ void main() {
         activeRoutingModeProvider.overrideWithValue('balance'),
         activeProxyNotifierProvider.overrideWith(() => TestActiveProxy(updates.stream)),
         youtubeSequentialVerificationProvider.overrideWithValue(true),
+        // This suite supplies a native player double on every test host,
+        // including Windows where the real player is deliberately disabled.
+        youtubePlaybackSupportedProvider.overrideWithValue(true),
         youtubeVerificationCacheProvider.overrideWithValue(cache),
         youtubeVerificationResultProvider.overrideWithValue((report, passed) async {
           if (report.ticket != null) completions.add('${report.configurationTag}:$passed');
