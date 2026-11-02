@@ -18,4 +18,26 @@ CREATE TABLE IF NOT EXISTS subscription_revisions(id TEXT PRIMARY KEY,profile_id
  END;
  CREATE TABLE IF NOT EXISTS application_options(id TEXT PRIMARY KEY,state TEXT NOT NULL,representation TEXT NOT NULL,created INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS application_option_fields(version TEXT NOT NULL REFERENCES application_options(id) ON DELETE CASCADE,path TEXT NOT NULL,kind TEXT NOT NULL,type_name TEXT NOT NULL,text_value TEXT NOT NULL,int_value INTEGER NOT NULL,real_value REAL NOT NULL,blob_value BLOB,PRIMARY KEY(version,path)) WITHOUT ROWID;
- PRAGMA user_version=1;
+ CREATE TABLE IF NOT EXISTS configuration_change_versions(revision TEXT PRIMARY KEY REFERENCES subscription_revisions(id) ON DELETE CASCADE,status_version INTEGER NOT NULL DEFAULT 0,usage_version INTEGER NOT NULL DEFAULT 0);
+ INSERT OR IGNORE INTO configuration_change_versions(revision) SELECT id FROM subscription_revisions;
+ CREATE TRIGGER IF NOT EXISTS status_version_insert AFTER INSERT ON configuration_status BEGIN
+ INSERT INTO configuration_change_versions(revision,status_version) VALUES(NEW.revision,1) ON CONFLICT(revision) DO UPDATE SET status_version=status_version+1;
+ END;
+ CREATE TRIGGER IF NOT EXISTS status_version_update AFTER UPDATE ON configuration_status
+ WHEN OLD.session IS NOT NEW.session OR OLD.network_epoch IS NOT NEW.network_epoch OR OLD.delay IS NOT NEW.delay OR OLD.unavailable IS NOT NEW.unavailable BEGIN
+ INSERT INTO configuration_change_versions(revision,status_version) VALUES(NEW.revision,1) ON CONFLICT(revision) DO UPDATE SET status_version=status_version+1;
+ END;
+ CREATE TRIGGER IF NOT EXISTS status_version_delete AFTER DELETE ON configuration_status BEGIN
+ UPDATE configuration_change_versions SET status_version=status_version+1 WHERE revision=OLD.revision;
+ END;
+ CREATE TRIGGER IF NOT EXISTS usage_version_insert AFTER INSERT ON configuration_usage BEGIN
+ INSERT INTO configuration_change_versions(revision,usage_version) VALUES(NEW.revision,1) ON CONFLICT(revision) DO UPDATE SET usage_version=usage_version+1;
+ END;
+ CREATE TRIGGER IF NOT EXISTS usage_version_update AFTER UPDATE ON configuration_usage
+ WHEN OLD.session IS NOT NEW.session OR OLD.upload IS NOT NEW.upload OR OLD.download IS NOT NEW.download BEGIN
+ INSERT INTO configuration_change_versions(revision,usage_version) VALUES(NEW.revision,1) ON CONFLICT(revision) DO UPDATE SET usage_version=usage_version+1;
+ END;
+ CREATE TRIGGER IF NOT EXISTS usage_version_delete AFTER DELETE ON configuration_usage BEGIN
+ UPDATE configuration_change_versions SET usage_version=usage_version+1 WHERE revision=OLD.revision;
+ END;
+ PRAGMA user_version=2;

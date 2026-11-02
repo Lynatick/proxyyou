@@ -31,7 +31,7 @@ class ConfigurationCatalog extends GeneratedDatabase {
   final File databaseFile;
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
   @override
   Iterable<TableInfo<Table, Object?>> get allTables => const [];
   @override
@@ -93,58 +93,87 @@ class ConfigurationCatalog extends GeneratedDatabase {
   }
 
   // Replace the complete SQL ranking atomically, including rows beyond the
-  // currently loaded page. The notifier reloads its entire visible prefix
+  // currently loaded page. The notifier reloads its visible window
   // before allowing another page request, so offsets cannot mix two rankings.
   Future<void> refreshOrder(CatalogView view, ProxiesSort sort, {bool reversed = false}) async {
+    const numberOrder = "CASE e.section WHEN 'outbounds' THEN 0 ELSE 1 END,e.ordinal,e.id";
     final order = switch (sort) {
-      ProxiesSort.unsorted => "CASE e.section WHEN 'outbounds' THEN 0 ELSE 1 END,e.ordinal,e.id",
+      ProxiesSort.unsorted => numberOrder,
       ProxiesSort.name => 'e.tag,e.id',
       ProxiesSort.delay => 'CASE WHEN $delay=0 THEN 2147483647 ELSE $delay END,e.tag,e.id',
       ProxiesSort.usage => 'COALESCE(u.upload+u.download,0) DESC,e.tag,e.id',
     };
     await transaction(() async {
       await customStatement(
+        'CREATE TEMP TABLE IF NOT EXISTS configuration_view_numbers( '
+        'view_id TEXT NOT NULL,entry_id INTEGER NOT NULL,number INTEGER NOT NULL, '
+        'PRIMARY KEY(view_id,entry_id)) WITHOUT ROWID',
+      );
+      await customStatement(
         'CREATE TEMP TABLE IF NOT EXISTS configuration_view_rows( '
         'view_id TEXT NOT NULL,position INTEGER NOT NULL,revision TEXT NOT NULL,entry_id INTEGER NOT NULL,number INTEGER NOT NULL, '
         'PRIMARY KEY(view_id,position)) WITHOUT ROWID',
       );
+      var numbered = await customSelect(
+        'SELECT 1 FROM configuration_view_numbers WHERE view_id=? LIMIT 1',
+        variables: [Variable(view.id)],
+      ).getSingleOrNull();
+      if (numbered == null) {
+        await customStatement(
+          'INSERT INTO configuration_view_numbers SELECT view_id,entry_id,number '
+          'FROM configuration_view_rows WHERE view_id=?',
+          [view.id],
+        );
+        numbered = await customSelect(
+          'SELECT 1 FROM configuration_view_numbers WHERE view_id=? LIMIT 1',
+          variables: [Variable(view.id)],
+        ).getSingleOrNull();
+      }
+      // On first opening, use the original single query. Cache its numbers only
+      // on the first re-sort, avoiding an additional scan on the startup path.
+      final number = numbered == null ? 'row_number() OVER(ORDER BY $numberOrder)' : 'n.number';
+      final numbersJoin = numbered == null
+          ? ''
+          : 'JOIN configuration_view_numbers n ON n.view_id=? AND n.entry_id=e.id';
       await customStatement('DELETE FROM configuration_view_rows WHERE view_id=?', [view.id]);
       await customStatement(
         'INSERT INTO configuration_view_rows '
         'SELECT ?,${reversed ? 'count(*) OVER()-' : ''}row_number() OVER(ORDER BY $order)${reversed ? '' : '-1'},e.revision,e.id, '
-        "row_number() OVER(ORDER BY CASE e.section WHEN 'outbounds' THEN 0 ELSE 1 END,e.ordinal,e.id) "
-        'FROM configuration_entries e $statusJoin '
+        '$number FROM configuration_entries e $numbersJoin $statusJoin '
         "WHERE e.revision=? AND e.is_group=0 AND e.section<>'root' "
         "AND e.type NOT IN ('direct','dns','block','custom') AND instr(e.tag,'§hide§')=0 "
         'AND EXISTS(SELECT 1 FROM configuration_revision_leases WHERE token=? AND revision=?)',
-        [view.id, view.revision, view.id, view.revision],
+        [view.id, if (numbered != null) view.id, view.revision, view.id, view.revision],
       );
     });
   }
 
-  // Traffic changes must not re-sort a delay list every second. Sequence sums
-  // change when results are written, including results for unloaded pages;
-  // session/epoch also invalidate ordering when a new connection/network starts.
+  // Triggers advance these counters in the same transaction as each write.
+  // Reading a version never scans the subscription, including unloaded pages.
+  Future<CatalogVersion> changeVersion(CatalogView view) async {
+    final row = await customSelect(
+      'SELECT r.session,r.network_epoch,COALESCE(v.status_version,0) AS status_version, '
+      'COALESCE(v.usage_version,0) AS usage_version FROM subscription_revisions e '
+      'LEFT JOIN configuration_runtime r ON r.profile_id=e.profile_id AND r.revision=e.id '
+      'LEFT JOIN configuration_change_versions v ON v.revision=e.id WHERE e.id=?',
+      variables: [Variable(view.revision)],
+    ).getSingleOrNull();
+    return (
+      session: row?.readNullable<String>('session'),
+      epoch: row?.readNullable<int>('network_epoch'),
+      status: row?.read<int>('status_version') ?? 0,
+      usage: row?.read<int>('usage_version') ?? 0,
+    );
+  }
+
+  static Object? orderingKey(CatalogVersion version, ProxiesSort sort) => switch (sort) {
+    ProxiesSort.delay => (version.session, version.epoch, version.status),
+    ProxiesSort.usage => version.usage,
+    _ => null,
+  };
+
   Future<Object?> orderingVersion(CatalogView view, ProxiesSort sort) async {
-    if (sort == ProxiesSort.delay) {
-      final row = await customSelect(
-        'SELECT r.session,r.network_epoch,COALESCE(sum(s.sequence),0) AS sequence '
-        'FROM configuration_runtime r LEFT JOIN configuration_status s '
-        'ON s.revision=r.revision AND s.session=r.session AND s.network_epoch=r.network_epoch '
-        'WHERE r.profile_id=? AND r.revision=?',
-        variables: [Variable(view.profile), Variable(view.revision)],
-      ).getSingle();
-      return (row.readNullable<String>('session'), row.readNullable<int>('network_epoch'), row.read<int>('sequence'));
-    }
-    if (sort == ProxiesSort.usage) {
-      final row = await customSelect(
-        'SELECT count(*) AS count,COALESCE(sum(upload),0) AS upload,COALESCE(sum(download),0) AS download '
-        'FROM configuration_usage WHERE revision=?',
-        variables: [Variable(view.revision)],
-      ).getSingle();
-      return (row.read<int>('count'), row.read<int>('upload'), row.read<int>('download'));
-    }
-    return null;
+    return orderingKey(await changeVersion(view), sort);
   }
 
   Future<List<OutboundInfo>> refreshPage(
@@ -153,9 +182,10 @@ class ConfigurationCatalog extends GeneratedDatabase {
     required int limit,
     required bool reorder,
     bool reversed = false,
+    int offset = 0,
   }) => transaction(() async {
     if (reorder) await refreshOrder(view, sort, reversed: reversed);
-    return page(view, offset: 0, limit: limit);
+    return page(view, offset: offset, limit: limit);
   });
 
   // Pages keep the current ranking until refreshOrder explicitly replaces it.
@@ -203,6 +233,7 @@ class ConfigurationCatalog extends GeneratedDatabase {
     if (view.id.isEmpty) return;
     await transaction(() async {
       await customStatement('DELETE FROM configuration_view_rows WHERE view_id=?', [view.id]);
+      await customStatement('DELETE FROM configuration_view_numbers WHERE view_id=?', [view.id]);
       await customStatement('DELETE FROM configuration_revision_leases WHERE token=?', [view.id]);
     });
   }
@@ -252,6 +283,8 @@ class CatalogView {
   final int count;
   final String profile;
 }
+
+typedef CatalogVersion = ({String? session, int? epoch, int status, int usage});
 
 final configurationCatalogProvider = Provider<ConfigurationCatalog>((ref) {
   final catalog = ConfigurationCatalog(ref.watch(profilePathResolverProvider).database);

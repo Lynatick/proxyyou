@@ -139,6 +139,46 @@ void main() {
     expect(rows.any((row) => row.read<String>('text_value') == 'off'), isTrue);
   });
 
+  test('transactional versions detect delete and rollback without aggregating result rows', () async {
+    final database = memory();
+    addTearDown(database.close);
+    await database.customStatement("INSERT INTO subscription_revisions VALUES('r','p','ready',1,0,'h')");
+    await database.customStatement("INSERT INTO subscription_active VALUES('p','r')");
+    await database.customStatement("INSERT INTO configuration_runtime VALUES('p','r','s',0,1)");
+    await database.customStatement(
+      "INSERT INTO configuration_entries VALUES('r',1,'outbounds',0,'one','socks','SOCKS',0,'h')",
+    );
+    final view = await database.createView('p', ProxiesSort.delay, connected: true);
+    final before = await database.changeVersion(view);
+    await database.customStatement("INSERT INTO configuration_status VALUES('r',1,'s',1,1,10,0,0)");
+    final inserted = await database.changeVersion(view);
+    expect(inserted.status, before.status + 1);
+    await expectLater(
+      database.transaction(() async {
+        await database.customStatement("UPDATE configuration_status SET delay=20");
+        throw StateError('rollback');
+      }),
+      throwsStateError,
+    );
+    expect(await database.changeVersion(view), inserted);
+    await database.customStatement("DELETE FROM configuration_status");
+    expect((await database.changeVersion(view)).status, inserted.status + 1);
+    await database.customStatement("INSERT INTO configuration_usage VALUES('r',1,'s',1,1)");
+    final usage = await database.changeVersion(view);
+    expect(usage.usage, 1);
+    await database.customStatement("UPDATE configuration_runtime SET network_epoch=2");
+    expect((await database.changeVersion(view)).epoch, 2);
+    await database.customStatement("DELETE FROM configuration_revision_leases");
+    await database.customStatement("DELETE FROM subscription_active");
+    await database.customStatement("DELETE FROM subscription_revisions");
+    expect(
+      (await database.customSelect('SELECT count(*) AS n FROM configuration_change_versions').getSingle()).read<int>(
+        'n',
+      ),
+      0,
+    );
+  });
+
   test('ranking refresh handles 50000 SQL configurations while returning only the loaded page', () async {
     final database = memory();
     addTearDown(database.close);

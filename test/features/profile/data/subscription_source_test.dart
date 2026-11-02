@@ -39,6 +39,34 @@ void main() {
     expect((await inspectSubscriptionSource(file.path)).remoteLines, isNull);
   });
 
+  test('streamed UTF-8, base64 and late invalid base64 retain exact digest and metadata', () async {
+    final file = File('${directory.path}/streamed');
+    final content = '# profile-title: Подписка\n${'vless://сервер\n' * 10000}';
+    for (final source in [content, base64Encode(utf8.encode(content))]) {
+      await file.writeAsString(source);
+      final result = await inspectSubscriptionSource(file.path);
+      expect(result.hash, sha256.convert(utf8.encode(source)).toString());
+      expect(result.headers['profile-title'], 'Подписка');
+      expect(result.remoteLines, isNull);
+    }
+    // Prefix-only decoding would incorrectly accept this corrupt envelope.
+    await file.writeAsString('${base64Encode(utf8.encode(content))}!');
+    expect((await inspectSubscriptionSource(file.path)).headers, isEmpty);
+  });
+
+  test('large structured source does not retain body and late aggregate URL retains original lines', () async {
+    final file = File('${directory.path}/large');
+    final content = '{"outbounds":[],"padding":"${'x' * (2 * 1024 * 1024)}"}';
+    await file.writeAsString(content);
+    final result = await inspectSubscriptionSource(file.path);
+    expect(result.hash, sha256.convert(utf8.encode(content)).toString());
+    expect(result.headers, isEmpty);
+    expect(result.remoteLines, isNull);
+    final lines = [...List.filled(10000, 'vless://one'), 'https://example.invalid/sub', ''];
+    await file.writeAsString(lines.join('\n'));
+    expect((await inspectSubscriptionSource(file.path)).remoteLines, lines);
+  });
+
   test('cached file has one owner and respects URL, user agent and invalidation', () async {
     final cache = SubscriptionSourceCache();
     addTearDown(cache.clear);

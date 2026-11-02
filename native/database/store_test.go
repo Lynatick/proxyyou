@@ -43,6 +43,66 @@ func TestRelationalCodecPreservesTypesWithoutJSON(t *testing.T) {
 	}
 }
 
+func TestVersionOneMigrationPreservesSubscriptionAndAddsTransactionalCounters(t *testing.T) {
+	ctx := libbox.BaseContext(nil)
+	path := filepath.Join(t.TempDir(), "migration.db")
+	store, err := configdb.Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := &option.Options{Outbounds: []option.Outbound{{Type: "socks", Tag: "server", Options: &option.SOCKSOutboundOptions{ServerOptions: option.ServerOptions{Server: "127.0.0.1", ServerPort: 9001}}}}}
+	revision, err := store.Import(ctx, "profile", options, map[string]configdb.Descriptor{"server": {Network: []string{"tcp"}, Display: "SOCKS"}}, "source")
+	if err != nil {
+		store.Close()
+		t.Fatal(err)
+	}
+	// Restore the exact v1 table layout; all subscription/field rows remain.
+	for _, trigger := range []string{"status_version_insert", "status_version_update", "status_version_delete", "usage_version_insert", "usage_version_update", "usage_version_delete"} {
+		if _, err = store.DB.Exec("DROP TRIGGER " + trigger); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err = store.DB.Exec("DROP TABLE configuration_change_versions; PRAGMA user_version=1"); err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+	store, err = configdb.Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	var version, status int
+	if err = store.DB.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != configdb.SchemaVersion {
+		t.Fatalf("migration version %d: %v", version, err)
+	}
+	if resolved, err := store.Resolve(ctx, "profile", ""); err != nil || resolved != revision {
+		t.Fatalf("lost active subscription: %v", err)
+	}
+	if _, err = store.DB.Exec("INSERT INTO configuration_status VALUES(?,1,'session',1,1,10,0,0)", revision); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.DB.QueryRow("SELECT status_version FROM configuration_change_versions WHERE revision=?", revision).Scan(&status); err != nil || status != 1 {
+		t.Fatalf("counter %d: %v", status, err)
+	}
+	tx, err := store.DB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec("UPDATE configuration_status SET delay=20 WHERE revision=?", revision); err != nil {
+		t.Fatal(err)
+	}
+	tx.Rollback()
+	if err = store.DB.QueryRow("SELECT status_version FROM configuration_change_versions WHERE revision=?", revision).Scan(&status); err != nil || status != 1 {
+		t.Fatalf("rollback changed counter %d: %v", status, err)
+	}
+	if _, err = store.DB.Exec("DELETE FROM configuration_status WHERE revision=?", revision); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.DB.QueryRow("SELECT status_version FROM configuration_change_versions WHERE revision=?", revision).Scan(&status); err != nil || status != 2 {
+		t.Fatalf("delete counter %d: %v", status, err)
+	}
+}
+
 func TestRelationalCodecPreservesPrefixAndGenericMaps(t *testing.T) {
 	type values struct {
 		Prefix   badoption.Prefixable
