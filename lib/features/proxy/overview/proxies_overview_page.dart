@@ -1,8 +1,8 @@
-import 'dart:async';
 import 'dart:math';
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
@@ -21,6 +21,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
+    final scrollController = useScrollController();
     final catalog = ref.watch(catalogOverviewProvider);
     final sortBy = ref.watch(proxiesSortNotifierProvider);
     final connected = ref.watch(serviceRunningProvider);
@@ -69,39 +70,53 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
               : const <OutboundInfo>[];
           final indices = <String, int>{
             for (var index = 0; index < modes.length; index++) modes[index].tag: index,
-            for (var index = 0; index < data.items.length; index++) data.items[index].tag: modes.length + index,
+            for (var index = 0; index < data.items.length; index++)
+              data.items[index].tag: modes.length + data.offset + index,
           };
           return LayoutBuilder(
             builder: (context, constraints) {
               final columns = PlatformUtils.isMobile && constraints.maxWidth < 600
                   ? 1
                   : max(1, (constraints.maxWidth / 268).floor());
-              return GridView.builder(
-                padding: const EdgeInsets.only(bottom: 86),
-                itemCount: modes.length + data.items.length + (data.hasMore ? 1 : 0),
-                findChildIndexCallback: (key) => key is ValueKey<String> ? indices[key.value] : null,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: columns, mainAxisExtent: 72),
-                itemBuilder: (context, index) {
-                  if (index == modes.length + data.items.length) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (context.mounted) unawaited(ref.read(catalogOverviewProvider.notifier).loadMore());
-                    });
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final proxy = index < modes.length ? modes[index] : data.items[index - modes.length];
-                  return ProxyTile(
-                    proxy,
-                    key: ValueKey(proxy.tag),
-                    selected: (connected ? selected : data.selected) == proxy.tag,
-                    onTap: () async {
-                      if (!connected) {
-                        await ref.read(catalogOverviewProvider.notifier).selectOffline(proxy.tag);
-                        return;
-                      }
-                      await ref.read(proxiesOverviewNotifierProvider.notifier).changeProxy('select', proxy.tag);
-                    },
-                  );
+              void reportViewport() {
+                if (!context.mounted || !scrollController.hasClients) return;
+                final position = scrollController.position;
+                final first = (position.pixels / 72).floor() * columns - modes.length;
+                final last = ((position.pixels + position.viewportDimension) / 72).ceil() * columns - modes.length;
+                ref.read(catalogOverviewProvider.notifier).setVisibleRange(first, last);
+              }
+
+              WidgetsBinding.instance.addPostFrameCallback((_) => reportViewport());
+              return NotificationListener<ScrollNotification>(
+                onNotification: (_) {
+                  reportViewport();
+                  return false;
                 },
+                child: GridView.builder(
+                  controller: scrollController,
+                  padding: const EdgeInsets.only(bottom: 86),
+                  itemCount: modes.length + data.view.count,
+                  findChildIndexCallback: (key) => key is ValueKey<String> ? indices[key.value] : null,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: columns, mainAxisExtent: 72),
+                  itemBuilder: (context, index) {
+                    final proxy = index < modes.length ? modes[index] : data.itemAt(index - modes.length);
+                    if (proxy == null) {
+                      return Center(key: ValueKey('pending-$index'), child: const CircularProgressIndicator());
+                    }
+                    return ProxyTile(
+                      proxy,
+                      key: ValueKey(proxy.tag),
+                      selected: (connected ? selected : data.selected) == proxy.tag,
+                      onTap: () async {
+                        if (!connected) {
+                          await ref.read(catalogOverviewProvider.notifier).selectOffline(proxy.tag);
+                          return;
+                        }
+                        await ref.read(proxiesOverviewNotifierProvider.notifier).changeProxy('select', proxy.tag);
+                      },
+                    );
+                  },
+                ),
               );
             },
           );

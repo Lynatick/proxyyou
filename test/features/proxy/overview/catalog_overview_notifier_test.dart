@@ -29,6 +29,8 @@ class ObservedCatalog extends ConfigurationCatalog {
         NativeDatabase.memory(setup: (db) => db.execute(File('native/database/schema.sql').readAsStringSync())),
       );
   int rankings = 0;
+  int pageReads = 0;
+  int largestRead = 0;
   Completer<void>? refreshStarted;
   Completer<void>? resumeRefresh;
   bool failRefresh = false;
@@ -46,11 +48,21 @@ class ObservedCatalog extends ConfigurationCatalog {
     required int limit,
     required bool reorder,
     bool reversed = false,
+    int offset = 0,
   }) async {
+    pageReads++;
+    if (limit > largestRead) largestRead = limit;
     refreshStarted?.complete();
     await resumeRefresh?.future;
     return transaction(() async {
-      final items = await super.refreshPage(view, sort, limit: limit, reorder: reorder, reversed: reversed);
+      final items = await super.refreshPage(
+        view,
+        sort,
+        limit: limit,
+        reorder: reorder,
+        reversed: reversed,
+        offset: offset,
+      );
       if (failRefresh) throw StateError('simulated database read error');
       return items;
     });
@@ -250,5 +262,46 @@ void main() {
     await container.read(catalogOverviewProvider.future);
     await database.customStatement("INSERT INTO configuration_status VALUES('revision',200,'session',7,1,10,0,0)");
     await updated.future.timeout(const Duration(seconds: 5));
+  });
+
+  test('steady state does not read pages and a quiet tick flushes coalesced ping ordering', () async {
+    container.listen(catalogOverviewProvider, (_, _) {});
+    await container.read(catalogOverviewProvider.future);
+    final notifier = container.read(catalogOverviewProvider.notifier);
+    await notifier.refreshStatus();
+    final reads = database.pageReads;
+    final rankings = database.rankings;
+    await notifier.refreshStatus();
+    expect(database.pageReads, reads);
+    await database.customStatement("INSERT INTO configuration_status VALUES('revision',200,'session',7,1,100,0,0)");
+    await notifier.refreshStatus(forceReorder: false);
+    await database.customStatement('UPDATE configuration_status SET delay=5,sequence=2');
+    await notifier.refreshStatus(forceReorder: false);
+    expect(database.rankings, rankings);
+    await notifier.refreshStatus(forceReorder: false);
+    expect(database.rankings, rankings + 1);
+    expect(container.read(catalogOverviewProvider).requireValue.items.first.tag, 'server-200');
+  });
+
+  test('deep scrolling reads a bounded window and returning reloads the right page', () async {
+    await database.customStatement(
+      'WITH RECURSIVE ids(i) AS (VALUES(201) UNION ALL SELECT i+1 FROM ids WHERE i<4999) '
+      "INSERT INTO configuration_entries SELECT 'revision',i,'outbounds',i,printf('server-%05d',i),'socks','SOCKS',0,'h' FROM ids",
+    );
+    (container.read(proxiesSortNotifierProvider.notifier) as DelaySort).sort = ProxiesSort.unsorted;
+    container.listen(catalogOverviewProvider, (_, _) {});
+    await container.read(catalogOverviewProvider.future);
+    final notifier = container.read(catalogOverviewProvider.notifier);
+    notifier.setVisibleRange(3900, 3920);
+    await notifier.refreshStatus();
+    final deep = container.read(catalogOverviewProvider).requireValue;
+    expect(deep.offset, 3800);
+    expect(deep.items.length, 300);
+    expect(deep.itemAt(3900)?.tagDisplay, '3901. server-03900');
+    expect(deep.itemAt(0), isNull);
+    notifier.setVisibleRange(0, 20);
+    await notifier.refreshStatus();
+    expect(container.read(catalogOverviewProvider).requireValue.items.first.tagDisplay, '1. server-000');
+    expect(database.largestRead, lessThanOrEqualTo(300));
   });
 }

@@ -24,7 +24,7 @@ import (
 const ImportBatchSize = 1024
 const configurationFieldsInsert = "INSERT INTO configuration_fields VALUES(?,?,?,?,?,?,?,?,?)"
 
-const SchemaVersion = 1
+const SchemaVersion = 2
 const Scheme = "proxyyou-db"
 
 //go:embed schema.sql
@@ -154,8 +154,15 @@ func (s *Store) initialize() error {
 	if version == SchemaVersion {
 		return nil
 	}
-	_, err := s.DB.Exec(schemaDDL)
-	return err
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec(schemaDDL); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) Import(ctx context.Context, profile string, options *option.Options, descriptors map[string]Descriptor, sourceHash string) (revision string, err error) {

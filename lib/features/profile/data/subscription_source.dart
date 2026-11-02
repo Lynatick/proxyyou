@@ -16,7 +16,10 @@ class SubscriptionInspection {
 }
 
 Map<String, dynamic> subscriptionContentHeaders(String content) {
-  final decoded = safeDecodeBase64(content);
+  return _decodedHeaders(safeDecodeBase64(content));
+}
+
+Map<String, dynamic> _decodedHeaders(String decoded) {
   final headers = <String, dynamic>{};
   var offset = 0;
   for (var i = 0; i < 10 && offset < decoded.length; i++) {
@@ -35,16 +38,113 @@ Map<String, dynamic> subscriptionContentHeaders(String content) {
   return headers;
 }
 
-// One file read supplies digest, metadata and optional aggregate URL lines.
-// Neither the complete body nor JSON objects cross back to the UI isolate.
-Future<SubscriptionInspection> inspectSubscriptionSource(String path) => Isolate.run(() {
-  final bytes = File(path).readAsBytesSync();
-  final content = utf8.decode(bytes);
-  final first = content.trimLeft();
-  final structured = first.startsWith('{') || first.startsWith('[');
-  final lines = !structured && RegExp('^https?://', multiLine: true).hasMatch(content) ? content.split('\n') : null;
-  return SubscriptionInspection(sha256.convert(bytes).toString(), subscriptionContentHeaders(content), lines);
+// Ordinary subscriptions take one streaming pass, with bounded metadata memory.
+// Only URL aggregators need a second pass to retain their expansion lines: we
+// cannot retain every ordinary URI line just in case a URL appears at the end.
+Future<SubscriptionInspection> inspectSubscriptionSource(String path) => Isolate.run(() async {
+  final digest = _DigestSink();
+  final hash = sha256.startChunkedConversion(digest);
+  final plain = _InspectionSink();
+  final decoded = _InspectionSink();
+  Sink<String>? encoded = base64.decoder.startChunkedConversion(utf8.decoder.startChunkedConversion(decoded));
+  final text = utf8.decoder.startChunkedConversion(
+    _TextSink((chunk) {
+      plain.add(chunk);
+      try {
+        encoded?.add(chunk);
+      } on FormatException {
+        encoded = null;
+      }
+    }),
+  );
+  await for (final chunk in File(path).openRead()) {
+    hash.add(chunk);
+    text.add(chunk);
+  }
+  hash.close();
+  text.close();
+  try {
+    encoded?.close();
+  } on FormatException {
+    encoded = null;
+  }
+  List<String>? lines;
+  if (!plain.structured && plain.hasRemoteUrl) {
+    lines = <String>[];
+    var tail = '';
+    await for (final chunk in File(path).openRead().transform(utf8.decoder)) {
+      final parts = (tail + chunk).split('\n');
+      tail = parts.removeLast();
+      lines.addAll(parts);
+    }
+    lines.add(tail);
+  }
+  return SubscriptionInspection(
+    digest.value!.toString(),
+    _decodedHeaders((encoded == null ? plain : decoded).prefix.toString()),
+    lines,
+  );
 });
+
+class _DigestSink implements Sink<Digest> {
+  Digest? value;
+  @override
+  void add(Digest data) => value = data;
+  @override
+  void close() {}
+}
+
+class _TextSink implements Sink<String> {
+  _TextSink(this.receive);
+  final void Function(String) receive;
+  @override
+  void add(String data) => receive(data);
+  @override
+  void close() {}
+}
+
+class _InspectionSink implements Sink<String> {
+  final prefix = StringBuffer();
+  int _lines = 0;
+  bool _formatKnown = false;
+  bool structured = false;
+  bool hasRemoteUrl = false;
+  String _lineStart = '';
+
+  @override
+  void add(String chunk) {
+    if (!_formatKnown) {
+      final first = chunk.trimLeft();
+      if (first.isNotEmpty) {
+        structured = first.startsWith('{') || first.startsWith('[');
+        _formatKnown = true;
+      }
+    }
+    var start = 0;
+    while (start < chunk.length) {
+      final newline = chunk.indexOf('\n', start);
+      final end = newline < 0 ? chunk.length : newline;
+      if (_lineStart.length < 8) {
+        final remaining = 8 - _lineStart.length;
+        _lineStart += chunk.substring(start, end - start > remaining ? start + remaining : end);
+        hasRemoteUrl |= _lineStart.startsWith('http://') || _lineStart.startsWith('https://');
+      }
+      // Metadata is limited to ten lines and 64 KiB, including a giant JSON line.
+      if (_lines < 10 && prefix.length < 65536) {
+        final stop = newline < 0 ? end : end + 1;
+        final remaining = 65536 - prefix.length;
+        prefix.write(chunk.substring(start, stop - start > remaining ? start + remaining : stop));
+      }
+      if (newline < 0) break;
+      _lines++;
+      _lineStart = '';
+      start = newline + 1;
+    }
+  }
+
+  @override
+  void close() {}
+}
 
 class DownloadedSubscription {
   const DownloadedSubscription(this.inspection, this.headers);
