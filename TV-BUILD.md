@@ -57,13 +57,19 @@ adb connect <tv-ip>:5555
 adb install -r build/app/outputs/flutter-apk/app-release.apk
 ```
 
-The build published with this tree:
+The release publishes two APKs of the same build, differing only in the signing key:
 
-- file: `Hiddify-Android-TV-armv7-5.9.15.apk`
-- size: 65.5 MB
-- sha256: `cd2de5b3510dd21b4f7432dff7a4f911cae263f937b40e5051a9980f1ff49d44`
-- signed with a local `CN=Hiddify TV` key (not the official Hiddify key), so it does not update an
-  official Hiddify installation in place: uninstall the official app first if it is installed.
+- `Hiddify-Android-TV-armv7-5.9.15.apk`, 65.5 MB — signed with a local `CN=Hiddify TV` key.
+  For a clean install. The official Hiddify app, or a debug-signed build, has to be uninstalled
+  first: its signature differs.
+  sha256: `cd2de5b3510dd21b4f7432dff7a4f911cae263f937b40e5051a9980f1ff49d44`
+- `Hiddify-Android-TV-armv7-5.9.15-debugkey.apk`, 65.6 MB — signed with the Android debug key,
+  the same one the Mi Stick's previous Hiddify 5.9.9 was signed with. It installs over that build
+  without uninstalling and keeps the profiles.
+  sha256: `68adcd390bb569caf0a762e256814b4dbae0e58a9cead86dc096c1035a82732b`
+
+Verified on a Xiaomi Mi Stick 4K (Android 14, `armeabi-v7a`): the debug-key APK installed over
+5.9.9, the app started, the existing profiles were still there, and logcat had no crash.
 
 ## Upstream notes
 
