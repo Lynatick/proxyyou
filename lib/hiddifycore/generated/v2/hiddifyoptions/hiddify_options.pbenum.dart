@@ -17,16 +17,11 @@ import 'package:protobuf/protobuf.dart' as $pb;
 /// *
 ///  DomainStrategy defines the strategies for IP address preference when resolving domain names.
 class DomainStrategy extends $pb.ProtobufEnum {
-  static const DomainStrategy as_is =
-      DomainStrategy._(0, _omitEnumNames ? '' : 'as_is');
-  static const DomainStrategy prefer_ipv4 =
-      DomainStrategy._(1, _omitEnumNames ? '' : 'prefer_ipv4');
-  static const DomainStrategy prefer_ipv6 =
-      DomainStrategy._(2, _omitEnumNames ? '' : 'prefer_ipv6');
-  static const DomainStrategy ipv4_only =
-      DomainStrategy._(3, _omitEnumNames ? '' : 'ipv4_only');
-  static const DomainStrategy ipv6_only =
-      DomainStrategy._(4, _omitEnumNames ? '' : 'ipv6_only');
+  static const DomainStrategy as_is = DomainStrategy._(0, _omitEnumNames ? '' : 'as_is');
+  static const DomainStrategy prefer_ipv4 = DomainStrategy._(1, _omitEnumNames ? '' : 'prefer_ipv4');
+  static const DomainStrategy prefer_ipv6 = DomainStrategy._(2, _omitEnumNames ? '' : 'prefer_ipv6');
+  static const DomainStrategy ipv4_only = DomainStrategy._(3, _omitEnumNames ? '' : 'ipv4_only');
+  static const DomainStrategy ipv6_only = DomainStrategy._(4, _omitEnumNames ? '' : 'ipv6_only');
 
   static const $core.List<DomainStrategy> values = <DomainStrategy>[
     as_is,
@@ -36,13 +31,10 @@ class DomainStrategy extends $pb.ProtobufEnum {
     ipv6_only,
   ];
 
-  static final $core.List<DomainStrategy?> _byValue =
-      $pb.ProtobufEnum.$_initByValueList(values, 4);
-  static DomainStrategy? valueOf($core.int value) =>
-      value < 0 || value >= _byValue.length ? null : _byValue[value];
+  static final $core.List<DomainStrategy?> _byValue = $pb.ProtobufEnum.$_initByValueList(values, 4);
+  static DomainStrategy? valueOf($core.int value) => value < 0 || value >= _byValue.length ? null : _byValue[value];
 
   const DomainStrategy._(super.value, super.name);
 }
 
-const $core.bool _omitEnumNames =
-    $core.bool.fromEnvironment('protobuf.omit_enum_names');
+const $core.bool _omitEnumNames = $core.bool.fromEnvironment('protobuf.omit_enum_names');

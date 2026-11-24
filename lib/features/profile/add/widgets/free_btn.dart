@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/locale_preferences.dart';
 import 'package:hiddify/core/localization/translations.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/common/custom_text_scroll.dart';
 import 'package:hiddify/features/profile/add/model/free_profiles_model.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -87,7 +86,7 @@ class Feature extends ConsumerWidget {
     final color = theme.colorScheme.primary;
     return Row(
       children: [
-        PlatformIcon(icon, size: 12, color: theme.colorScheme.primary),
+        Icon(icon, size: 12, color: theme.colorScheme.primary),
         const Gap(4),
         Text(title, style: theme.textTheme.labelSmall!.copyWith(color: color)),
       ],

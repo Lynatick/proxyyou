@@ -5,7 +5,6 @@ import 'package:flutter_typeahead/flutter_typeahead.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -46,7 +45,8 @@ class SettingInputDialog<T> extends HookConsumerWidget with PresLogger {
     // focus management
     final okBtnFocusNode = useFocusNode();
     KeyEventResult handleKeyEvent(FocusNode node, KeyEvent event) {
-      if (KeyboardConst.select.contains(event.logicalKey) && event is KeyDownEvent) {
+      final key = event.logicalKey;
+      if ((KeyboardConst.select.contains(key) || key == LogicalKeyboardKey.tab) && event is KeyDownEvent) {
         okBtnFocusNode.requestFocus();
         return KeyEventResult.handled;
       }
@@ -55,7 +55,7 @@ class SettingInputDialog<T> extends HookConsumerWidget with PresLogger {
 
     return AlertDialog(
       title: Text(title),
-      icon: icon != null ? PlatformIcon(icon) : null,
+      icon: icon != null ? Icon(icon) : null,
       // material: (context, platform) => MaterialAlertDialogData(
       //   icon: icon != null ? Icon(icon) : null,
       // ),

@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/proxy/active/ip_widget.dart';
 import 'package:hiddify/features/settings/notifier/battery_optimization/battery_optimizations_notifier.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:hooks_riverpod/legacy.dart';
 
 class ValuePreferenceWidget<T> extends HookConsumerWidget {
   const ValuePreferenceWidget({
@@ -41,7 +39,7 @@ class ValuePreferenceWidget<T> extends HookConsumerWidget {
     return ListTile(
       title: Text(title),
       subtitle: Text(presentValue?.call(value) ?? value.toString()),
-      leading: icon != null ? PlatformIcon(icon) : null,
+      leading: icon != null ? Icon(icon) : null,
       trailing: trailing,
       // material: (context, platform) => MaterialListTileData(
       enabled: enabled,
@@ -118,7 +116,7 @@ class ChoicePreferenceWidget<T> extends HookConsumerWidget {
     return ListTile(
       title: Text(title),
       subtitle: Text(presentChoice(selected)),
-      leading: icon != null ? PlatformIcon(icon) : null,
+      leading: icon != null ? Icon(icon) : null,
       trailing: showFlag ? flagByTitle(presentChoice(selected), size: 40) : null,
       enabled: enabled,
       onTap: () async {
@@ -170,7 +168,7 @@ class BatteryOptimizationWidget extends HookConsumerWidget {
           : ListTile(
               title: Text(t.pages.settings.general.ignoreBatteryOptimizations),
               subtitle: Text(t.pages.settings.general.ignoreBatteryOptimizationsMsg),
-              leading: const PlatformIcon(Icons.battery_saver_rounded),
+              leading: const Icon(Icons.battery_saver_rounded),
               onTap: () async {
                 await ref.read(batteryOptimizationNotifierProvider.notifier).requestToIgnore();
               },

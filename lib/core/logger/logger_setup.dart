@@ -39,25 +39,7 @@ final logRing = LogRing(1000);
 /// Nobody listens to dev.log in a release build, so the sink is never even
 /// attached there. In debug it is on by default and can be switched off when
 /// the logs page alone is enough.
-bool _consoleEnabled = false;
-bool _loggingEnabled = false;
-String? _filePath;
-bool _keepFile = false;
-
-bool get loggingEnabled => _loggingEnabled;
-
-/// The persisted core log level controls app logging as well. No startup
-/// records or files are created until the user opts into diagnostics.
-void logSetEnabled(bool enabled) {
-  _loggingEnabled = enabled;
-  Logger.root.level = enabled ? Level.ALL : Level.OFF;
-  if (enabled && _keepFile && _filePath != null) {
-    logSetFileEnabled(true);
-  } else if (!enabled) {
-    _dropFile();
-    logRing.clear();
-  }
-}
+bool _consoleEnabled = !kReleaseMode;
 
 bool get consoleEnabled => _consoleEnabled;
 
@@ -173,12 +155,13 @@ void _toConsole(LogRecord r) {
 /// thousand.
 void _toFile(LogRecord r) {
   if (r.level < Level.SEVERE) return;
-  writeLogLine(formatRecord(r));
+  // the error itself, or the line says that something failed but not what
+  final error = r.error;
+  writeLogLine(error == null ? formatRecord(r) : '${formatRecord(r)}: ${'$error'.replaceAll('\n', ' ')}');
 }
 
 /// Marks where a run begins, since the file now spans several of them.
 void logMarkRun(String appVersion) {
-  if (!_loggingEnabled || !fileEnabled) return;
   final now = DateTime.now().toIso8601String().split('.').first;
   writeLogLine('');
   writeLogLine('---- run started $now  ·  $appVersion ${'-' * 20}');
@@ -190,8 +173,6 @@ bool get fileEnabled => _fileSub != null;
 /// turned back on. Use [logFinish] to close it for good.
 void logSetFileEnabled(bool on) {
   if (on) {
-    if (!_loggingEnabled || _filePath == null) return;
-    if (!isLogFileOpen) openLogFile(_filePath!);
     if (_fileSub == null && isLogFileOpen) {
       _fileSub = Logger.root.onRecord.listen(_toFile);
     }
@@ -238,7 +219,7 @@ void _printWhereTheLogsAre() {
 void logStart() {
   // ALL on purpose: this is the only gate before the sinks, and each sink
   // applies its own threshold. Anything dropped here is gone for good.
-  Logger.root.level = _loggingEnabled ? Level.ALL : Level.OFF;
+  Logger.root.level = Level.ALL;
   if (_consoleEnabled) {
     _consoleSub = Logger.root.onRecord.listen(_toConsole);
     _printWhereTheLogsAre();
@@ -249,8 +230,10 @@ void logStart() {
 
 /// phase 2 — the folders are ready, so the file can be opened
 void logAddFile(String path) {
-  _filePath = path;
-  if (_loggingEnabled && _keepFile) logSetFileEnabled(true);
+  openLogFile(path);
+  // on web the sink never opens, so no listener is attached at all
+  if (!isLogFileOpen) return;
+  _fileSub = Logger.root.onRecord.listen(_toFile);
 }
 
 /// phase 3 — the last word on whether the file stays at all
@@ -258,12 +241,7 @@ void logAddFile(String path) {
 /// The root level is not touched here. It stays ALL so the ring keeps every
 /// record; each sink decides for itself what it wants.
 void logFinish({required bool keepFile}) {
-  _keepFile = keepFile;
-  if (_loggingEnabled && keepFile) {
-    logSetFileEnabled(true);
-  } else {
-    _dropFile();
-  }
+  if (!keepFile) _dropFile();
 }
 
 // ------------------------------------------------- switch things at runtime

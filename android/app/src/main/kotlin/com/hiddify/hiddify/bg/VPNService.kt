@@ -1,6 +1,7 @@
 package com.hiddify.hiddify.bg
 import android.util.Log
 
+import com.hiddify.hiddify.Application
 import com.hiddify.hiddify.Settings
 import android.content.Intent
 import android.content.pm.PackageManager.NameNotFoundException
@@ -26,8 +27,20 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
 
     private val service = BoxService(this, this)
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int) =
-        service.onStartCommand()
+    override fun onCreate() {
+        Application.initialize(this)
+        super.onCreate()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Always-on VPN: Android starts the service by itself (at boot, or after the process was
+        // killed), with no app to start the core over gRPC; its intent has no EXTRA_START_CORE,
+        // which is a start of the core (see BoxService.EXTRA_START_CORE).
+        if (intent?.action == VpnService.SERVICE_INTERFACE) {
+            Log.i(TAG, "started by always-on VPN")
+        }
+        return service.onStartCommand(intent)
+    }
 
     override fun onBind(intent: Intent): IBinder {
         val binder = super.onBind(intent)
@@ -55,16 +68,15 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
 
     var systemProxyAvailable = false
     var systemProxyEnabled = false
-    fun addIncludePackage(builder: Builder, packageName: String): Boolean {
-        if (packageName == this.packageName) {
-            Log.d("VpnService", "Cannot include myself: $packageName")
-            return false
+    fun addIncludePackage(builder: Builder, packageName: String) {
+        if (packageName == this.packageName) { 
+            Log.d("VpnService","Cannot include myself: $packageName")
+            return
         }
-        return try {
+        try {     
+            Log.d("VpnService","Including $packageName")
             builder.addAllowedApplication(packageName)
-            true
         } catch (e: NameNotFoundException) {
-            false
         }
     }
 
@@ -114,9 +126,12 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
         }
 
         if (options.autoRoute) {
-            // Core 4.1.0 exposes a single DNS address rather than the newer DNS-mode API.
-            val dnsServerAddress = options.dnsServerAddress.value
-            if (dnsServerAddress.isNotBlank()) builder.addDnsServer(dnsServerAddress)
+            if (options.dnsMode.value != Libbox.DNSModeDisabled) {
+                val dnsServerAddress = options.dnsServerAddress
+                while (dnsServerAddress.hasNext()) {
+                    builder.addDnsServer(dnsServerAddress.next())
+                }
+            }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 val inet4RouteAddress = options.inet4RouteAddress
@@ -167,9 +182,8 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
             if (Settings.perAppProxyEnabled) {
                 val appList = Settings.perAppProxyList
                 if (Settings.perAppProxyMode == PerAppProxyMode.INCLUDE) {
-                    val included = appList.count { addIncludePackage(builder, it) }
-                    check(included > 0) {
-                        "Выбранные программы отсутствуют. Выберите хотя бы одну установленную программу."
+                    appList.forEach {
+                        addIncludePackage(builder,it)
                     }
 //                    addIncludePackage(builder,packageName)
                 } else {
@@ -223,4 +237,5 @@ class VPNService : VpnService(), PlatformInterfaceWrapper {
 //        service.sendNotification(notification)
     }
 
+    override fun cancelNotification(identifier: String, typeID: Int) = service.cancelNotification(identifier, typeID)
 }

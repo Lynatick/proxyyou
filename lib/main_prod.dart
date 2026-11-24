@@ -10,16 +10,15 @@ import 'package:hiddify/core/model/environment.dart';
 
 Future<void> main() async {
   // Behind --dart-define=driver=true — see the note in lib/main.dart.
-  if (kDebugMode && const bool.fromEnvironment('driver')) {
+  if (!kReleaseMode && const bool.fromEnvironment('driver')) {
     enableFlutterDriverExtension();
   }
 
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
 
+  // The bars stay transparent (MainActivity turns on edge-to-edge); setting their colors
+  // calls window APIs Android 15 deprecates and ignores.
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(statusBarColor: Colors.transparent, systemNavigationBarColor: Colors.transparent),
-  );
 
   return await lazyBootstrap(widgetsBinding, Environment.prod);
 }

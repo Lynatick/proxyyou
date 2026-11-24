@@ -3,29 +3,32 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:hiddify/core/analytics/analytics_controller.dart';
 import 'package:hiddify/core/app_info/app_info_provider.dart';
+import 'package:hiddify/core/db/db.dart';
+import 'package:hiddify/core/db/db_error_prompt.dart';
+import 'package:hiddify/core/db/db_recovery.dart';
+import 'package:hiddify/core/db/provider/db_providers.dart';
 import 'package:hiddify/core/directories/directories_provider.dart';
+import 'package:hiddify/core/localization/locale_preferences.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/logger/crash/app_crash_store.dart';
 import 'package:hiddify/core/logger/logger.dart';
 import 'package:hiddify/core/logger/logger_setup.dart';
 import 'package:hiddify/core/model/environment.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/preferences/preferences_migration.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
+import 'package:hiddify/core/widget/native_splash.dart';
 import 'package:hiddify/features/app/widget/app.dart';
 import 'package:hiddify/features/auto_start/notifier/auto_start_notifier.dart';
 import 'package:hiddify/features/chain/model/chain_enum.dart';
 import 'package:hiddify/features/chain/notifier/chain_profile_notifier.dart';
-
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/log/data/log_data_providers.dart';
-import 'package:hiddify/features/log/model/log_level.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
-import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/system_tray/notifier/system_tray_notifier.dart';
 import 'package:hiddify/features/window/notifier/window_notifier.dart';
 import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
@@ -35,35 +38,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async {
-  if (!kIsWeb) {
-    FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
-  }
-  try {
-    await _bootstrap(env);
-  } catch (error, stackTrace) {
-    Logger.bootstrap.error("application startup failed", error, stackTrace);
-    runApp(
-      const MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          body: Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'Не удалось запустить ProxyYou.\nПолностью закройте приложение и откройте его снова.',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  } finally {
-    if (!kIsWeb) FlutterNativeSplash.remove();
-  }
-}
-
-Future<void> _bootstrap(Environment env) async {
+  NativeSplash.preserve(widgetsBinding);
   // phase 1 — console and the in-memory history, before the folders are known
   logStart();
   FlutterError.onError = Logger.logFlutterError;
@@ -72,16 +47,15 @@ Future<void> _bootstrap(Environment env) async {
   final stopWatch = Stopwatch()..start();
 
   final container = ProviderContainer(
-    // Preserve Riverpod 2 behavior: failed native operations and subscription
-    // requests are retried only by the existing explicit application actions.
-    retry: (retryCount, error) => null,
     overrides: [environmentProvider.overrideWithValue(env)],
-    observers: [RiverpodObserver()],
+    // every provider change with its value: far too much to log by default
+    observers: [if (const bool.fromEnvironment('riverpod_log')) RiverpodObserver()],
   );
 
   await _init("directories", () => container.read(appDirectoriesProvider.future));
   // phase 2 — the folders exist, so app.log can be opened
   logAddFile(container.read(logPathResolverProvider).appFile().path);
+  openAppCrashStore(container.read(appDirectoriesProvider).requireValue.workingDir.path);
 
   final appInfo = await _init("app info", () => container.read(appInfoProvider.future));
   await _init("preferences", () => container.read(sharedPreferencesProvider.future));
@@ -105,12 +79,16 @@ Future<void> _bootstrap(Environment env) async {
     }
   });
 
-  // The log level decides this now. There is no second debug switch to keep in
-  // sync, and the core reaches the same conclusion from the same value.
-  final debug = container.read(ConfigOptions.logLevel).isVerbose;
-  container.listen(ConfigOptions.logLevel, (previous, next) {
-    logSetEnabled(next != LogLevel.off);
-  }, fireImmediately: true);
+  // A dev build (a .dev tag or the draft release) is a beta: it joins the beta channel, so that
+  // it updates to the next beta rather than waiting for a stable release. A store build has no
+  // beta channel: the store delivers its updates (TestFlight is the App Store's beta)
+  if (env == Environment.dev && appInfo.release.allowCustomUpdateChecker) {
+    final build = "${appInfo.version}+${appInfo.buildNumber}";
+    if (container.read(Preferences.betaUpdatesJoinedBy) != build) {
+      await container.read(Preferences.betaUpdatesJoinedBy.notifier).update(build);
+      await container.read(Preferences.betaUpdates.notifier).update(true);
+    }
+  }
 
   if (PlatformUtils.isDesktop) {
     await _init("window controller", () => container.read(windowNotifierProvider.future));
@@ -124,19 +102,30 @@ Future<void> _bootstrap(Environment env) async {
     }
     await _init("auto start service", () => container.read(autoStartNotifierProvider.future));
   }
-  // phase 3 — a log file is worth its cost on desktop, or while debugging.
-  // On a phone in release it only burns storage nobody reads.
-  await _init("logging", () async => logFinish(keepFile: debug || PlatformUtils.isDesktop));
+  // phase 3 — the file is kept everywhere: after a crash, it is the only log
+  // of the run that crashed, and the report sends it. Only errors reach it,
+  // and it is cut back when it grows.
+  await _init("logging", () async => logFinish(keepFile: true));
 
   // marks where this run begins, since the file now spans several
   logMarkRun(appInfo.format());
   Logger.bootstrap.info(appInfo.format());
 
-  await _init("profile repository", () => container.read(profileRepositoryProvider.future));
-
   await _init("translations", () => container.read(translationsProvider.future));
 
-  await _init("startup profiles", () => initializeStartupProfiles(container));
+  await _init("database", () => _openDatabase(container));
+
+  await _init("profile repository", () => container.read(profileRepositoryProvider.future));
+
+  await _safeInit("active profile", () => container.read(activeProfileProvider.future), timeout: 1000);
+  await _init(
+    "chain profile extra security",
+    () => container.read(chainProfileNotifierProvider(ChainType.extraSecurity).future),
+  );
+  await _init(
+    "chain profile unblocker",
+    () => container.read(chainProfileNotifierProvider(ChainType.unblocker).future),
+  );
   await _safeInit("hiddify-core", () => container.read(hiddifyCoreServiceProvider).init());
 
   // Eagerly listen to activeProxyNotifierProvider to force synchronous evaluation in microtasks,
@@ -150,7 +139,13 @@ Future<void> _bootstrap(Environment env) async {
         () => container.read(connectionNotifierProvider.notifier).restoreConnectionOnStartup(),
         timeout: 5000,
       );
-      await _safeInit("system tray", () => container.read(systemTrayNotifierProvider.future), timeout: 1000);
+      // nothing at start waits for the tray: it rebuilds on every connection change, and a
+      // connection restored just above keeps it rebuilding for a while (it used to time out here)
+      container.listen(systemTrayNotifierProvider, (_, next) {
+        if (next case AsyncError(:final error, :final stackTrace)) {
+          Logger.bootstrap.error("[system tray] error", error, stackTrace);
+        }
+      }, fireImmediately: true);
     }
 
     if (PlatformUtils.isAndroid) {
@@ -166,28 +161,64 @@ Future<void> _bootstrap(Environment env) async {
   runApp(
     UncontrolledProviderScope(
       container: container,
-      child: SentryUserInteractionWidget(child: const App()),
+      child: NativeSplash.cover(SentryUserInteractionWidget(child: const App())),
     ),
   );
 
+  // the router removes the splash after the first frame of its real routes; this only lets the frames through
+  // if that screen never comes
+  unawaited(Future<void>.delayed(const Duration(seconds: 5), NativeSplash.remove));
   // SentryFlutter.s(DateTime.now().toUtc());
 }
 
-/// Keep profile streams active before the first frame and while the window is hidden.
-/// Reading only `.future` closes its temporary listener in Riverpod 3 and can
-/// pause the stream before it delivers even the empty-database result.
-Future<void> initializeStartupProfiles(
-  ProviderContainer container, {
-  Duration timeout = const Duration(seconds: 5),
-}) async {
-  container.listen(activeProfileProvider, (previous, next) {});
-  for (final type in ChainType.values) {
-    container.listen(chainProfileNotifierProvider(type), (previous, next) {});
+/// Opens the database now, so a database the app cannot read is caught here and
+/// not by the first screen that lists profiles. One written by a newer version
+/// (after a downgrade) or broken (a failed migration, a damaged file) is left
+/// alone unless the user wipes it; the profiles that can still be read are then
+/// added back to the fresh database.
+Future<void> _openDatabase(ProviderContainer container) async {
+  Future<void> open() => container.read(dbProvider).customSelect('SELECT 1').get();
+  try {
+    await open();
+    return;
+  } on DbNewerThanAppException catch (e) {
+    Logger.bootstrap.warning("database is newer than this app: $e");
+    await _askWipeDb(container, e);
+  } catch (e, stackTrace) {
+    if (kIsWeb) rethrow;
+    Logger.bootstrap.error("database can not be opened", e, stackTrace);
+    await _askWipeDb(container, e);
   }
-  await Future.wait([
-    container.read(activeProfileProvider.future),
-    for (final type in ChainType.values) container.read(chainProfileNotifierProvider(type).future),
-  ]).timeout(timeout);
+
+  Logger.bootstrap.info("wiping the database, as the user chose");
+  try {
+    await container.read(dbProvider).close().timeout(const Duration(seconds: 3));
+  } catch (e, stackTrace) {
+    Logger.bootstrap.warning("closing the database failed", e, stackTrace);
+  }
+  container.invalidate(dbProvider);
+  var salvage = DbSalvage.empty;
+  try {
+    salvage = await salvageDb(await Db.file(), configsDir: container.read(profilePathResolverProvider).directory);
+    Logger.bootstrap.info(
+      "salvaged ${salvage.profiles.length} profiles and ${salvage.appProxies.length} app proxy entries",
+    );
+  } catch (e, stackTrace) {
+    Logger.bootstrap.warning("salvaging the database failed", e, stackTrace);
+  }
+  await Db.deleteFiles();
+  await open();
+  try {
+    await restoreSalvage(container.read(dbProvider), salvage);
+  } catch (e, stackTrace) {
+    Logger.bootstrap.error("adding back the salvaged profiles failed", e, stackTrace);
+  }
+}
+
+Future<void> _askWipeDb(ProviderContainer container, Object error) async {
+  NativeSplash.remove();
+  if (PlatformUtils.isDesktop) await container.read(windowNotifierProvider.notifier).show();
+  await askWipeDb(container.read(localePreferencesProvider), container.read(translationsProvider).requireValue, error);
 }
 
 Future<T> _init<T>(String name, Future<T> Function() initializer, {int? timeout}) async {

@@ -6,14 +6,14 @@ part 'free_profiles_model.freezed.dart';
 part 'free_profiles_model.g.dart';
 
 @freezed
-abstract class FreeProfilesModel with _$FreeProfilesModel {
+class FreeProfilesModel with _$FreeProfilesModel {
   const factory FreeProfilesModel({required List<FreeProfile> profiles}) = _FreeProfilesModel;
 
   factory FreeProfilesModel.fromJson(Map<String, Object?> json) => _$FreeProfilesModelFromJson(json);
 }
 
 @freezed
-abstract class FreeProfile with _$FreeProfile {
+class FreeProfile with _$FreeProfile {
   const factory FreeProfile({
     required List<String> region,
     required StringByLocale title,
@@ -27,14 +27,14 @@ abstract class FreeProfile with _$FreeProfile {
 }
 
 @freezed
-abstract class StringByLocale with _$StringByLocale {
+class StringByLocale with _$StringByLocale {
   const factory StringByLocale({required String en, required String fa}) = _StringByLocale;
 
   factory StringByLocale.fromJson(Map<String, Object?> json) => _$StringByLocaleFromJson(json);
 }
 
 @freezed
-abstract class ListOfStringByLocale with _$ListOfStringByLocale {
+class ListOfStringByLocale with _$ListOfStringByLocale {
   const factory ListOfStringByLocale({required List<String> en, required List<String> fa}) = _ListOfStringByLocale;
 
   factory ListOfStringByLocale.fromJson(Map<String, Object?> json) => _$ListOfStringByLocaleFromJson(json);

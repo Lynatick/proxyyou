@@ -1,4 +1,5 @@
 import 'package:hiddify/features/app_based_routing/data/auto_selection_repository.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'auto_selection_repository_provider.g.dart';

@@ -205,7 +205,7 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
                           onExit: (context, state) async {
                             final t = ref.read(translationsProvider).requireValue;
                             final orderId = int.tryParse(state.pathParameters['orderId']!);
-                            final isRuleEdited = ref.read(isRuleEditedProvider(orderId));
+                            final isRuleEdited = ref.read(IsRuleEditedProvider(orderId));
                             if (orderId != null && isRuleEdited) {
                               await ref.read(ruleNotifierProvider(orderId).notifier).save();
                               ref

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:hiddify/core/app_info/app_info_provider.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'http_client_provider.g.dart';
@@ -15,5 +16,11 @@ DioHttpClient httpClient(Ref ref) {
   );
 
   ref.listen(ConfigOptions.mixedPort, (_, next) => client.setProxyPort(next), fireImmediately: true);
+  // the local port asks for the secret only while the user has it ask (local-proxy-auth)
+  void setSecret() =>
+      client.secret = ref.read(ConfigOptions.localProxyAuth) ? ref.read(ConfigOptions.lanSharingPassword) : "";
+  ref.listen(ConfigOptions.localProxyAuth, (_, _) => setSecret());
+  ref.listen(ConfigOptions.lanSharingPassword, (_, _) => setSecret());
+  setSecret();
   return client;
 }

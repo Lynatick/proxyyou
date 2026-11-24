@@ -14,6 +14,7 @@ struct _MyApplication
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+#define ICON_PATH "./hiddify.png"
 
 // Implements GApplication::activate.
 static void my_application_activate(GApplication *application)
@@ -29,14 +30,7 @@ static void my_application_activate(GApplication *application)
 
   GtkWindow *window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
-  gchar *executable = g_file_read_link("/proc/self/exe", NULL);
-  gchar *directory = executable ? g_path_get_dirname(executable) : g_get_current_dir();
-  gchar *icon_path = g_build_filename(directory, "data", "flutter_assets", "assets",
-                                     "images", "source", "ic_launcher_border.png", NULL);
-  gtk_window_set_icon_from_file(window, icon_path, NULL);
-  g_free(icon_path);
-  g_free(directory);
-  g_free(executable);
+  gtk_window_set_icon_from_file(window, ICON_PATH, NULL);
 
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu
@@ -61,13 +55,13 @@ static void my_application_activate(GApplication *application)
   {
     GtkHeaderBar *header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "ProxyYou");
+    gtk_header_bar_set_title(header_bar, "Hiddify");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   }
   else
   {
-    gtk_window_set_title(window, "ProxyYou");
+    gtk_window_set_title(window, "Hiddify");
   }
 
   gtk_window_set_default_size(window, 1280, 720);

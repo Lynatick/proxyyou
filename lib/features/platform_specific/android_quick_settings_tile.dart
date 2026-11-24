@@ -1,11 +1,11 @@
 // void setTileLable(Tile tile, WidgetRef ref) {
 //   final t = ref.watch(translationsProvider).requireValue;
 //   final connectionStatus = ref.watch(connectionNotifierProvider);
-//   final activeProfile = ref.watch(activeProfileProvider).value;
+//   final activeProfile = ref.watch(activeProfileProvider).valueOrNull;
 //   tile.label = activeProfile?.name ?? t.general.appTitle;
 
 //   final activeProxy = ref.watch(activeProxyNotifierProvider);
-//   final delay = activeProxy.value?.urlTestDelay ?? 0;
+//   final delay = activeProxy.valueOrNull?.urlTestDelay ?? 0;
 
 //   tile.subtitle = switch (connectionStatus) {
 //     AsyncData(value: Connected()) when delay <= 0 || delay >= 65000 => t.connection.connecting,

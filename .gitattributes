@@ -1,3 +1,0 @@
-
-# Unified diff context preserves leading spaces before Go tabs.
-native-patches/*.patch -whitespace

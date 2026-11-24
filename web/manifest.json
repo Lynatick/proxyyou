@@ -1,18 +1,18 @@
 {
-  "name": "PROXYYOU",
-  "short_name": "PROXYYOU",
-  "start_url": ".",
-  "display": "standalone",
-  "background_color": "#0b1f3a",
-  "theme_color": "#0b1f3a",
-  "description": "Прокси-клиент PROXYYOU",
-  "orientation": "portrait-primary",
-  "prefer_related_applications": false,
-  "icons": [
-    {
-      "src": "icon.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
+    "name": "Hiddify",
+    "short_name": "Hiddify",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#0175C2",
+    "theme_color": "#0175C2",
+    "description": "Hiddify",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icon.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
 }

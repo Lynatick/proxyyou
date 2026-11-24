@@ -1,1 +1,4 @@
-<resources><color name="ic_banner_background">#0b1f3a</color></resources>
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_banner_background">#F0F3FA</color>
+</resources>

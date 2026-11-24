@@ -5,7 +5,7 @@ import 'package:hiddify/features/app_update/model/remote_version_entity.dart';
 part 'app_update_state.freezed.dart';
 
 @freezed
-abstract class AppUpdateState with _$AppUpdateState {
+class AppUpdateState with _$AppUpdateState {
   const factory AppUpdateState.initial() = AppUpdateStateInitial;
   const factory AppUpdateState.disabled() = AppUpdateStateDisabled;
   const factory AppUpdateState.checking() = AppUpdateStateChecking;

@@ -1,10 +1,14 @@
+import 'dart:convert';
+
 import 'package:dartx/dartx.dart';
+import 'package:flutter/foundation.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/core/model/optional_range.dart';
 import 'package:hiddify/core/model/region.dart';
 import 'package:hiddify/core/utils/exception_handler.dart';
 import 'package:hiddify/core/utils/json_converters.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
+import 'package:hiddify/features/crash_report/notifier/trace_session_notifier.dart';
 import 'package:hiddify/features/log/model/log_level.dart';
 import 'package:hiddify/features/profile/data/profile_parser.dart';
 import 'package:hiddify/features/route_rules/notifier/rules_notifier.dart';
@@ -14,16 +18,15 @@ import 'package:hiddify/singbox/model/singbox_config_enum.dart';
 import 'package:hiddify/singbox/model/singbox_config_option.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:hooks_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 abstract class ConfigOptions {
   static final serviceMode = PreferencesNotifier.create<ServiceMode, String>(
     "service-mode",
     ServiceMode.defaultMode,
-    mapFrom: (value) => PlatformUtils.isMacOS && value == ServiceMode.tun.key
-        ? ServiceMode.systemProxy
-        : ServiceMode.choices.firstWhere((e) => e.key == value),
+    // a mode this build does not offer (system proxy, saved before the Mac App Store build) is
+    // the default again
+    mapFrom: (value) => ServiceMode.choices.firstWhere((e) => e.key == value, orElse: () => ServiceMode.defaultMode),
     mapTo: (value) => value.key,
   );
 
@@ -34,17 +37,24 @@ abstract class ConfigOptions {
     mapTo: (value) => value.key,
   );
 
+  static final defaultProxy = PreferencesNotifier.create<DefaultProxy, String>(
+    "default-proxy",
+    DefaultProxy.balance,
+    mapFrom: (value) => DefaultProxy.values.firstWhere((e) => e.key == value, orElse: () => DefaultProxy.balance),
+    mapTo: (value) => value.key,
+  );
+
   static final region = PreferencesNotifier.create<Region, String>(
     "region",
     Region.other,
     mapFrom: Region.values.byName,
     mapTo: (value) => value.name,
   );
-  static final useXrayCoreWhenPossible = PreferencesNotifier.create<bool, bool>("use-xray-core-when-possible", false);
+  static final useSystemTlsEngine = PreferencesNotifier.create<bool, bool>("use-system-tls-engine", true);
   // static final blockAds = PreferencesNotifier.create<bool, bool>("block-ads", false);
   static final logLevel = PreferencesNotifier.create<LogLevel, String>(
     "log-level",
-    LogLevel.off,
+    LogLevel.warn,
     mapFrom: LogLevel.values.byName,
     mapTo: (value) => value.name,
   );
@@ -53,8 +63,8 @@ abstract class ConfigOptions {
 
   static final ipv6Mode = PreferencesNotifier.create<IPv6Mode, String>(
     "ipv6-mode",
-    IPv6Mode.disable,
-    mapFrom: (value) => IPv6Mode.values.firstWhere((e) => e.key == value),
+    IPv6Mode.ipv4Only,
+    mapFrom: IPv6Mode.fromKey,
     mapTo: (value) => value.key,
   );
 
@@ -129,33 +139,60 @@ abstract class ConfigOptions {
   );
 
   static final enableMixedPort = PreferencesNotifier.create<bool, bool>("enable-mixed-port", true);
-  static final enableTproxyPort = PreferencesNotifier.create<bool, bool>("enable-tproxy-port", true);
-  static final enableRedirectPort = PreferencesNotifier.create<bool, bool>("enable-redirect-port", true);
-  static final enableDirectPort = PreferencesNotifier.create<bool, bool>("enable-direct-port", true);
+  // the transparent ports serve setups made by hand (a Linux gateway, pf rules): off until asked for
+  static final enableTproxyPort = PreferencesNotifier.create<bool, bool>("enable-tproxy-port", false);
+  static final enableRedirectPort = PreferencesNotifier.create<bool, bool>("enable-redirect-port", false);
+  static final enableDirectPort = PreferencesNotifier.create<bool, bool>("enable-direct-port", false);
 
   static final tunImplementation = PreferencesNotifier.create<TunImplementation, String>(
     "tun-implementation",
-    TunImplementation.gvisor,
+    TunImplementation.sing15,
     mapFrom: TunImplementation.values.byName,
     mapTo: (value) => value.name,
   );
 
-  static final mtu = PreferencesNotifier.create<int, int>("mtu", 1400);
+  static final mtu = PreferencesNotifier.create<int, int>("mtu", 9000);
 
   static final strictRoute = PreferencesNotifier.create<bool, bool>("strict-route", true);
 
   static final connectionTestUrl = PreferencesNotifier.create<String, String>(
     "connection-test-url",
-    "https://www.youtube.com/generate_204",
-    possibleValues: const ["https://www.youtube.com/generate_204"],
-    validator: (value) => value == "https://www.youtube.com/generate_204",
+    "http://captive.apple.com/hotspot-detect.html",
+    possibleValues: List.of([
+      "http://connectivitycheck.gstatic.com/generate_204",
+      "http://www.gstatic.com/generate_204",
+      "https://www.gstatic.com/generate_204",
+      "https://redirector.googlevideo.com/generate_204",
+      "http://cp.cloudflare.com",
+      "http://kernel.org",
+      "http://detectportal.firefox.com",
+      "http://captive.apple.com/hotspot-detect.html",
+      "https://1.1.1.1",
+      "http://1.1.1.1",
+    ]),
+    validator: (value) => value.isNotBlank && isUrl(value),
   );
 
   static final urlTestInterval = PreferencesNotifier.create<Duration, int>(
     "url-test-interval",
-    const Duration(minutes: 5),
+    const Duration(minutes: 10),
     mapFrom: const IntervalInSecondsConverter().fromJson,
     mapTo: const IntervalInSecondsConverter().toJson,
+  );
+
+  /// How many megabytes an upload test sends through each proxy.
+  static final uploadTestSize = PreferencesNotifier.create<int, int>("upload-test-size", 1);
+
+  /// How many proxies a speed test of the list tests, the fastest by their ping; 0 for all of them.
+  static final uploadTestLimit = PreferencesNotifier.create<int, int>("upload-test-limit", 20);
+
+  /// Whether a speed test measures download or upload.
+  static final speedTestDirection = PreferencesNotifier.create<SpeedTestDirection, String>(
+    "speed-test-direction",
+    SpeedTestDirection.upload,
+    mapFrom: (value) =>
+        SpeedTestDirection.values.firstWhere((e) => e.name == value, orElse: () => SpeedTestDirection.upload),
+    mapTo: (value) => value.name,
   );
 
   static final enableClashApi = PreferencesNotifier.create<bool, bool>("enable-clash-api", true);
@@ -171,6 +208,25 @@ abstract class ConfigOptions {
   static final allowConnectionFromLan = PreferencesNotifier.create<bool, bool>("allow-connection-from-lan", false);
 
   static final lanSharingPassword = PreferencesNotifier.create<String, String>("lan_sharing_password", "");
+
+  /// The port the local network uses while the VPN is shared, apart from this device's own (the
+  /// mixed port), always asking for the secret.
+  static final lanSharingPort = PreferencesNotifier.create<int, int>(
+    "lan-sharing-port",
+    12338,
+    validator: (value) => isPort(value.toString()),
+  );
+
+  /// Whether the local port asks for the secret too; off by default, as browsers can not send a
+  /// SOCKS5 password. Never as the system proxy, which can not pass one.
+  static final localProxyAuth = PreferencesNotifier.create<bool, bool>("local-proxy-auth", false);
+
+  /// Whether the local port stays open in VPN mode, where every app already goes through the VPN.
+  static final localProxyInVpn = PreferencesNotifier.create<bool, bool>("local-proxy-in-vpn", false);
+
+  /// Whether picking proxy mode no longer shows how apps are pointed at it; the home page's Manual
+  /// tab still does.
+  static final hideLocalProxyOnPick = PreferencesNotifier.create<bool, bool>("hide-local-proxy-on-pick", false);
 
   static final enableFakeDns = PreferencesNotifier.create<bool, bool>("enable-fake-dns", false);
 
@@ -291,9 +347,54 @@ abstract class ConfigOptions {
     "",
   );
 
+  static final extraSecurityWarpTunnel = PreferencesNotifier.create<WarpTunnel, String>(
+    "extra-security-warp-tunnel",
+    WarpTunnel.auto,
+    mapFrom: (value) => WarpTunnel.values.asNameMap()[value] ?? WarpTunnel.auto,
+    mapTo: (value) => value.name,
+  );
+
+  static final extraSecurityWarpMtu = PreferencesNotifier.create<int, int>("extra-security-warp-mtu", 0);
+
   static final unblockerWarpLicenseKey = PreferencesNotifier.create<String, String>("unblocker-warp-license-key", "");
 
-  static final unblockerWarpCleanIp = PreferencesNotifier.create<String, String>("unblocker-warp-clean-ip", "auto");
+  static final unblockerWarpTunnel = PreferencesNotifier.create<WarpTunnel, String>(
+    "unblocker-warp-tunnel",
+    WarpTunnel.auto,
+    mapFrom: (value) => WarpTunnel.values.asNameMap()[value] ?? WarpTunnel.auto,
+    mapTo: (value) => value.name,
+  );
+
+  // The unblocker's WARP is all auto by default: the scanner finds an endpoint that answers, and
+  // with no noise set it also finds the noise that gets through, remembered per network. A value
+  // set here is used as given. The clean IP and port are the custom endpoint's; an older clean IP
+  // that also chose the source is moved to the source (PreferencesVersion3Migration).
+  static final unblockerWarpEndpoint = _warpEndpoint("unblocker-warp-endpoint", WarpEndpointSource.scan);
+
+  static final unblockerWarpCleanIp = PreferencesNotifier.create<String, String>("unblocker-warp-clean-ip", "");
+
+  static final unblockerWarpMtu = PreferencesNotifier.create<int, int>("unblocker-warp-mtu", 0);
+
+  static final unblockerWarpScanner = _warpBlock(
+    "unblocker-warp-scanner",
+    const SingboxWarpScannerOption(),
+    SingboxWarpScannerOption.fromJson,
+    (value) => value.toJson(),
+  );
+
+  static final unblockerWarpMasque = _warpBlock(
+    "unblocker-warp-masque",
+    const SingboxWarpMasqueOption(),
+    SingboxWarpMasqueOption.fromJson,
+    (value) => value.toJson(),
+  );
+
+  static final unblockerWarpAwg = _warpBlock(
+    "unblocker-warp-awg",
+    const SingboxWarpAwgOption(),
+    SingboxWarpAwgOption.fromJson,
+    (value) => value.toJson(),
+  );
 
   static final unblockerWarpPort = PreferencesNotifier.create<int, int>(
     "unblocker-warp-port",
@@ -303,24 +404,52 @@ abstract class ConfigOptions {
 
   static final unblockerWarpNoise = PreferencesNotifier.create<OptionalRange, String>(
     "unblocker-warp-noise",
-    const OptionalRange(min: 1, max: 3),
+    const OptionalRange(),
     mapFrom: (value) => OptionalRange.parse(value, allowEmpty: true),
     mapTo: const OptionalRangeJsonConverter().toJson,
   );
 
-  static final unblockerWarpNoiseMode = PreferencesNotifier.create<String, String>("unblocker-warp-noise-mode", "m4");
+  static final unblockerWarpNoiseMode = PreferencesNotifier.create<String, String>("unblocker-warp-noise-mode", "");
 
   static final unblockerWarpNoiseDelay = PreferencesNotifier.create<OptionalRange, String>(
     "unblocker-warp-noise-delay",
-    const OptionalRange(min: 10, max: 30),
+    const OptionalRange(),
     mapFrom: (value) => OptionalRange.parse(value, allowEmpty: true),
     mapTo: const OptionalRangeJsonConverter().toJson,
   );
   static final unblockerWarpNoiseSize = PreferencesNotifier.create<OptionalRange, String>(
     "unblocker-warp-noise-size",
-    const OptionalRange(min: 10, max: 30),
+    const OptionalRange(),
     mapFrom: (value) => OptionalRange.parse(value, allowEmpty: true),
     mapTo: const OptionalRangeJsonConverter().toJson,
+  );
+
+  /// The WARP settings of each hop, so one panel edits either.
+  // Extra security is a privacy layer behind the user's pick, not a way past filtering: the tunnel,
+  // the licence and the MTU are all it offers. It takes the endpoint Cloudflare assigned (scanning
+  // through a proxy only measures the proxy) and the core's MASQUE and AmneziaWG defaults.
+  static final extraSecurityWarp = WarpHopPreferences(
+    detour: true,
+    tunnel: extraSecurityWarpTunnel,
+    licenseKey: extraSecurityWarpLicenseKey,
+    mtu: extraSecurityWarpMtu,
+  );
+
+  static final unblockerWarp = WarpHopPreferences(
+    detour: false,
+    tunnel: unblockerWarpTunnel,
+    licenseKey: unblockerWarpLicenseKey,
+    endpoint: unblockerWarpEndpoint,
+    cleanIp: unblockerWarpCleanIp,
+    cleanPort: unblockerWarpPort,
+    mtu: unblockerWarpMtu,
+    scanner: unblockerWarpScanner,
+    masque: unblockerWarpMasque,
+    awg: unblockerWarpAwg,
+    noise: unblockerWarpNoise,
+    noiseMode: unblockerWarpNoiseMode,
+    noiseSize: unblockerWarpNoiseSize,
+    noiseDelay: unblockerWarpNoiseDelay,
   );
 
   static final hasExperimentalFeatures = Provider.autoDispose<bool>((ref) {
@@ -345,8 +474,9 @@ abstract class ConfigOptions {
   static final Map<String, StateNotifierProvider<PreferencesNotifier, dynamic>> preferences = {
     "region": region,
     "balancer-strategy": balancerStrategy,
+    "default-proxy": defaultProxy,
     // "block-ads": blockAds,
-    "use-xray-core-when-possible": useXrayCoreWhenPossible,
+    "use-system-tls-engine": useSystemTlsEngine,
     "service-mode": serviceMode,
     "log-level": logLevel,
     "resolve-destination": resolveDestination,
@@ -368,10 +498,16 @@ abstract class ConfigOptions {
     "strict-route": strictRoute,
     "connection-test-url": connectionTestUrl,
     "url-test-interval": urlTestInterval,
+    "upload-test-size": uploadTestSize,
+    "upload-test-limit": uploadTestLimit,
+    "speed-test-direction": speedTestDirection,
     "clash-api-port": clashApiPort,
     // "bypass-lan": bypassLan,
     "allow-connection-from-lan": allowConnectionFromLan,
     "lan-sharing-password": lanSharingPassword,
+    "lan-sharing-port": lanSharingPort,
+    "local-proxy-auth": localProxyAuth,
+    "local-proxy-in-vpn": localProxyInVpn,
     // "enable-dns-routing": enableDnsRouting,
 
     // mux
@@ -392,6 +528,8 @@ abstract class ConfigOptions {
     // EXTRA-SECURITY
     // warp
     "extra-security.warp.license-key": extraSecurityWarpLicenseKey,
+    "extra-security.warp.tunnel": extraSecurityWarpTunnel,
+    "extra-security.warp.mtu": extraSecurityWarpMtu,
     // psiphon
     "extra-security.psiphon.region": extraSecurityPsiphonRegion,
     "extra-security.psiphon.conduit-pairing-id": extraSecurityPsiphonConduitPairingId,
@@ -401,12 +539,18 @@ abstract class ConfigOptions {
     // UNBLOCKER
     // warp
     "unblocker.warp.license-key": unblockerWarpLicenseKey,
+    "unblocker.warp.tunnel": unblockerWarpTunnel,
+    "unblocker.warp.endpoint": unblockerWarpEndpoint,
     "unblocker.warp.clean-ip": unblockerWarpCleanIp,
     "unblocker.warp.clean-port": unblockerWarpPort,
     "unblocker.warp.noise": unblockerWarpNoise,
     "unblocker.warp.noise-size": unblockerWarpNoiseSize,
     "unblocker.warp.noise-mode": unblockerWarpNoiseMode,
     "unblocker.warp.noise-delay": unblockerWarpNoiseDelay,
+    "unblocker.warp.mtu": unblockerWarpMtu,
+    "unblocker.warp.scanner": unblockerWarpScanner,
+    "unblocker.warp.masque": unblockerWarpMasque,
+    "unblocker.warp.awg": unblockerWarpAwg,
     // psiphon
     "unblocker.psiphon.region": unblockerPsiphonRegion,
     "unblocker.psiphon.conduit-pairing-id": unblockerPsiphonConduitPairingId,
@@ -457,14 +601,23 @@ abstract class ConfigOptions {
     // };
 
     final mode = ref.watch(serviceMode);
+    final level = ref.watch(logLevel);
+    // a trace session's end goes with trace only: the session starts before the level changes and
+    // ends after it changes back, so each is one change of these options, one reconnect
+    final traceUntil = level == LogLevel.trace ? ref.watch(traceSessionProvider) : null;
+    final traceAfter = traceUntil == null ? null : ref.read(traceSessionProvider.notifier).levelBefore;
+    final traceEnds = traceUntil != null && traceAfter != null && traceAfter != LogLevel.trace;
     // final reg = ref.watch(Preferences.region.notifier).raw();
     return SingboxConfigOption(
       region: ref.watch(region).name,
       balancerStrategy: ref.watch(balancerStrategy),
+      defaultProxy: ref.watch(defaultProxy),
       // blockAds: ref.watch(blockAds),
-      useXrayCoreWhenPossible: ref.watch(useXrayCoreWhenPossible),
+      useSystemTlsEngine: ref.watch(useSystemTlsEngine),
       executeConfigAsIs: false,
-      logLevel: ref.watch(logLevel),
+      logLevel: level,
+      logLevelUntil: traceEnds ? traceUntil.toUtc() : null,
+      logLevelAfter: traceEnds ? traceAfter : null,
       resolveDestination: ref.watch(resolveDestination),
       ipv6Mode: ref.watch(ipv6Mode),
       remoteDnsAddress: ref.watch(remoteDnsAddress),
@@ -486,12 +639,16 @@ abstract class ConfigOptions {
       urlTestInterval: ref.watch(urlTestInterval),
       enableClashApi: ref.watch(enableClashApi),
       clashApiPort: ref.watch(clashApiPort),
-      enableTun: mode == ServiceMode.tun,
+      enableTun: mode == ServiceMode.tun || mode == ServiceMode.router,
+      routerMode: mode == ServiceMode.router,
       // enableTunService: mode == false, //ServiceMode.tunService,
       setSystemProxy: mode == ServiceMode.systemProxy,
       // bypassLan: ref.watch(bypassLan),
       allowConnectionFromLan: ref.watch(allowConnectionFromLan),
       lanSharingPassword: ref.watch(lanSharingPassword),
+      lanSharingPort: ref.watch(lanSharingPort),
+      localProxyAuth: ref.watch(localProxyAuth),
+      localProxyInVpn: ref.watch(localProxyInVpn),
       enableFakeDns: ref.watch(enableFakeDns),
       // enableDnsRouting: ref.watch(enableDnsRouting),
       independentDnsCache: ref.watch(independentDnsCache),
@@ -511,8 +668,11 @@ abstract class ConfigOptions {
       ),
       chainStatus: ref.watch(chainStatus),
       extraSecurity: SingboxExtraSecurityOption(
-        mode: ref.watch(extraSecurityMode),
-        warp: SingboxExtraSecurityWarpOption(licenseKey: ref.watch(extraSecurityWarpLicenseKey)),
+        mode: ref.watch(extraSecurityMode).coreKey(ref.watch(extraSecurityWarpTunnel)),
+        warp: SingboxExtraSecurityWarpOption(
+          licenseKey: ref.watch(extraSecurityWarpLicenseKey),
+          mtu: ref.watch(extraSecurityWarpMtu),
+        ),
         psiphon: SingboxExtraSecurityPsiphonOption(
           region: ref.watch(extraSecurityPsiphonRegion),
           conduitPairingId: ref.watch(extraSecurityPsiphonConduitPairingId),
@@ -520,11 +680,16 @@ abstract class ConfigOptions {
         profile: SingboxExtraSecurityProfileOption(id: ref.watch(extraSecurityProfileId)),
       ),
       unblocker: SingboxUnblockerOption(
-        mode: ref.watch(unblockerMode),
+        mode: ref.watch(unblockerMode).coreKey(ref.watch(unblockerWarpTunnel)),
         warp: SingboxUnblockerWarpOption(
           licenseKey: ref.watch(unblockerWarpLicenseKey),
+          endpoint: ref.watch(unblockerWarpEndpoint),
           cleanIp: ref.watch(unblockerWarpCleanIp),
           cleanPort: ref.watch(unblockerWarpPort),
+          mtu: ref.watch(unblockerWarpMtu),
+          scanner: ref.watch(unblockerWarpScanner).orNull,
+          masque: ref.watch(unblockerWarpMasque).orNull,
+          awg: ref.watch(unblockerWarpAwg).orNull,
           noise: ref.watch(unblockerWarpNoise),
           noiseMode: ref.watch(unblockerWarpNoiseMode),
           noiseSize: ref.watch(unblockerWarpNoiseSize),
@@ -542,7 +707,8 @@ abstract class ConfigOptions {
 }
 
 class ConfigOptionRepository with ExceptionHandler, InfraLogger {
-  ConfigOptionRepository({required this.preferences, required this._getConfigOptions});
+  ConfigOptionRepository({required this.preferences, required SingboxConfigOption Function() getConfigOptions})
+    : _getConfigOptions = getConfigOptions;
 
   final SharedPreferences preferences;
   final SingboxConfigOption Function() _getConfigOptions;
@@ -550,11 +716,93 @@ class ConfigOptionRepository with ExceptionHandler, InfraLogger {
   Either<ConfigOptionFailure, SingboxConfigOption> fullOptions() =>
       Either.tryCatch(() => _getConfigOptions(), ConfigOptionFailure.unexpected);
 
-  Either<ConfigOptionFailure, SingboxConfigOption> fullOptionsOverrided(Map<String, dynamic>? profileOverride) =>
+  /// The settings as the core gets them: the user's own, with the profile's override (its headers
+  /// and the user's per-profile choices) on top, except what extra security rules out.
+  Either<ConfigOptionFailure, SingboxConfigOption> fullOptionsOverrided(String? profileOverride) =>
       Either.tryCatch(() => _getConfigOptions(), ConfigOptionFailure.unexpected).flatMap(
         (options) => Either.tryCatch(() {
-          final json = ProfileParser.applyProfileOverride(options.toJson(), profileOverride);
-          return SingboxConfigOption.fromJson(json);
+          final own = options.toJson();
+          final merged = ProfileParser.applyProfileOverride(options.toJson(), profileOverride);
+          return SingboxConfigOption.fromJson(keepOwnDnsBehindExtraSecurity(own, merged));
         }, ConfigOptionFailure.unexpected),
       );
+
+  /// Behind extra security the remote DNS answers through the hop, which a profile's own resolver
+  /// was never meant for. So whenever extra security is on when connecting, from the user's
+  /// settings or from the profile itself, the profile's remote DNS is not applied and the user's
+  /// own stays; the core adds DoH through the profile alone as the group's last resort.
+  @visibleForTesting
+  static Map<String, dynamic> keepOwnDnsBehindExtraSecurity(Map<String, dynamic> own, Map<String, dynamic> merged) {
+    if (merged['chain-status'] != ChainStatus.extraSecurity.key) return merged;
+    return {...merged, 'remote-dns-address': own['remote-dns-address']};
+  }
+}
+
+typedef _Preference<T, P> = StateNotifierProvider<PreferencesNotifier<T, P>, T>;
+
+_Preference<WarpEndpointSource, String> _warpEndpoint(String key, WarpEndpointSource byDefault) =>
+    PreferencesNotifier.create<WarpEndpointSource, String>(
+      key,
+      byDefault,
+      mapFrom: (value) => WarpEndpointSource.values.asNameMap()[value] ?? byDefault,
+      mapTo: (value) => value.name,
+    );
+
+/// A WARP block kept as its JSON, so each field the core reads is editable without a preference
+/// of its own. A value that no longer reads (an older build's) is the default again, not an error.
+_Preference<T, String> _warpBlock<T>(
+  String key,
+  T byDefault,
+  T Function(Map<String, dynamic>) fromJson,
+  Map<String, dynamic> Function(T) toJson,
+) => PreferencesNotifier.create<T, String>(
+  key,
+  byDefault,
+  mapFrom: (value) {
+    if (value.isEmpty) return byDefault;
+    try {
+      return fromJson((jsonDecode(value) as Map).cast<String, dynamic>());
+    } catch (_) {
+      return byDefault;
+    }
+  },
+  mapTo: (value) => jsonEncode(toJson(value)),
+);
+
+/// The WARP settings of one chain hop, for the panel that edits them. [detour]: the hop dials
+/// through the user's pick (extra security), so it never scans. The scanner and noise belong to
+/// the unblocker alone.
+class WarpHopPreferences {
+  const WarpHopPreferences({
+    required this.detour,
+    required this.tunnel,
+    required this.licenseKey,
+    required this.mtu,
+    this.endpoint,
+    this.cleanIp,
+    this.cleanPort,
+    this.masque,
+    this.awg,
+    this.scanner,
+    this.noise,
+    this.noiseMode,
+    this.noiseSize,
+    this.noiseDelay,
+  });
+
+  final bool detour;
+  final _Preference<WarpTunnel, String> tunnel;
+  final _Preference<String, String> licenseKey;
+  final _Preference<int, int> mtu;
+  // null: the hop does not offer it, and the core's default applies
+  final _Preference<WarpEndpointSource, String>? endpoint;
+  final _Preference<String, String>? cleanIp;
+  final _Preference<int, int>? cleanPort;
+  final _Preference<SingboxWarpMasqueOption, String>? masque;
+  final _Preference<SingboxWarpAwgOption, String>? awg;
+  final _Preference<SingboxWarpScannerOption, String>? scanner;
+  final _Preference<OptionalRange, String>? noise;
+  final _Preference<String, String>? noiseMode;
+  final _Preference<OptionalRange, String>? noiseSize;
+  final _Preference<OptionalRange, String>? noiseDelay;
 }

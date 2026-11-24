@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:grpc/grpc.dart';
 import 'package:hiddify/core/localization/translations.dart';
-import 'package:hooks_riverpod/misc.dart' show ProviderException;
 
 typedef PresentableError = ({String type, String? message});
 
@@ -24,7 +23,6 @@ mixin ExpectedFailure {}
 
 extension ErrorPresenter on TranslationsEn {
   PresentableError errorToPair(Object error) => switch (error) {
-    ProviderException(exception: final nestedErr) => errorToPair(nestedErr),
     GrpcError(message: final nestedErr?) => errorToPair(nestedErr),
     UnexpectedFailure(error: final nestedErr?) => errorToPair(nestedErr),
     Failure() => error.present(this),

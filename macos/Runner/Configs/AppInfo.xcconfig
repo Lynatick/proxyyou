@@ -5,11 +5,12 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = ProxyYou
+PRODUCT_NAME = Hiddify
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = dev.proxyyou.client
-SWIFT_OBJC_BRIDGING_HEADER = Runner/ProxyHelperLaunch.h
+PRODUCT_BUNDLE_IDENTIFIER = $(HIDDIFY_APP_BUNDLE_IDENTIFIER)
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2023 hiddify.com. All rights reserved.
+
+#include "NetworkExtension.xcconfig"

@@ -48,8 +48,6 @@ GEO_ASSETS_DIR=assets$(SEP)core
 CORE_PRODUCT_NAME=hiddify-core
 CORE_NAME=hiddify-lib
 LIB_NAME=hiddify-core
-NATIVE_SOURCE ?= ../core-source
-NATIVE_MACOS_ARCH ?= arm64
 
 ifeq ($(CHANNEL),prod)
 	CORE_URL=https://github.com/hiddify/hiddify-core/releases/download/v$(core.version)
@@ -63,20 +61,28 @@ else
 	TARGET=lib/main.dart
 endif
 
-BUILD_ARGS=--dart-define sentry_dsn=$(SENTRY_DSN)
-DISTRIBUTOR_ARGS=--skip-clean --build-target $(TARGET) --build-dart-define sentry_dsn=$(SENTRY_DSN)
+# the app's commit, 7 characters as git abbreviates it, for the diagnostics report (app_diagnostics.dart)
+APP_COMMIT:=$(shell git rev-parse --short=7 HEAD 2>/dev/null)
+BUILD_ARGS=--dart-define sentry_dsn=$(SENTRY_DSN) --dart-define commit=$(APP_COMMIT)
+DISTRIBUTOR_ARGS=--skip-clean --build-target $(TARGET) --build-dart-define sentry_dsn=$(SENTRY_DSN) --build-dart-define commit=$(APP_COMMIT)
 
 
 
 get:	
 	flutter pub get
 
+# CI generates the code once (job `codegen` of .github/workflows/build.yml) and gives the result
+# to every build, which then runs with SKIP_CODEGEN=1.
+ifeq ($(SKIP_CODEGEN),1)
+gen translate:
+	@echo "$@ skipped: the generated code is already there (SKIP_CODEGEN=1)"
+else
 gen:
-	dart run slang
-	dart run build_runner build
+	dart run build_runner build --delete-conflicting-outputs
 
 translate:
 	dart run slang
+endif
 
 
 
@@ -90,10 +96,10 @@ prepare:
 
 common-prepare:  get gen translate
 windows-prepare: common-prepare windows-libs
-
+	
 ios-prepare: common-prepare ios-libs 
 	cd ios; pod repo update; pod install;echo "done ios prepare"
-
+	
 macos-prepare: common-prepare macos-libs
 linux-prepare: common-prepare linux-amd64-libs
 
@@ -141,23 +147,22 @@ generate_dart_protoc:
 
 .PHONY: protos
 protos: generate_go_protoc generate_kotlin_protos generate_dart_protoc
-
-
-
+	
+	
+	
 
 macos-install-deps:
 	brew install create-dmg tree 
 	npm install -g appdmg
 	dart pub global activate fastforge
+macos-appstore-install-deps: macos-install-deps
 
 ios-install-deps: 
 	if [ "$(flutter)" = "true" ]; then \
-		case "$$(uname -m)" in arm64) flutter_arch="_arm64" ;; *) flutter_arch="" ;; esac; \
-		flutter_archive="flutter_macos$${flutter_arch}_$(REQUIRED_VER)-stable.zip"; \
-		curl --fail --location -o "$$HOME/Downloads/$$flutter_archive" "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/$$flutter_archive"; \
+		curl -L -o ~/Downloads/flutter_macos_3.19.3-stable.zip https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/flutter_macos_3.22.3-stable.zip; \
 		mkdir -p ~/develop; \
 		cd ~/develop; \
-		unzip "$$HOME/Downloads/$$flutter_archive"; \
+		unzip ~/Downloads/flutter_macos_3.22.3-stable.zip; \
 		export PATH="$$PATH:$$HOME/develop/flutter/bin"; \
 		echo 'export PATH="$$PATH:$$HOME/develop/flutter/bin"' >> ~/.zshrc; \
 		export PATH="$PATH:$HOME/develop/flutter/bin"; \
@@ -171,9 +176,9 @@ ios-install-deps:
 	fi
 	brew install create-dmg tree 
 	npm install -g appdmg
-
+	
 	dart pub global activate fastforge
-
+	
 
 android-install-deps: 
 	dart pub global activate fastforge
@@ -263,7 +268,7 @@ linux-flutter-sync:
 windows-install-deps:
 	dart pub global activate fastforge
 # 	choco install innosetup -y
-
+	
 gen_translations: #generating missing translations using google translate
 	cd .github && bash sync_translate.sh
 	make translate
@@ -277,7 +282,7 @@ android-apk-release:
 	  --skip-clean \
 	  --build-target=$(TARGET) \
 	  --build-target-platform=android-arm,android-arm64,android-x64 \
-	  --build-dart-define=sentry_dsn=$(SENTRY_DSN)
+	  --build-dart-define=sentry_dsn=$(SENTRY_DSN) --build-dart-define=commit=$(APP_COMMIT)
 	ls -R build/app/outputs
 
 android-aab-release:
@@ -286,10 +291,22 @@ android-aab-release:
 	  --targets aab \
 	  --skip-clean \
 	  --build-target=$(TARGET) \
-	  --build-dart-define=sentry_dsn=$(SENTRY_DSN) \
+	  --build-dart-define=sentry_dsn=$(SENTRY_DSN) --build-dart-define=commit=$(APP_COMMIT) \
 	  --build-dart-define=release=google-play
 
+# fastforge runs `flutter build windows` itself before packing, which re-copies fresh
+# (unsigned) plugin DLLs over the signed Release tree. The pre-package hook signs the
+# tree again right before Inno Setup / msix read it, so every PE inside Setup.exe, the
+# MSIX and the portable zip carries a signature. WINDOWS_SIGN_BACKEND is exported by
+# windows/scripts/configure_windows_signing.ps1 (CI only; local builds stay unsigned).
+ifneq ($(WINDOWS_SIGN_BACKEND),)
+WINDOWS_PACKAGE_HOOK=--hook-pre=windows/scripts/sign_release_tree.sh
+endif
+
 windows-release: windows-zip-release windows-exe-release windows-msix-release
+
+windows-validate:
+	flutter build windows --release --target $(TARGET) $(BUILD_ARGS)
 
 windows-zip-release:
 	fastforge package \
@@ -297,8 +314,9 @@ windows-zip-release:
 	  --targets zip \
 	  --skip-clean \
 	  --build-target=$(TARGET) \
-	  --build-dart-define=sentry_dsn=$(SENTRY_DSN) \
-	  --build-dart-define=portable=true
+	  --build-dart-define=sentry_dsn=$(SENTRY_DSN) --build-dart-define=commit=$(APP_COMMIT) \
+	  --build-dart-define=portable=true \
+	  $(WINDOWS_PACKAGE_HOOK)
 # 	repacking needs Windows' own tar.exe: GNU tar from Git Bash ignores -a for .zip and writes a plain tar
 	@FULL_PATH=$$(ls dist/*/*.zip | head -n 1); \
 	ZIP_DIR=$$(dirname "$$FULL_PATH"); \
@@ -324,7 +342,8 @@ windows-exe-release:
 	  --targets exe \
 	  --skip-clean \
 	  --build-target=$(TARGET) \
-	  --build-dart-define=sentry_dsn=$(SENTRY_DSN)
+	  --build-dart-define=sentry_dsn=$(SENTRY_DSN) --build-dart-define=commit=$(APP_COMMIT) \
+	  $(WINDOWS_PACKAGE_HOOK)
 
 windows-msix-release:
 	fastforge package \
@@ -332,9 +351,10 @@ windows-msix-release:
 	  --targets msix \
 	  --skip-clean \
 	  --build-target=$(TARGET) \
-	  --build-dart-define=sentry_dsn=$(SENTRY_DSN)
+	  --build-dart-define=sentry_dsn=$(SENTRY_DSN) --build-dart-define=commit=$(APP_COMMIT) \
+	  $(WINDOWS_PACKAGE_HOOK)
 
-linux-release: linux-deb-release linux-appimage-release
+linux-release: linux-deb-release linux-rpm-release linux-appimage-release
 
 linux-amd64-release: linux-release
 linux-arm64-release: linux-release
@@ -348,7 +368,22 @@ linux-deb-release:
 	--targets deb \
 	--skip-clean \
 	--build-target=$(TARGET) \
-	--build-dart-define=sentry_dsn=$(SENTRY_DSN)
+	--build-dart-define=sentry_dsn=$(SENTRY_DSN) --build-dart-define=commit=$(APP_COMMIT)
+
+# Fedora, RHEL, openSUSE. The bundle's libsentry links the build host's (Ubuntu's) libcurl, whose
+# symbols carry the CURL_OPENSSL_4 version that Fedora's libcurl lacks: rpmbuild would require it
+# and dnf refuse the package, though the library loads without it. So that requirement is left out
+# (rpmbuild reads ~/.rpmmacros). fastforge's spec needs rpm < 4.20 (ubuntu-22.04 has 4.17): newer
+# rpm runs %install from BUILD/<name>-build, where the spec's relative paths are not found.
+linux-rpm-release:
+	grep -qs 'CURL_OPENSSL_4' ~/.rpmmacros || \
+	  printf '%s\n' '%__requires_exclude ^libcurl\\.so\\.4\\(CURL_OPENSSL_4\\)' >> ~/.rpmmacros
+	fastforge package \
+	--platform linux \
+	--targets rpm \
+	--skip-clean \
+	--build-target=$(TARGET) \
+	--build-dart-define=sentry_dsn=$(SENTRY_DSN) --build-dart-define=commit=$(APP_COMMIT)
 
 
 # ==============================================================================
@@ -386,37 +421,10 @@ linux-appimage-release:
 	--targets appimage \
 	--skip-clean \
 	--build-target=$(TARGET) \
-	--build-dart-define=sentry_dsn=$(SENTRY_DSN)
-	@$(YELLOW)Post-processing AppImage$(DONE); \
-	$(BLUE)Extracting AppImage$(DONE); \
-	cd dist/* && ./*.AppImage --appimage-extract > /dev/null; \
-	$(BLUE)Replacing AppRun$(DONE); \
-	cp ../../linux/packaging/appimage/AppRun squashfs-root/AppRun; \
-	$(BLUE)Granting permissions$(DONE); \
-	chmod +x squashfs-root/AppRun; \
-	$(BLUE)Adding StartupWMClass to hiddify.desktop$(DONE); \
-	sed -i '/^\[Desktop Entry\]/a StartupWMClass=app.hiddify.com' "squashfs-root/hiddify.desktop"; \
-	$(BLUE)Removing old AppImage$(DONE); \
-	rm *.AppImage; \
-	$(BLUE)Deleting bundled libstdc++ to fix Arch Linux compatibility...$(DONE); \
-	find squashfs-root/usr/lib -name "libstdc++.so.6" -delete; \
-	$(BLUE)Rebuilding AppImage$(DONE); \
-	ARCH=x86_64 appimagetool --no-appstream squashfs-root Hiddify.AppImage > /dev/null; \
-	$(BLUE)Cleaning up squashfs$(DONE); \
-	rm -rf squashfs-root; \
-	$(YELLOW)Creating Portable Package$(DONE); \
-	PKG_DIR_NAME="hiddify-linux-appimage"; \
-	$(BLUE)Creating dir: $$PKG_DIR_NAME$(DONE); \
-	mkdir -p "$$PKG_DIR_NAME"; \
-	$(BLUE)Moving Hiddify.AppImage$(DONE); \
-	cp -p "Hiddify.AppImage" "$$PKG_DIR_NAME/Hiddify.AppImage"; \
-	$(BLUE)Creating Portable Home directory$(DONE); \
-	mkdir -p "$$PKG_DIR_NAME/Hiddify.AppImage.home"; \
-	$(BLUE)Compressing to .tar.gz$(DONE); \
-	tar -czf "$$PKG_DIR_NAME.tar.gz" -C . "$$PKG_DIR_NAME"; \
-	$(BLUE)Removing intermediate directory$(DONE); \
-	rm -rf "$$PKG_DIR_NAME"; \
-	$(GREEN)Successful$(DONE)
+	--build-dart-define=sentry_dsn=$(SENTRY_DSN) --build-dart-define=commit=$(APP_COMMIT)
+	@$(YELLOW)Post-processing AppImage$(DONE)
+	bash linux/packaging/appimage/repackage.sh dist
+	@$(GREEN)Successful$(DONE)
 
 DOCKER_IMAGE_NAME := hiddify-linux-builder
 DOCKER_FLUTTER_VOL := hiddify-flutter-sdk-cache
@@ -435,6 +443,8 @@ DOCKER_CMD := \
 	tar -cf - --exclude='build' --exclude='.dart_tool' --exclude='dist' --exclude='dist_docker' --exclude='android' --exclude='windows' --exclude='ios' --exclude='macos' --exclude='.git' -C /host . | tar -xf - -C /app; \
 	cd /app; \
 	make linux-flutter-sync; \
+	echo '** Re-activating fastforge for the synced Dart SDK...'; \
+	dart pub global activate fastforge > /dev/null; \
 	make linux-prepare; \
 	echo '** Building Release (linux-release)...'; \
 	make linux-release; \
@@ -452,7 +462,7 @@ DOCKER_CMD := \
 linux-docker-release:	
 	@$(BLUE)Building docker image (Cached)$(DONE)
 	docker build -t $(DOCKER_IMAGE_NAME) -f Dockerfile .
-
+	
 	@$(BLUE)Ensuring cache volumes exist$(DONE)
 	docker volume create $(DOCKER_FLUTTER_VOL) || true
 	docker volume create $(DOCKER_PUB_VOL) || true
@@ -474,41 +484,61 @@ macos-release:
 ios-release: #not tested
 	fastforge package --platform ios --targets ipa --build-export-options-plist  ios/exportOptions.plist $(DISTRIBUTOR_ARGS)
 
-# Database-backed configurations require ProxyYou's locally patched native core.
+ios-validate:
+	flutter build ios --release --no-codesign --target $(TARGET) $(BUILD_ARGS)
+
+ios-simulator-validate:
+	flutter build ios --simulator --debug --target $(TARGET) $(BUILD_ARGS)
+
 android-libs:
-	python3 scripts/native-core-stamp.py verify android/app/libs/hiddify-core.aar
+	$(MKDIR) $(ANDROID_OUT) || echo Folder already exists. Skipping...
+	curl -fL --retry 5 --retry-delay 5 --retry-all-errors $(CORE_URL)/$(CORE_NAME)-android.tar.gz | tar xz -C $(ANDROID_OUT)/
 
 android-apk-libs: android-libs
 android-aab-libs: android-libs
 
 windows-libs:
-	python3 scripts/native-core-stamp.py verify hiddify-core/windows-x64/hiddify-core.dll
-
+	$(MKDIR) $(DESKTOP_OUT) || echo Folder already exists. Skipping...
+	curl -fL --retry 5 --retry-delay 5 --retry-all-errors $(CORE_URL)/$(CORE_NAME)-windows-amd64.tar.gz | tar xz -C $(DESKTOP_OUT)/
+	ls $(DESKTOP_OUT) || dir $(DESKTOP_OUT)/
+	
 
 linux-amd64-libs:
 	mkdir -p $(DESKTOP_OUT)
-	curl -L $(CORE_URL)/$(CORE_NAME)-linux-amd64.tar.gz | tar xz -C $(DESKTOP_OUT)/
+	curl -fL --retry 5 --retry-delay 5 --retry-all-errors $(CORE_URL)/$(CORE_NAME)-linux-amd64.tar.gz | tar xz -C $(DESKTOP_OUT)/
 
 linux-arm64-libs:
 	mkdir -p $(DESKTOP_OUT)
-	curl -L $(CORE_URL)/$(CORE_NAME)-linux-arm64.tar.gz | tar xz -C $(DESKTOP_OUT)/
+	curl -fL --retry 5 --retry-delay 5 --retry-all-errors $(CORE_URL)/$(CORE_NAME)-linux-arm64.tar.gz | tar xz -C $(DESKTOP_OUT)/
 
 linux-amd64-musl-libs:
 	mkdir -p $(DESKTOP_OUT)
-	curl -L $(CORE_URL)/$(CORE_NAME)-linux-amd64-musl.tar.gz | tar xz -C $(DESKTOP_OUT)/
+	curl -fL --retry 5 --retry-delay 5 --retry-all-errors $(CORE_URL)/$(CORE_NAME)-linux-amd64-musl.tar.gz | tar xz -C $(DESKTOP_OUT)/
 
 linux-arm64-musl-libs:
 	mkdir -p $(DESKTOP_OUT)
-	curl -L $(CORE_URL)/$(CORE_NAME)-linux-arm64-musl.tar.gz | tar xz -C $(DESKTOP_OUT)/
+	curl -fL --retry 5 --retry-delay 5 --retry-all-errors $(CORE_URL)/$(CORE_NAME)-linux-arm64-musl.tar.gz | tar xz -C $(DESKTOP_OUT)/
 
 
 macos-libs:
-	python3 scripts/native-core-stamp.py verify hiddify-core/bin/hiddify-core.dylib
+	mkdir -p $(DESKTOP_OUT) macos/Frameworks
+	curl -fL --retry 5 --retry-delay 5 --retry-all-errors $(CORE_URL)/$(CORE_NAME)-macos.tar.gz | tar xz -C $(DESKTOP_OUT)
+	# Tunnel bind ships in the same tarball (built by hiddify-core `make macos`).
+	test -d $(DESKTOP_OUT)/HiddifyTunnelCore.xcframework
+	rm -rf macos/Frameworks/HiddifyTunnelCore.xcframework
+	mv $(DESKTOP_OUT)/HiddifyTunnelCore.xcframework macos/Frameworks/
+	touch macos/Frameworks/HiddifyTunnelCore.xcframework/.downloaded
+	# The core helper (macos/scripts/embed-core-helper.sh) is built from the shared C launcher. CI
+	# does not check out the submodule, so take that file from the commit the app pins.
+	test -f hiddify-core/cmd/launcher/main.c || { \
+		mkdir -p hiddify-core/cmd/launcher && \
+		curl -fL --retry 5 --retry-delay 5 --retry-all-errors -o hiddify-core/cmd/launcher/main.c \
+			https://raw.githubusercontent.com/hiddify/hiddify-core/$$(git rev-parse HEAD:hiddify-core)/cmd/launcher/main.c; }
 
 ios-libs: #not tested
 	mkdir -p $(IOS_OUT)
 	rm -rf $(IOS_OUT)/HiddifyCore.xcframework
-	curl -L $(CORE_URL)/$(CORE_NAME)-ios.tar.gz | tar xz -C "$(IOS_OUT)"
+	curl -fL --retry 5 --retry-delay 5 --retry-all-errors $(CORE_URL)/$(CORE_NAME)-ios.tar.gz | tar xz -C "$(IOS_OUT)"
 
 get-geo-assets:
 	echo ""
@@ -519,16 +549,48 @@ build-headers:
 	make -C hiddify-core -f Makefile headers && mv $(BINDIR)/$(CORE_NAME)-headers.h $(BINDIR)/hiddify-core.h
 
 build-android-libs:
-	bash scripts/build-android-core.sh "$(NATIVE_SOURCE)"
+	make -C hiddify-core -f Makefile android 
+	mv $(BINDIR)/$(LIB_NAME).aar $(ANDROID_OUT)/
 
 build-windows-libs:
-	bash scripts/build-windows-core.sh "$(NATIVE_SOURCE)"
+	make -C hiddify-core -f Makefile windows-amd64
 
 build-linux-libs:
 	make -C hiddify-core -f Makefile linux-amd64 
 
 build-macos-libs:
-	bash scripts/build-macos-core.sh "$(NATIVE_SOURCE)" "$(NATIVE_MACOS_ARCH)"
+	make -C hiddify-core -f Makefile macos
+	test -d hiddify-core/bin/HiddifyTunnelCore.xcframework
+	mkdir -p macos/Frameworks
+	rm -rf macos/Frameworks/HiddifyTunnelCore.xcframework
+	cp -R hiddify-core/bin/HiddifyTunnelCore.xcframework macos/Frameworks/
+
+# Native arch only (no lipo, no HiddifyTunnelCore.xcframework).
+build-lite-macos-libs:
+	make -C hiddify-core -f Makefile macos-lite
+
+# Runs Debug from /Applications, where macOS allows the VPN system extension.
+macos-run-dev:
+	bash macos/scripts/run-dev.sh
+
+# macOS releases built on this Mac; see macos/scripts/dist.sh.
+macos-dist-unsigned:
+	bash macos/scripts/dist.sh unsigned $(DISTRIBUTOR_ARGS)
+
+macos-dist-developer-id:
+	bash macos/scripts/dist.sh developer-id $(DISTRIBUTOR_ARGS)
+
+macos-dist-appstore:
+	bash macos/scripts/dist.sh app-store
+
+macos-appstore-upload:
+	bash macos/scripts/dist.sh app-store --upload
+
+# CI builds the Mac App Store pkg + dmg; MACOS_APPSTORE_ARGS=--upload sends the pkg to TestFlight.
+macos-appstore-prepare: macos-prepare
+
+macos-appstore-release:
+	bash macos/scripts/dist.sh app-store $(MACOS_APPSTORE_ARGS)
 
 build-ios-libs: 
 	rm -rf $(IOS_OUT)/HiddifyCore.xcframework 

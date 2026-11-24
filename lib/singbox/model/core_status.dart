@@ -11,15 +11,21 @@ sealed class CoreStatus with _$CoreStatus {
 
   const factory CoreStatus.stopped({CoreAlert? alert, String? message}) = CoreStopped;
   const factory CoreStatus.starting() = CoreStarting;
+  // the core is up but no ping works yet; a positive ping makes it started
+  const factory CoreStatus.waiting() = CoreWaiting;
+  // every proxy was tested and timed out; not an error
+  const factory CoreStatus.noAvailableProxies() = CoreNoAvailableProxies;
   const factory CoreStatus.started() = CoreStarted;
   const factory CoreStatus.stopping() = CoreStopping;
+  // the running core applies a new config; the connection stays up
+  const factory CoreStatus.hotReloading() = CoreHotReloading;
 
   factory CoreStatus.fromEvent(dynamic event) {
-    final data = event as Map<String, dynamic>?;
-    switch (data?["status"]) {
+    event = event as Map<String, dynamic>?;
+    switch (event?["status"]) {
       case "Stopped":
-        final alertstr = data?["alert"] as String?;
-        var msgStr = data?["message"] as String?;
+        final alertstr = event?["alert"] as String?;
+        var msgStr = event?["message"] as String?;
         var alert = CoreAlert.values.firstOrNullWhere((e) => alertstr?.toLowerCase() == e.name.toLowerCase());
         if ((alert == null) && (alertstr ?? "") != "") {
           msgStr = ((msgStr ?? "") != "") ? "$alertstr: $msgStr" : alertstr;
@@ -29,10 +35,16 @@ sealed class CoreStatus with _$CoreStatus {
 
       case "Starting":
         return const CoreStarting();
+      case "Waiting":
+        return const CoreWaiting();
+      case "NoAvailableProxies":
+        return const CoreNoAvailableProxies();
       case "Started":
         return const CoreStarted();
       case "Stopping":
         return const CoreStopping();
+      case "HotReloading":
+        return const CoreHotReloading();
       default:
         throw Exception("unexpected status [$event]");
     }
@@ -64,10 +76,16 @@ sealed class CoreStatus with _$CoreStatus {
         return CoreStatus.stopped(alert: alert, message: event.message);
       case CoreStates.STARTING:
         return const CoreStarting();
+      case CoreStates.WAITING:
+        return const CoreWaiting();
+      case CoreStates.NO_AVAILABLE_PROXIES:
+        return const CoreNoAvailableProxies();
       case CoreStates.STARTED:
         return const CoreStarted();
       case CoreStates.STOPPING:
         return const CoreStopping();
+      case CoreStates.HOT_RELOADING:
+        return const CoreHotReloading();
       default:
         throw Exception("unexpected status [$event]");
     }

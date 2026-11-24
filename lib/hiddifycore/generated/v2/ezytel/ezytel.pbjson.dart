@@ -20,21 +20,15 @@ const ChannelInfoRequest$json = {
   '2': [
     {'1': 'channel_id', '3': 1, '4': 1, '5': 9, '10': 'channelId'},
     {'1': 'last_read', '3': 2, '4': 1, '5': 3, '10': 'lastRead'},
-    {
-      '1': 'disable_inline_images',
-      '3': 3,
-      '4': 1,
-      '5': 8,
-      '10': 'disableInlineImages'
-    },
+    {'1': 'disable_inline_images', '3': 3, '4': 1, '5': 8, '10': 'disableInlineImages'},
   ],
 };
 
 /// Descriptor for `ChannelInfoRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List channelInfoRequestDescriptor = $convert.base64Decode(
-    'ChJDaGFubmVsSW5mb1JlcXVlc3QSHQoKY2hhbm5lbF9pZBgBIAEoCVIJY2hhbm5lbElkEhsKCW'
-    'xhc3RfcmVhZBgCIAEoA1IIbGFzdFJlYWQSMgoVZGlzYWJsZV9pbmxpbmVfaW1hZ2VzGAMgASgI'
-    'UhNkaXNhYmxlSW5saW5lSW1hZ2Vz');
+final $typed_data.Uint8List channelInfoRequestDescriptor =
+    $convert.base64Decode('ChJDaGFubmVsSW5mb1JlcXVlc3QSHQoKY2hhbm5lbF9pZBgBIAEoCVIJY2hhbm5lbElkEhsKCW'
+        'xhc3RfcmVhZBgCIAEoA1IIbGFzdFJlYWQSMgoVZGlzYWJsZV9pbmxpbmVfaW1hZ2VzGAMgASgI'
+        'UhNkaXNhYmxlSW5saW5lSW1hZ2Vz');
 
 @$core.Deprecated('Use channelInfoDescriptor instead')
 const ChannelInfo$json = {
@@ -52,11 +46,11 @@ const ChannelInfo$json = {
 };
 
 /// Descriptor for `ChannelInfo`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List channelInfoDescriptor = $convert.base64Decode(
-    'CgtDaGFubmVsSW5mbxISCgRuYW1lGAEgASgJUgRuYW1lEiAKC2Rlc2NyaXB0aW9uGAIgASgJUg'
-    'tkZXNjcmlwdGlvbhIfCgthdmF0YXJfcGF0aBgDIAEoCVIKYXZhdGFyUGF0aBISCgRkYXRlGAQg'
-    'ASgDUgRkYXRlEhkKCGRhdGVfc3RyGAUgASgJUgdkYXRlU3RyEhYKBm5ld21zZxgGIAEoCVIGbm'
-    'V3bXNnEiAKDGxhc3RfcG9zdF9pZBgHIAEoA1IKbGFzdFBvc3RJZBIOCgJvaxgIIAEoCFICb2s=');
+final $typed_data.Uint8List channelInfoDescriptor =
+    $convert.base64Decode('CgtDaGFubmVsSW5mbxISCgRuYW1lGAEgASgJUgRuYW1lEiAKC2Rlc2NyaXB0aW9uGAIgASgJUg'
+        'tkZXNjcmlwdGlvbhIfCgthdmF0YXJfcGF0aBgDIAEoCVIKYXZhdGFyUGF0aBISCgRkYXRlGAQg'
+        'ASgDUgRkYXRlEhkKCGRhdGVfc3RyGAUgASgJUgdkYXRlU3RyEhYKBm5ld21zZxgGIAEoCVIGbm'
+        'V3bXNnEiAKDGxhc3RfcG9zdF9pZBgHIAEoA1IKbGFzdFBvc3RJZBIOCgJvaxgIIAEoCFICb2s=');
 
 @$core.Deprecated('Use channelMessagesRequestDescriptor instead')
 const ChannelMessagesRequest$json = {
@@ -64,21 +58,15 @@ const ChannelMessagesRequest$json = {
   '2': [
     {'1': 'channel_id', '3': 1, '4': 1, '5': 9, '10': 'channelId'},
     {'1': 'before', '3': 2, '4': 1, '5': 3, '10': 'before'},
-    {
-      '1': 'disable_inline_images',
-      '3': 3,
-      '4': 1,
-      '5': 8,
-      '10': 'disableInlineImages'
-    },
+    {'1': 'disable_inline_images', '3': 3, '4': 1, '5': 8, '10': 'disableInlineImages'},
   ],
 };
 
 /// Descriptor for `ChannelMessagesRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List channelMessagesRequestDescriptor = $convert.base64Decode(
-    'ChZDaGFubmVsTWVzc2FnZXNSZXF1ZXN0Eh0KCmNoYW5uZWxfaWQYASABKAlSCWNoYW5uZWxJZB'
-    'IWCgZiZWZvcmUYAiABKANSBmJlZm9yZRIyChVkaXNhYmxlX2lubGluZV9pbWFnZXMYAyABKAhS'
-    'E2Rpc2FibGVJbmxpbmVJbWFnZXM=');
+final $typed_data.Uint8List channelMessagesRequestDescriptor =
+    $convert.base64Decode('ChZDaGFubmVsTWVzc2FnZXNSZXF1ZXN0Eh0KCmNoYW5uZWxfaWQYASABKAlSCWNoYW5uZWxJZB'
+        'IWCgZiZWZvcmUYAiABKANSBmJlZm9yZRIyChVkaXNhYmxlX2lubGluZV9pbWFnZXMYAyABKAhS'
+        'E2Rpc2FibGVJbmxpbmVJbWFnZXM=');
 
 @$core.Deprecated('Use channelMessagesResponseDescriptor instead')
 const ChannelMessagesResponse$json = {
@@ -91,10 +79,10 @@ const ChannelMessagesResponse$json = {
 };
 
 /// Descriptor for `ChannelMessagesResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List channelMessagesResponseDescriptor = $convert.base64Decode(
-    'ChdDaGFubmVsTWVzc2FnZXNSZXNwb25zZRISCgRodG1sGAEgASgJUgRodG1sEiUKDmNoYW5uZW'
-    'xfYXZhdGFyGAIgASgJUg1jaGFubmVsQXZhdGFyEiAKDGxhc3RfcG9zdF9pZBgDIAEoA1IKbGFz'
-    'dFBvc3RJZA==');
+final $typed_data.Uint8List channelMessagesResponseDescriptor =
+    $convert.base64Decode('ChdDaGFubmVsTWVzc2FnZXNSZXNwb25zZRISCgRodG1sGAEgASgJUgRodG1sEiUKDmNoYW5uZW'
+        'xfYXZhdGFyGAIgASgJUg1jaGFubmVsQXZhdGFyEiAKDGxhc3RfcG9zdF9pZBgDIAEoA1IKbGFz'
+        'dFBvc3RJZA==');
 
 @$core.Deprecated('Use proxyImageRequestDescriptor instead')
 const ProxyImageRequest$json = {
@@ -105,8 +93,8 @@ const ProxyImageRequest$json = {
 };
 
 /// Descriptor for `ProxyImageRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List proxyImageRequestDescriptor = $convert.base64Decode(
-    'ChFQcm94eUltYWdlUmVxdWVzdBIXCgdoZXhfdXJsGAEgASgJUgZoZXhVcmw=');
+final $typed_data.Uint8List proxyImageRequestDescriptor =
+    $convert.base64Decode('ChFQcm94eUltYWdlUmVxdWVzdBIXCgdoZXhfdXJsGAEgASgJUgZoZXhVcmw=');
 
 @$core.Deprecated('Use proxyImageResponseDescriptor instead')
 const ProxyImageResponse$json = {
@@ -119,9 +107,9 @@ const ProxyImageResponse$json = {
 };
 
 /// Descriptor for `ProxyImageResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List proxyImageResponseDescriptor = $convert.base64Decode(
-    'ChJQcm94eUltYWdlUmVzcG9uc2USEgoEZGF0YRgBIAEoDFIEZGF0YRIhCgxjb250ZW50X3R5cG'
-    'UYAiABKAlSC2NvbnRlbnRUeXBlEh0KCmNhY2hlX25hbWUYAyABKAlSCWNhY2hlTmFtZQ==');
+final $typed_data.Uint8List proxyImageResponseDescriptor =
+    $convert.base64Decode('ChJQcm94eUltYWdlUmVzcG9uc2USEgoEZGF0YRgBIAEoDFIEZGF0YRIhCgxjb250ZW50X3R5cG'
+        'UYAiABKAlSC2NvbnRlbnRUeXBlEh0KCmNhY2hlX25hbWUYAyABKAlSCWNhY2hlTmFtZQ==');
 
 @$core.Deprecated('Use parseChannelsRequestDescriptor instead')
 const ParseChannelsRequest$json = {
@@ -132,8 +120,8 @@ const ParseChannelsRequest$json = {
 };
 
 /// Descriptor for `ParseChannelsRequest`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List parseChannelsRequestDescriptor = $convert
-    .base64Decode('ChRQYXJzZUNoYW5uZWxzUmVxdWVzdBIQCgNyYXcYASABKAlSA3Jhdw==');
+final $typed_data.Uint8List parseChannelsRequestDescriptor =
+    $convert.base64Decode('ChRQYXJzZUNoYW5uZWxzUmVxdWVzdBIQCgNyYXcYASABKAlSA3Jhdw==');
 
 @$core.Deprecated('Use parseChannelsResponseDescriptor instead')
 const ParseChannelsResponse$json = {
@@ -144,6 +132,6 @@ const ParseChannelsResponse$json = {
 };
 
 /// Descriptor for `ParseChannelsResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List parseChannelsResponseDescriptor = $convert.base64Decode(
-    'ChVQYXJzZUNoYW5uZWxzUmVzcG9uc2USHwoLY2hhbm5lbF9pZHMYASADKAlSCmNoYW5uZWxJZH'
-    'M=');
+final $typed_data.Uint8List parseChannelsResponseDescriptor =
+    $convert.base64Decode('ChVQYXJzZUNoYW5uZWxzUmVzcG9uc2USHwoLY2hhbm5lbF9pZHMYASADKAlSCmNoYW5uZWxJZH'
+        'M=');

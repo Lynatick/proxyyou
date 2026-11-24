@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/widget/adaptive_menu.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/chain/model/chain_enum.dart';
 import 'package:hiddify/features/chain/overview/chain_mode_icon.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
@@ -20,11 +19,19 @@ class ChainModeMenu extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
+    // the current choice carries a check, so the menu also says what is set
+    final on = type.isEnable(ref.watch(ConfigOptions.chainStatus));
+    final current = switch (type) {
+      ChainType.extraSecurity => ref.watch(ConfigOptions.extraSecurityMode),
+      ChainType.unblocker => ref.watch(ConfigOptions.unblockerMode),
+    };
+    const check = Icon(Icons.check_rounded, size: 16);
 
     final menuItems = [
       AdaptiveMenuItem(
-        leadingIcon: const PlatformIcon(Icons.block, size: 16),
+        leadingIcon: const Icon(Icons.block, size: 16),
         title: t.common.disable,
+        trailingIcon: on ? null : check,
         onTap: () async {
           final status = ref.read(ConfigOptions.chainStatus);
           if (type.isEnable(status)) await ref.read(ConfigOptions.chainStatus.notifier).update(ChainStatus.off);
@@ -34,6 +41,7 @@ class ChainModeMenu extends HookConsumerWidget {
         return AdaptiveMenuItem(
           leadingIcon: ChainModeIcon(mode: e),
           title: e.present(t),
+          trailingIcon: on && current == e ? check : null,
           divider: e == ChainMode.selectable.last && showConfiguration,
           onTap: () async {
             switch (type) {
@@ -50,7 +58,7 @@ class ChainModeMenu extends HookConsumerWidget {
       if (showConfiguration)
         AdaptiveMenuItem(
           title: t.common.configuration,
-          trailingIcon: const PlatformIcon(Icons.arrow_right, size: 16),
+          trailingIcon: const Icon(Icons.arrow_right, size: 16),
           onTap: () {
             context.pop();
             context.goNamed('chainOptions');

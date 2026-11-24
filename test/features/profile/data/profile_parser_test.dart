@@ -1,5 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
+import 'package:hiddify/core/db/db.dart';
+import 'package:hiddify/features/profile/data/profile_data_mapper.dart';
 import 'package:hiddify/features/profile/data/profile_parser.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/model/profile_failure.dart';
@@ -21,7 +27,7 @@ Either<ProfileFailure, ProfileEntity> parseRemoteWithHeaders(
         name: '',
         url: url,
         lastUpdate: DateTime.now(),
-        userOverride: userOverride ?? const UserOverride(isAutoUpdateDisable: false),
+        userOverride: userOverride,
         populatedHeaders: headers,
       ),
     ),
@@ -37,15 +43,17 @@ void expectRemote(Either<ProfileFailure, ProfileEntity> either, void Function(Re
   });
 }
 
-/// Build typed override values from raw headers / user override.
+/// Build and decode the profile-override JSON from raw headers / user override.
 Map<String, dynamic> decodeOverride({Map<String, dynamic>? headers, UserOverride? userOverride}) {
-  return ProfileParser.profileOverride(populatedHeaders: headers, userOverride: userOverride);
+  return jsonDecode(ProfileParser.profileOverride(populatedHeaders: headers, userOverride: userOverride))
+      as Map<String, dynamic>;
 }
 
 void main() {
   const validBaseUrl = "https://example.com/configurations/user1/filename.yaml";
   const validExtendedUrl = "https://example.com/configurations/user1/filename.yaml?test#b";
   const validSupportUrl = "https://example.com/support";
+  const validIpinfoUrl = "https://example.com/ipapi/json";
 
   group("parse", () {
     test("Should use filename in url with no headers and fragment", () {
@@ -109,6 +117,7 @@ void main() {
         "subscription-userinfo": ["upload=0;download=1024;total=10240.5;expire=1704054600.55"],
         "profile-web-page-url": [validBaseUrl],
         "support-url": [validSupportUrl],
+        "ipinfo-url": [validIpinfoUrl],
       };
       // This fix occurs in the _downloadProfile method within ProfileParser, and the fixed headers are passed to populateHeaders
       final fixedHeaders = headers.map((key, value) {
@@ -118,6 +127,7 @@ void main() {
       final allHeaders = ProfileParser.populateHeaders(content: '', remoteHeaders: fixedHeaders);
       expect(allHeaders.isRight(), true);
       allHeaders.match((l) {}, (r) {
+        expect(r['ipinfo-url'], equals(validIpinfoUrl));
         final profile = ProfileParser.parse(
           tempFilePath: '',
           profile: ProfileEntity.remote(
@@ -127,7 +137,6 @@ void main() {
             url: validExtendedUrl,
             lastUpdate: DateTime.now(),
             populatedHeaders: r,
-            userOverride: const UserOverride(isAutoUpdateDisable: false),
           ),
         );
         expect(profile.isRight(), true);
@@ -151,6 +160,8 @@ void main() {
               );
               expect(rp.webPageUrl, equals(validBaseUrl));
               expect(rp.supportUrl, equals(validSupportUrl));
+              // Kept in populatedHeaders only — not a dedicated entity/DB field.
+              expect(rp.populatedHeaders?['ipinfo-url'], equals(validIpinfoUrl));
             },
             local: (lp) {},
           );
@@ -180,7 +191,6 @@ void main() {
             url: validBaseUrl,
             lastUpdate: DateTime.now(),
             populatedHeaders: r,
-            userOverride: const UserOverride(isAutoUpdateDisable: false),
           ),
         );
         expect(profile.isRight(), true);
@@ -222,7 +232,6 @@ void main() {
             url: validBaseUrl,
             lastUpdate: DateTime.now(),
             populatedHeaders: r,
-            userOverride: const UserOverride(isAutoUpdateDisable: false),
           ),
         );
         expect(profile.isRight(), true);
@@ -241,6 +250,103 @@ void main() {
           );
         });
       });
+    });
+  });
+
+  group("local profile names", () {
+    late Directory tempDirectory;
+    late File configFile;
+
+    setUp(() {
+      tempDirectory = Directory.systemTemp.createTempSync('profile-name-test-');
+      configFile = File('${tempDirectory.path}/config');
+    });
+
+    tearDown(() {
+      tempDirectory.deleteSync(recursive: true);
+    });
+
+    ProfileEntity parseLocal(ProfileEntity profile) => ProfileParser.parse(
+      tempFilePath: configFile.path,
+      profile: profile,
+    ).match((failure) => throw failure, (parsed) => parsed);
+
+    ProfileEntity newProfile({String name = ''}) =>
+        ProfileEntity.local(id: const Uuid().v4(), active: true, name: name, lastUpdate: DateTime.now());
+
+    for (final (scheme, outboundType) in [
+      ('vless', 'vless'),
+      ('trojan', 'trojan'),
+      ('ss', 'shadowsocks'),
+      ('hy2', 'hysteria2'),
+      ('tuic', 'tuic'),
+      ('socks', 'socks'),
+    ]) {
+      test("preserves the imported profile name after editing as JSON ($scheme)", () {
+        configFile.writeAsStringSync('$scheme://credential@1.2.3.4:443#My%20Server');
+        final imported = parseLocal(newProfile());
+        expect(imported.name, 'My Server');
+
+        configFile.writeAsStringSync(
+          jsonEncode({
+            'outbounds': [
+              {'type': outboundType, 'tag': 'My Server', 'server': '1.2.3.4', 'server_port': 8443},
+            ],
+            'endpoints': [],
+          }),
+        );
+        final saved = parseLocal(imported);
+        expect(saved.name, 'My Server');
+        expect(saved.userOverride, isNull);
+        expect(parseLocal(saved).name, 'My Server');
+      });
+    }
+
+    test("explicit rename takes precedence over the existing name", () {
+      configFile.writeAsStringSync('{"outbounds": []}');
+      final profile = newProfile(name: 'My Server').copyWith(userOverride: const UserOverride(name: 'Renamed'));
+      expect(parseLocal(profile).name, 'Renamed');
+    });
+
+    for (final hasNameOverride in [false, true]) {
+      test("keeps a manually renamed profile after saving and reloading (override: $hasNameOverride)", () async {
+        final db = Db(NativeDatabase.memory());
+        addTearDown(db.close);
+        final profile = newProfile(name: 'My Custom Name').copyWith(
+          populatedHeaders: const {},
+          userOverride: hasNameOverride ? const UserOverride(name: 'My Custom Name') : null,
+        );
+        await db.into(db.profileEntries).insert(profile.toInsertEntry());
+
+        for (final port in [8443, 9443]) {
+          final stored = (await db.select(db.profileEntries).getSingle()).toEntity();
+          expect(stored.name, 'My Custom Name');
+          configFile.writeAsStringSync(
+            jsonEncode({
+              'outbounds': [
+                {'type': 'trojan', 'tag': 'Original Server Name', 'server': '1.2.3.4', 'server_port': port},
+              ],
+              'endpoints': [],
+            }),
+          );
+          final saved = parseLocal(stored);
+          await db.update(db.profileEntries).write(saved.toUpdateEntry());
+          final reloaded = (await db.select(db.profileEntries).getSingle()).toEntity();
+          expect(reloaded.name, 'My Custom Name');
+          expect(reloaded.userOverride?.name, hasNameOverride ? 'My Custom Name' : null);
+        }
+      });
+    }
+
+    test("profile title takes precedence over the existing name", () {
+      configFile.writeAsStringSync('{"outbounds": []}');
+      final profile = newProfile(name: 'My Server').copyWith(populatedHeaders: {'profile-title': 'Profile Title'});
+      expect(parseLocal(profile).name, 'Profile Title');
+    });
+
+    test("a blank existing name still uses the link fragment", () {
+      configFile.writeAsStringSync('vless://uuid@1.2.3.4:443#My%20Server');
+      expect(parseLocal(newProfile(name: '   ')).name, 'My Server');
     });
   });
 
@@ -287,6 +393,33 @@ void main() {
       expectRemote(parseRemoteWithHeaders({"content-disposition": header}), (rp) {
         expect(rp.name, equals(persian));
       });
+    });
+  });
+
+  group("profile-title base64", () {
+    test("decodes a padded value", () {
+      expect(ProfileParser.decodeBase64Title(base64.encode(utf8.encode("My VPN"))), equals("My VPN"));
+    });
+
+    test("decodes a value without padding (previously threw)", () {
+      final padded = base64.encode(utf8.encode("Stockholm 1"));
+      expect(padded.endsWith("="), isTrue);
+      expect(ProfileParser.decodeBase64Title(padded.replaceAll("=", "")), equals("Stockholm 1"));
+    });
+
+    test("invalid base64 falls through to the next name source (previously threw)", () {
+      expectRemote(
+        parseRemoteWithHeaders({"profile-title": "base64:not base64!"}, url: "https://example.com/sub#Fallback"),
+        (rp) => expect(rp.name, equals("Fallback")),
+      );
+    });
+
+    test("parse() uses an unpadded base64 title (previously threw)", () {
+      final unpadded = base64.encode(utf8.encode("Stockholm 1")).replaceAll("=", "");
+      expectRemote(
+        parseRemoteWithHeaders({"profile-title": "base64:$unpadded"}),
+        (rp) => expect(rp.name, equals("Stockholm 1")),
+      );
     });
   });
 
@@ -356,6 +489,53 @@ void main() {
       );
     });
 
+    test("an infinite total is unlimited, not a rejected profile", () {
+      expectRemote(
+        parseRemoteWithHeaders({
+          "profile-title": "p",
+          "subscription-userinfo": "upload=100;download=200;total=1e999;expire=1704054600",
+        }),
+        (rp) {
+          expect(rp.subInfo!.download, equals(200));
+          expect(rp.subInfo!.total, equals(ProfileParser.infiniteTrafficThreshold + 1));
+          expect(rp.subInfo!.expire, equals(DateTime.fromMillisecondsSinceEpoch(1704054600 * 1000)));
+        },
+      );
+    });
+
+    test("NaN or negative upload yields null subInfo but still parses", () {
+      for (final upload in ["NaN", "-1", "-Infinity"]) {
+        expectRemote(
+          parseRemoteWithHeaders({
+            "profile-title": "p",
+            "subscription-userinfo": "upload=$upload;download=200;total=1000;expire=1704054600",
+          }),
+          (rp) {
+            expect(rp.subInfo, isNull);
+            expect(rp.name, equals("p"));
+          },
+        );
+      }
+    });
+
+    test("an expiry beyond DateTime's range is no expiry", () {
+      for (final expire in ["9999999999999", "99999999999999999999", "1e999"]) {
+        expectRemote(
+          parseRemoteWithHeaders({
+            "profile-title": "p",
+            "subscription-userinfo": "upload=100;download=200;total=1000;expire=$expire",
+          }),
+          (rp) {
+            expect(rp.subInfo!.total, equals(1000));
+            expect(
+              rp.subInfo!.expire,
+              equals(DateTime.fromMillisecondsSinceEpoch(ProfileParser.infiniteTimeThreshold * 1000)),
+            );
+          },
+        );
+      }
+    });
+
     test("decimals are truncated to int", () {
       expectRemote(
         parseRemoteWithHeaders({
@@ -389,6 +569,15 @@ void main() {
       expectRemote(
         parseRemoteWithHeaders({"profile-title": "p", "profile-update-interval": "1.5"}),
         (rp) => expect(rp.options, isNull),
+      );
+    });
+
+    // a number of hours past what a Duration holds made a wrong, even negative, interval
+    test("a huge interval is held to a year", () {
+      expectRemote(
+        parseRemoteWithHeaders({"profile-title": "p", "profile-update-interval": "999999999999999"}),
+        (rp) =>
+            expect(rp.options, equals(const ProfileOptions(updateInterval: Duration(hours: maxUpdateIntervalHours)))),
       );
     });
 
@@ -445,7 +634,7 @@ void main() {
     test("warp header sets extra_security + warp mode", () {
       final o = decodeOverride(headers: {"extra-security": "warp"});
       expect(o["chain-status"], equals("extra_security"));
-      expect((o["extra-security"] as Map)["mode"], equals("warp"));
+      expect((o["extra-security"] as Map)["mode"], equals("warp_auto"));
     });
 
     test("psiphon header sets psiphon mode", () {
@@ -475,7 +664,7 @@ void main() {
 
     test("UserOverride enables warp without a header", () {
       final o = decodeOverride(userOverride: const UserOverride(extraSecurity: "warp"));
-      expect((o["extra-security"] as Map)["mode"], equals("warp"));
+      expect((o["extra-security"] as Map)["mode"], equals("warp_auto"));
     });
 
     test("UserOverride takes precedence over the header", () {
@@ -491,7 +680,7 @@ void main() {
         headers: {"extra-security": "warp"},
         userOverride: const UserOverride(extraSecurity: "garbage"),
       );
-      expect((o["extra-security"] as Map)["mode"], equals("warp"));
+      expect((o["extra-security"] as Map)["mode"], equals("warp_auto"));
     });
   });
 
@@ -591,6 +780,17 @@ void main() {
       expect(ProfileParser.protocol('anytls://pass@1.2.3.4:443'), 'Anytls');
       expect(ProfileParser.protocol('naive+https://u:p@1.2.3.4:443'), 'Naive');
       expect(ProfileParser.protocol('socks://u:p@1.2.3.4:1080'), 'SOCKS');
+    });
+
+    test('an OpenVPN profile, as a file or a link', () {
+      expect(
+        ProfileParser.protocol(
+          'client\ndev tun\nremote vpn.example.com 1194\n<ca>\n-----BEGIN CERTIFICATE-----\n</ca>',
+        ),
+        'OpenVPN',
+      );
+      expect(ProfileParser.protocol('ovpn://Y2xpZW50'), 'OpenVPN');
+      expect(ProfileParser.protocol('ovpn://Y2xpZW50#Office'), 'Office');
     });
 
     test('other link schemes prefer the link name', () {

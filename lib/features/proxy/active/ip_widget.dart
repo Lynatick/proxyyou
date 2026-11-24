@@ -5,7 +5,6 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hiddify/core/haptic/haptic_service.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/utils/ip_utils.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/gen/fonts.gen.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import "package:simple_icons/simple_icons.dart";
@@ -92,12 +91,16 @@ class IPCountryFlag extends HookConsumerWidget {
     required this.countryCode,
     this.organization,
     this.size = 16,
+    this.radius = 8,
     this.padding = EdgeInsets.zero,
     super.key,
   });
 
   final String? countryCode;
   final double size;
+
+  /// The flag's corner radius.
+  final double radius;
 
   final EdgeInsetsGeometry padding;
 
@@ -111,7 +114,7 @@ class IPCountryFlag extends HookConsumerWidget {
       child: Padding(
         padding: padding,
         child: (countryCode?.isEmpty ?? true)
-            ? PlatformIcon(FluentIcons.question_circle_20_regular, size: size)
+            ? Icon(FluentIcons.question_circle_20_regular, size: size)
             : SizedBox(
                 width: size,
                 height: size,
@@ -119,12 +122,14 @@ class IPCountryFlag extends HookConsumerWidget {
                   textDirection: Directionality.of(context),
                   alignment: Alignment.center,
                   children: [
-                    CircleFlag(
-                      // key: ValueKey(countryCode),
-                      countryCode!.toLowerCase() == "ir" ? "ir-shir" : countryCode!,
-                      size: size - 8,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8), // Rounded effect
+                    // a rounded-rect clip, not the package's path clip: the flag's raster is
+                    // shared by every tile, so the clip was what each one paid for
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(radius),
+                      child: CircleFlag(
+                        countryCode!.toLowerCase() == "ir" ? "ir-shir" : countryCode!,
+                        size: size - 8,
+                        shape: null,
                       ),
                     ),
                     if (organization != null)
@@ -154,11 +159,9 @@ const Map<String, OrgIconData> organizationData = {
   "cloudflare": OrgIconData(SimpleIcons.cloudflare, SimpleIconColors.cloudflare),
   "hetzner": OrgIconData(SimpleIcons.hetzner, SimpleIconColors.hetzner),
   "ovh": OrgIconData(SimpleIcons.ovh, SimpleIconColors.ovh),
-  // These brands were removed upstream; use stable platform icons rather than
-  // retaining code points that now refer to unrelated glyphs in the new font.
-  "azure": OrgIconData(Icons.cloud_outlined, Color(0xff0078d4)),
-  "amazon": OrgIconData(Icons.cloud, Color(0xff232f3e)),
-  "oracle": OrgIconData(Icons.storage, Color(0xfff80000)),
+  "azure": OrgIconData(SimpleIcons.microsoftazure, SimpleIconColors.microsoftazure),
+  "amazon": OrgIconData(SimpleIcons.amazonaws, SimpleIconColors.amazonaws),
+  "oracle": OrgIconData(SimpleIcons.oracle, SimpleIconColors.oracle),
   "fastly": OrgIconData(SimpleIcons.fastly, SimpleIconColors.fastly),
   "digitalocean": OrgIconData(SimpleIcons.digitalocean, SimpleIconColors.digitalocean),
   "alibaba": OrgIconData(SimpleIcons.alibabacloud, SimpleIconColors.alibabacloud),
@@ -199,7 +202,7 @@ class OrganisationFlag extends HookConsumerWidget {
     for (final entry in organizationData.entries) {
       if (organization.toLowerCase().contains(entry.key)) {
         return getFlagWidget(
-          widget: PlatformIcon(entry.value.icon, color: Colors.white, size: size - 6),
+          widget: Icon(entry.value.icon, color: Colors.white, size: size - 6),
           color: entry.value.color,
           organization: organization,
           size: size,

@@ -28,21 +28,17 @@ class Empty extends $pb.GeneratedMessage {
   factory Empty.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromBuffer(data, registry);
-  factory Empty.fromJson($core.String json,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+  factory Empty.fromJson($core.String json, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'Empty',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'hcommon'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'Empty',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'hcommon'), createEmptyInstance: create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   Empty clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  Empty copyWith(void Function(Empty) updates) =>
-      super.copyWith((message) => updates(message as Empty)) as Empty;
+  Empty copyWith(void Function(Empty) updates) => super.copyWith((message) => updates(message as Empty)) as Empty;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -53,8 +49,7 @@ class Empty extends $pb.GeneratedMessage {
   Empty createEmptyInstance() => create();
   static $pb.PbList<Empty> createRepeated() => $pb.PbList<Empty>();
   @$core.pragma('dart2js:noInline')
-  static Empty getDefault() =>
-      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<Empty>(create);
+  static Empty getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<Empty>(create);
   static Empty? _defaultInstance;
 }
 
@@ -74,16 +69,12 @@ class Response extends $pb.GeneratedMessage {
   factory Response.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromBuffer(data, registry);
-  factory Response.fromJson($core.String json,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+  factory Response.fromJson($core.String json, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'Response',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'hcommon'),
-      createEmptyInstance: create)
-    ..aE<ResponseCode>(1, _omitFieldNames ? '' : 'code',
-        enumValues: ResponseCode.values)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'Response',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'hcommon'), createEmptyInstance: create)
+    ..aE<ResponseCode>(1, _omitFieldNames ? '' : 'code', enumValues: ResponseCode.values)
     ..aOS(2, _omitFieldNames ? '' : 'message')
     ..hasRequiredFields = false;
 
@@ -102,8 +93,7 @@ class Response extends $pb.GeneratedMessage {
   Response createEmptyInstance() => create();
   static $pb.PbList<Response> createRepeated() => $pb.PbList<Response>();
   @$core.pragma('dart2js:noInline')
-  static Response getDefault() =>
-      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<Response>(create);
+  static Response getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<Response>(create);
   static Response? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -125,7 +115,5 @@ class Response extends $pb.GeneratedMessage {
   void clearMessage() => $_clearField(2);
 }
 
-const $core.bool _omitFieldNames =
-    $core.bool.fromEnvironment('protobuf.omit_field_names');
-const $core.bool _omitMessageNames =
-    $core.bool.fromEnvironment('protobuf.omit_message_names');
+const $core.bool _omitFieldNames = $core.bool.fromEnvironment('protobuf.omit_field_names');
+const $core.bool _omitMessageNames = $core.bool.fromEnvironment('protobuf.omit_message_names');

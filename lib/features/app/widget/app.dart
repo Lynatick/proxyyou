@@ -6,39 +6,45 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:hiddify/core/app_info/app_info_provider.dart';
+import 'package:hiddify/core/localization/fallback_localizations.dart';
 import 'package:hiddify/core/localization/locale_extensions.dart';
 import 'package:hiddify/core/localization/locale_preferences.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
+import 'package:hiddify/core/notification/in_app_notification_controller.dart';
+import 'package:hiddify/core/preferences/general_preferences.dart';
+import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/router/go_router/go_router_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/core/theme/app_theme.dart';
 import 'package:hiddify/core/theme/theme_preferences.dart';
+import 'package:hiddify/core/utils/low_battery.dart';
+import 'package:hiddify/core/widget/ambient_motion.dart';
 import 'package:hiddify/features/app_based_routing/overview/app_based_routing_notifier.dart';
 import 'package:hiddify/features/app_update/notifier/app_update_notifier.dart';
+import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/connection/widget/connection_wrapper.dart';
+import 'package:hiddify/features/crash_report/notifier/crash_report_notifier.dart';
+import 'package:hiddify/features/crash_report/notifier/trace_session_notifier.dart';
 import 'package:hiddify/features/profile/notifier/profiles_update_notifier.dart';
-import 'package:hiddify/features/profile/notifier/subscription_updates_notifier.dart';
 import 'package:hiddify/features/shortcut/shortcut_wrapper.dart';
 import 'package:hiddify/features/system_tray/notifier/system_tray_notifier.dart';
-import 'package:hiddify/features/tv/tv_mode.dart';
-import 'package:hiddify/features/tv/tv_navigation.dart';
 import 'package:hiddify/features/window/widget/window_wrapper.dart';
 import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:toastification/toastification.dart';
+import 'package:upgrader/upgrader.dart';
 
 bool _debugAccessibility = false;
 bool isOnPauseCalled = false;
 
+const _telegramOfferDelay = Duration(minutes: 2);
+const _telegramFirstOfferAfter = Duration(days: 3);
+const _telegramOfferEvery = Duration(days: 30);
+
 class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
   const App({super.key});
-
-  void onInactive(WidgetRef ref) {
-    onPause(ref);
-  }
 
   void onPause(WidgetRef ref) {
     if (PlatformUtils.isDesktop) return;
@@ -47,8 +53,7 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
   }
 
   void onResume(WidgetRef ref) {
-    unawaited(ref.read(appUpdateNotifierProvider.notifier).check());
-    unawaited(ref.read(subscriptionUpdatesProvider.notifier).check());
+    // if (PlatformUtils.isDesktop) return;
     ref.read(hiddifyCoreServiceProvider).init();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -60,29 +65,57 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     setupStateListener(ref);
-    useEffect(() {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) unawaited(ref.read(appUpdateNotifierProvider.notifier).check());
-        unawaited(ref.read(subscriptionUpdatesProvider.notifier).check());
-      });
-      final timer = Timer.periodic(AppUpdateNotifier.retryInterval, (_) {
-        if (context.mounted && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
-          unawaited(ref.read(appUpdateNotifierProvider.notifier).check());
-          unawaited(ref.read(subscriptionUpdatesProvider.notifier).check());
-        }
-      });
-      return timer.cancel;
-    }, const []);
     final router = ref.watch(goRouterNotiferProvider);
     final locale = ref.watch(localePreferencesProvider);
     final themeMode = ref.watch(themePreferencesProvider);
     final theme = AppTheme(themeMode, locale.preferredFontFamily);
-    final isTv = ref.watch(televisionProvider).value ?? false;
+    final upgrader = ref.watch(upgraderProvider);
     final activeBreakpoint = Breakpoint(context).activeBreakpoint;
 
     ref.listen(foregroundProfilesUpdateNotifierProvider, (_, _) {});
+    // detailed logging from Report a problem ends on time, also when the app was closed meanwhile
+    ref.listen(traceSessionProvider, (_, _) {});
     if (PlatformUtils.isAndroid) ref.listen(appBasedRoutingProvider, (_, _) {});
     if (PlatformUtils.isDesktop) ref.listen(systemTrayNotifierProvider, (_, _) {});
+
+    // a crash in the previous run is offered for sending once the first frame is up
+    useEffect(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(crashReportNotifierProvider.notifier).checkOnStart();
+      });
+      // outside a store, a new release is offered once a day, a while after the start
+      final updateCheck = Timer(const Duration(seconds: 20), () async {
+        final release = await ref.read(appUpdateNotifierProvider.notifier).checkOnStart();
+        if (release == null) return;
+        await ref
+            .read(dialogNotifierProvider.notifier)
+            .showNewVersion(
+              currentVersion: ref.read(appInfoProvider).requireValue.presentVersion,
+              newVersion: release,
+              canIgnore: true,
+            );
+      });
+      // the Telegram channel is offered a few days after the first use, then once a month,
+      // some minutes into a run so it does not meet the update or crash report dialogs
+      final telegramOffer = Timer(_telegramOfferDelay, () async {
+        if (!ref.read(Preferences.introCompleted)) return;
+        final now = DateTime.now();
+        final firstUsed = ref.read(Preferences.firstUsedAt);
+        if (firstUsed == null) {
+          await ref.read(Preferences.firstUsedAt.notifier).update(now);
+          return;
+        }
+        if (now.difference(firstUsed) < _telegramFirstOfferAfter) return;
+        final offered = ref.read(Preferences.telegramChannelOfferedAt);
+        if (offered != null && now.difference(offered) < _telegramOfferEvery) return;
+        await ref.read(Preferences.telegramChannelOfferedAt.notifier).update(now);
+        await ref.read(dialogNotifierProvider.notifier).showTelegramChannel();
+      });
+      return () {
+        updateCheck.cancel();
+        telegramOffer.cancel();
+      };
+    }, const []);
 
     // updating ActiveBreakpointNotifier value
     useEffect(() {
@@ -91,33 +124,81 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
       });
       return null;
     }, [activeBreakpoint]);
-    return WindowWrapper(
-      ShortcutWrapper(
-        ToastificationWrapper(
-          child: ConnectionWrapper(
+    // Animations stop while the app cannot be seen: they kept a CPU core busy
+    // and drained laptop batteries with the window in the background. Hidden
+    // and paused already stop the frames. A window without focus, or a minimized
+    // one on Wayland (GTK is not told it was minimized, so it is only inactive),
+    // keeps updating as usual: connection state, proxies and logs still change.
+    // Only the endless decoration (the light around the connect button, the
+    // chain icons) stops there, through [ambientMotion]. Reduce animations
+    // does not stop it: it only stills the connect button's flowing light
+    // (see ConnectionButton). On a phone inactive is a moment under the
+    // notification shade or a system dialog, still on screen. Where it may run,
+    // it runs for a while after it starts and after each change of the
+    // connection, then stands still (see [allowAmbientMotion]); the connect
+    // button's light keeps moving.
+    final lifecycle = useAppLifecycleState();
+    // as soon as it changes: a hidden app draws no frame, so a build would come only once it is back
+    useEffect(() {
+      seeLifecycle(WidgetsBinding.instance.lifecycleState);
+      final listener = AppLifecycleListener(onStateChange: seeLifecycle);
+      return listener.dispose;
+    }, const []);
+    final animate = useValueListenable(appSeen);
+    final focused = useValueListenable(windowFocused);
+    // a battery under 5% stops it too
+    final lowBattery = useLowBattery();
+    final decorate =
+        animate && !lowBattery && !(PlatformUtils.isDesktop && (lifecycle == AppLifecycleState.inactive || !focused));
+    useEffect(() {
+      allowAmbientMotion(decorate);
+      return null;
+    }, [decorate]);
+    ref.listen(connectionNotifierProvider, (previous, next) {
+      if (previous?.valueOrNull != next.valueOrNull) wakeAmbientMotion();
+    });
+    return TickerMode(
+      enabled: animate,
+      child: WindowWrapper(
+        ShortcutWrapper(
+          ConnectionWrapper(
             DynamicColorBuilder(
               builder: (ColorScheme? lightColorScheme, ColorScheme? darkColorScheme) {
                 return MaterialApp.router(
                   routerConfig: router,
+                  scaffoldMessengerKey: appScaffoldMessengerKey,
                   locale: locale.flutterLocale,
-                  supportedLocales: const [Locale("ru")],
-                  localizationsDelegates: GlobalMaterialLocalizations.delegates,
+                  supportedLocales: AppLocaleUtils.supportedLocales,
+                  localizationsDelegates: appLocalizationsDelegates,
                   debugShowCheckedModeBanner: false,
                   themeMode: themeMode.flutterThemeMode,
                   theme: theme.lightTheme(lightColorScheme),
                   darkTheme: theme.darkTheme(darkColorScheme),
                   title: Constants.appName,
-                  builder: (context, routedChild) {
+                  builder: (context, child) {
                     final theme = Theme.of(context);
-                    Widget child = routedChild ?? const SizedBox();
+                    child = SnackBarHost(
+                      child: upgrader == null
+                          ? child ?? const SizedBox()
+                          : UpgradeAlert(
+                              upgrader: upgrader,
+                              navigatorKey: router.routerDelegate.navigatorKey,
+                              child: child ?? const SizedBox(),
+                            ),
+                    );
                     if (kDebugMode && _debugAccessibility) {
                       return AccessibilityTools(checkFontOverflows: true, child: child);
                     }
-                    if (isTv) child = TvNavigation(child: child);
                     return AnnotatedRegion<SystemUiOverlayStyle>(
+                      // The page draws behind the bars, but with 3-button navigation, and with
+                      // gestures on One UI, Android paints a navigation bar background over the
+                      // page's bottom in this color. Without it that strip is dark or black
+                      // (#2532).
                       value: SystemUiOverlayStyle(
-                        statusBarColor: theme.scaffoldBackgroundColor,
                         systemNavigationBarColor: theme.scaffoldBackgroundColor,
+                        statusBarIconBrightness: theme.brightness == Brightness.dark
+                            ? Brightness.light
+                            : Brightness.dark,
                         systemNavigationBarIconBrightness: theme.brightness == Brightness.dark
                             ? Brightness.light
                             : Brightness.dark,
@@ -159,8 +240,8 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
   //                       return PlatformApp.router(
   //                         routerConfig: router,
   //                         locale: locale.flutterLocale,
-  //                         supportedLocales: const [Locale("ru")],
-  //                         localizationsDelegates: GlobalMaterialLocalizations.delegates,
+  //                         supportedLocales: AppLocaleUtils.supportedLocales,
+  //                         localizationsDelegates: appLocalizationsDelegates,
   //                         debugShowCheckedModeBanner: false,
   //                         material: (context, platform) => MaterialAppRouterData(
   //                           theme: theme.lightTheme(lightColorScheme),
@@ -197,19 +278,27 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
   // }
 
   void setupStateListener(WidgetRef ref) {
-    final appLifecycleState = useAppLifecycleState();
-
     useEffect(() {
-      loggy.info("current app state");
-      loggy.info(appLifecycleState);
-      if (appLifecycleState == AppLifecycleState.paused) {
-        onPause(ref);
-      } else if (appLifecycleState == AppLifecycleState.inactive) {
-        onInactive(ref);
-      } else if (appLifecycleState == AppLifecycleState.resumed) {
-        onResume(ref);
+      // The engine calls the listener directly, so a pause is seen even when no frame is drawn in the
+      // background. Inactive (a dialog, the notification shade) is not a pause and closes nothing.
+      // On desktop a window losing focus is inactive too, so coming back from inactive alone sets
+      // nothing up again: doing it on every focus change reconnected to the core, reloaded what
+      // watches it, and made the home page blink.
+      var away = true;
+      void handle(AppLifecycleState state) {
+        loggy.info("app state: $state");
+        if (state == AppLifecycleState.hidden || state == AppLifecycleState.paused) away = true;
+        if (state == AppLifecycleState.paused) onPause(ref);
+        if (state == AppLifecycleState.resumed && away) {
+          away = false;
+          onResume(ref);
+        }
       }
-      return null;
-    }, [appLifecycleState]);
+
+      final initial = WidgetsBinding.instance.lifecycleState;
+      if (initial != null) handle(initial);
+      final listener = AppLifecycleListener(onStateChange: handle);
+      return listener.dispose;
+    }, const []);
   }
 }

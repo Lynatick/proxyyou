@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
@@ -22,6 +23,9 @@ sealed class ConnectionFailure with _$ConnectionFailure, Failure {
   const factory ConnectionFailure.missingPrivilege() = MissingPrivilege;
 
   @With<ExpectedMeasuredFailure>()
+  const factory ConnectionFailure.tunAddressInUse() = TunAddressInUse;
+
+  @With<ExpectedMeasuredFailure>()
   const factory ConnectionFailure.invalidConfigOption([String? message, ConfigOptionFailure? configOptionFailure]) =
       InvalidConfigOption;
 
@@ -37,6 +41,15 @@ sealed class ConnectionFailure with _$ConnectionFailure, Failure {
   @With<ExpectedMeasuredFailure>()
   const factory ConnectionFailure.missingPsiphonLicense() = MissingPsiphonLicense;
 
+  factory ConnectionFailure.fromError(Object error, [StackTrace? stackTrace]) => switch (error) {
+    ConnectionFailure() => error,
+    PlatformException(code: 'MACOS_VPN_APPROVAL_REQUIRED', :final message) => ConnectionFailure.missingVpnPermission(
+      message,
+    ),
+    PlatformException(code: 'MACOS_VPN', message: final message?) => ConnectionFailure.unexpected(message, stackTrace),
+    _ => ConnectionFailure.unexpected(error, stackTrace),
+  };
+
   @override
   ({String type, String? message}) present(TranslationsEn t) {
     return switch (this) {
@@ -51,6 +64,7 @@ sealed class ConnectionFailure with _$ConnectionFailure, Failure {
         message: message,
       ),
       MissingPrivilege() => (type: t.errors.singbox.missingPrivilege, message: t.errors.singbox.missingPrivilegeMsg),
+      TunAddressInUse() => (type: t.errors.singbox.tunAddressInUse, message: t.errors.singbox.tunAddressInUseMsg),
       InvalidConfigOption(:final message, :final configOptionFailure) =>
         configOptionFailure?.present(t) ?? (type: t.errors.singbox.invalidConfigOptions, message: message),
       InvalidConfig(:final message) => (type: t.errors.singbox.invalidConfig, message: message),

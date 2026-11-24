@@ -56,6 +56,7 @@ class FreeBtns extends ConsumerWidget {
                               url: profile.sublink,
                               userOverride: UserOverride(
                                 name: title,
+                                updateInterval: 12,
                                 extraSecurity: switch (profile.neededFeatures) {
                                   final f? when f.contains('psiphon_over_proxies') => 'psiphon',
                                   final f? when f.contains('warp_over_proxies') => 'warp',

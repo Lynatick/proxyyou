@@ -7,7 +7,7 @@ import 'package:hiddify/core/logger/ring/log_ring.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
+import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/log/model/log_level.dart' as engine;
 import 'package:hiddify/features/log/overview/logs_overview_notifier.dart';
@@ -25,7 +25,7 @@ const _bottomSlack = 24.0;
 ///
 /// Window width, not the bar's own — that is how the rest of the app states a
 /// breakpoint, and the bar is narrower than the window by the nav rail.
-const _oneRowMinWindowWidth = 700.0;
+const _oneRowMinWindowWidth = 820.0;
 
 class LogsPage extends ConsumerStatefulWidget {
   const LogsPage({super.key});
@@ -66,7 +66,7 @@ class _LogsPageState extends ConsumerState<LogsPage> with PresLogger {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final visible = TickerMode.valuesOf(context).enabled;
+    final visible = TickerMode.of(context);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(logsOverviewNotifierProvider.notifier).setVisible(visible);
@@ -108,19 +108,19 @@ class _LogsPageState extends ConsumerState<LogsPage> with PresLogger {
           const SizedBox(width: 4),
           IconButton(
             onPressed: state.paused ? notifier.resume : notifier.pause,
-            icon: PlatformIcon(state.paused ? FluentIcons.play_20_regular : FluentIcons.pause_20_regular),
+            icon: Icon(state.paused ? FluentIcons.play_20_regular : FluentIcons.pause_20_regular),
             tooltip: state.paused ? t.common.resume : t.common.pause,
             iconSize: 20,
           ),
           IconButton(
             onPressed: notifier.clear,
-            icon: const PlatformIcon(FluentIcons.delete_lines_20_regular),
+            icon: const Icon(FluentIcons.delete_lines_20_regular),
             tooltip: t.common.clear,
             iconSize: 20,
           ),
           IconButton(
             onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showLogsShare(),
-            icon: const PlatformIcon(FluentIcons.share_20_regular),
+            icon: const Icon(FluentIcons.share_20_regular),
             tooltip: t.common.share,
             iconSize: 20,
           ),
@@ -143,6 +143,18 @@ class _LogsPageState extends ConsumerState<LogsPage> with PresLogger {
             search: _search,
             onSearch: notifier.filterText,
             showCoreLevel: true,
+            // one tap to the developers: these logs with everything else that explains them
+            action: FilledButton.tonalIcon(
+              onPressed: () => ref.read(dialogNotifierProvider.notifier).showReportProblem(),
+              icon: const Icon(FluentIcons.chat_warning_20_regular, size: 16),
+              label: Text(t.pages.logs.fullReport),
+              style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                textStyle: Theme.of(context).textTheme.labelMedium,
+              ),
+            ),
           ),
         ],
       ),
@@ -167,7 +179,7 @@ class _CoreLevelChip extends ConsumerWidget {
       label: t.pages.logs.coreLogLevel,
       value: ref.watch(ConfigOptions.logLevel),
       options: engine.LogLevel.choices,
-      nameOf: (value) => value == engine.LogLevel.off ? 'Отключено' : value.name,
+      nameOf: (value) => value.name,
       onSelected: (value) async {
         if (value == null) return;
         // Read before the await: the status can change while it is in flight.
@@ -247,6 +259,7 @@ class LogFilterBar extends ConsumerWidget {
     this.search,
     this.onSearch,
     this.showCoreLevel = false,
+    this.action,
   });
 
   final LogCategory? category;
@@ -262,6 +275,9 @@ class LogFilterBar extends ConsumerWidget {
   /// Also left out by the share sheet: it decides what to send from what has
   /// already been recorded, and cannot change what the core records.
   final bool showCoreLevel;
+
+  /// Shown between the search field and the chips: the page's way to the full report.
+  final Widget? action;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -305,6 +321,7 @@ class LogFilterBar extends ConsumerWidget {
               children: [
                 Expanded(child: _search(theme, t)),
                 const SizedBox(width: 8),
+                if (action case final action?) ...[action, const SizedBox(width: 8)],
                 ...chips,
               ],
             )
@@ -313,7 +330,14 @@ class LogFilterBar extends ConsumerWidget {
               children: [
                 _search(theme, t),
                 const SizedBox(height: 8),
-                Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 6, children: chips),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  runSpacing: 6,
+                  children: [
+                    if (action case final action?) ...[action, const SizedBox(width: 6)],
+                    ...chips,
+                  ],
+                ),
               ],
             ),
     );
@@ -336,7 +360,7 @@ class LogFilterBar extends ConsumerWidget {
         hintText: t.common.filter,
         hintStyle: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         contentPadding: const EdgeInsets.only(right: 10, top: 9, bottom: 9),
-        prefixIcon: PlatformIcon(FluentIcons.search_20_regular, size: 15, color: theme.colorScheme.onSurfaceVariant),
+        prefixIcon: Icon(FluentIcons.search_20_regular, size: 15, color: theme.colorScheme.onSurfaceVariant),
         prefixIconConstraints: const BoxConstraints(minWidth: 30),
       ),
     );
@@ -393,7 +417,7 @@ class _DropdownChip<T> extends StatelessWidget {
             Text(label, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             const SizedBox(width: 5),
             Text(current == null ? allLabel ?? '' : nameOf(current), style: theme.textTheme.labelSmall),
-            PlatformIcon(Icons.arrow_drop_down_rounded, size: 18, color: theme.colorScheme.onSurfaceVariant),
+            Icon(Icons.arrow_drop_down_rounded, size: 18, color: theme.colorScheme.onSurfaceVariant),
           ],
         ),
       ),
@@ -444,7 +468,7 @@ class _LogRow extends ConsumerWidget {
           value: true,
           child: Row(
             children: [
-              const PlatformIcon(FluentIcons.copy_20_regular, size: 18),
+              const Icon(FluentIcons.copy_20_regular, size: 18),
               const SizedBox(width: 10),
               Text(t.common.addToClipboard),
             ],

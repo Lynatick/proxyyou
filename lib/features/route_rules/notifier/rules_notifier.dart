@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dartx/dartx_io.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:hiddify/core/directories/directories_provider.dart';
 import 'package:hiddify/core/localization/translations.dart';
@@ -17,11 +18,13 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 part 'rules_notifier.g.dart';
 
 const _geoUrl = 'https://raw.githubusercontent.com/hiddify/hiddify-geo/rule-set';
+const _geositeUrl = 'https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set';
 
 /// Rules the app ships with, in the order a new list starts with. They are always in the list: the user can
 /// only switch and move them, and their content comes from here, so an update can change it.
 enum BuiltinRule {
   bypassLan(enabledByDefault: true),
+  systemDirect(enabledByDefault: false),
   blockAds(enabledByDefault: false),
   bypassRegion(enabledByDefault: true);
 
@@ -32,10 +35,20 @@ enum BuiltinRule {
   /// Saved as the rule's name; the list shows [present] instead.
   String get key => 'builtin:$name';
 
-  static BuiltinRule? of(Rule rule) => values.where((builtin) => builtin.key == rule.name).firstOrNull;
+  /// The names built-in rules were saved under before, each with the rule it is now.
+  static const _formerKeys = {'builtin:appleDirect': systemDirect};
+
+  static BuiltinRule? of(Rule rule) =>
+      values.where((builtin) => builtin.key == rule.name).firstOrNull ?? _formerKeys[rule.name];
 
   String present(Translations t, Region region) => switch (this) {
     bypassLan => t.pages.settings.routing.builtinRules.bypassLan,
+    systemDirect => switch (defaultTargetPlatform) {
+      TargetPlatform.iOS || TargetPlatform.macOS => t.pages.settings.routing.builtinRules.systemDirect.apple,
+      TargetPlatform.windows => t.pages.settings.routing.builtinRules.systemDirect.microsoft,
+      TargetPlatform.android || TargetPlatform.fuchsia => t.pages.settings.routing.builtinRules.systemDirect.android,
+      TargetPlatform.linux => t.pages.settings.routing.builtinRules.systemDirect.linux,
+    },
     blockAds => t.pages.settings.routing.builtinRules.blockAds,
     bypassRegion => t.pages.settings.routing.builtinRules.bypassRegion(region: region.presentName(t)),
   };
@@ -59,6 +72,69 @@ enum BuiltinRule {
         '::/128',
       ],
     ),
+    // The system's own services (updates, app store, push, cloud sync) are not filtered and move a lot of
+    // data, so they go direct instead of through the proxy. The rule set carries the full list; the suffixes
+    // cover the main services until it is downloaded, and if it never is.
+    systemDirect => switch (defaultTargetPlatform) {
+      TargetPlatform.iOS || TargetPlatform.macOS => Rule(
+        outbound: Outbound.direct,
+        ruleSets: ['$_geositeUrl/geosite-apple.srs'],
+        domainSuffixes: [
+          'apple.com',
+          'icloud.com',
+          'icloud-content.com',
+          'apple-dns.net',
+          'cdn-apple.com',
+          'mzstatic.com',
+          'aaplimg.com',
+          'itunes.com',
+          'apple-cloudkit.com',
+          'apple-mapkit.com',
+          'testflight.apple.com',
+        ],
+      ),
+      TargetPlatform.windows => Rule(
+        outbound: Outbound.direct,
+        ruleSets: ['$_geositeUrl/geosite-microsoft.srs'],
+        domainSuffixes: [
+          'microsoft.com',
+          'windows.com',
+          'windows.net',
+          'windowsupdate.com',
+          'msftconnecttest.com',
+          'msftncsi.com',
+          'live.com',
+          'office.com',
+          'office.net',
+          'microsoftonline.com',
+          'onedrive.com',
+          'msedge.net',
+        ],
+      ),
+      // Google Play is left out: it refuses some countries' addresses, so it only works through the proxy there.
+      TargetPlatform.android || TargetPlatform.fuchsia => Rule(
+        outbound: Outbound.direct,
+        ruleSets: ['$_geositeUrl/geosite-android.srs', '$_geositeUrl/geosite-googlefcm.srs'],
+        domainSuffixes: ['android.com', 'mtalk.google.com'],
+      ),
+      TargetPlatform.linux => Rule(
+        outbound: Outbound.direct,
+        ruleSets: [
+          '$_geositeUrl/geosite-ubuntu.srs',
+          '$_geositeUrl/geosite-debian.srs',
+          '$_geositeUrl/geosite-fedora.srs',
+          '$_geositeUrl/geosite-archlinux.srs',
+        ],
+        domainSuffixes: [
+          'ubuntu.com',
+          'debian.org',
+          'fedoraproject.org',
+          'archlinux.org',
+          'flathub.org',
+          'snapcraft.io',
+        ],
+      ),
+    },
     blockAds => Rule(
       outbound: Outbound.block,
       ruleSets: [
@@ -126,6 +202,22 @@ class RulesNotifier extends _$RulesNotifier with AppLogger {
     await _updateFile();
   }
 
+  /// A copy of a rule, placed right after the original and open to any change: the way to tailor a
+  /// built-in rule, which itself cannot be edited. Returns the copy's list order.
+  Future<int> duplicateRule(int listOrder) async {
+    final current = state;
+    final index = current.indexWhere((element) => element.listOrder == listOrder);
+    if (index == -1) return listOrder;
+    final source = current[index];
+    final builtin = BuiltinRule.of(source);
+    final copy = source.deepCopy()
+      ..name = builtin == null ? '${source.name} (2)' : builtin.name
+      ..enabled = false;
+    state = _updateListOrder([...current.sublist(0, index + 1), copy, ...current.sublist(index + 1)]);
+    await _updateFile();
+    return index + 1;
+  }
+
   Future<void> updateRule(Rule rule) async {
     final current = state;
     final index = current.indexWhere((element) => element.listOrder == rule.listOrder);
@@ -142,10 +234,9 @@ class RulesNotifier extends _$RulesNotifier with AppLogger {
   }
 
   Future<void> reorder(int oldIndex, int newIndex) async {
-    final current = state.toList();
+    final current = state;
     final rule = current.removeAt(oldIndex);
-    // onReorderItem already adjusts the destination after removing the item.
-    current.insert(newIndex, rule);
+    current.insert(oldIndex < newIndex ? newIndex - 1 : newIndex, rule);
     state = _updateListOrder(current).toList();
     await _updateFile();
   }

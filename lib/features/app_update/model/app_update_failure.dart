@@ -4,7 +4,7 @@ import 'package:hiddify/core/model/failures.dart';
 
 part 'app_update_failure.freezed.dart';
 
-@Freezed(copyWith: false)
+@freezed
 sealed class AppUpdateFailure with _$AppUpdateFailure, Failure {
   const AppUpdateFailure._();
 

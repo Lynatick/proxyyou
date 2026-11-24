@@ -101,41 +101,34 @@ class ProfileServiceClient extends $grpc.Client {
 
   // method descriptors
 
-  static final _$getProfile =
-      $grpc.ClientMethod<$0.ProfileRequest, $0.ProfileResponse>(
-          '/profile.ProfileService/GetProfile',
-          ($0.ProfileRequest value) => value.writeToBuffer(),
-          $0.ProfileResponse.fromBuffer);
-  static final _$updateProfile =
-      $grpc.ClientMethod<$1.ProfileEntity, $0.ProfileResponse>(
-          '/profile.ProfileService/UpdateProfile',
-          ($1.ProfileEntity value) => value.writeToBuffer(),
-          $0.ProfileResponse.fromBuffer);
-  static final _$getAllProfiles =
-      $grpc.ClientMethod<$2.Empty, $0.MultiProfilesResponse>(
-          '/profile.ProfileService/GetAllProfiles',
-          ($2.Empty value) => value.writeToBuffer(),
-          $0.MultiProfilesResponse.fromBuffer);
-  static final _$getActiveProfile =
-      $grpc.ClientMethod<$2.Empty, $0.ProfileResponse>(
-          '/profile.ProfileService/GetActiveProfile',
-          ($2.Empty value) => value.writeToBuffer(),
-          $0.ProfileResponse.fromBuffer);
-  static final _$setActiveProfile =
-      $grpc.ClientMethod<$0.ProfileRequest, $2.Response>(
-          '/profile.ProfileService/SetActiveProfile',
-          ($0.ProfileRequest value) => value.writeToBuffer(),
-          $2.Response.fromBuffer);
-  static final _$addProfile =
-      $grpc.ClientMethod<$0.AddProfileRequest, $0.ProfileResponse>(
-          '/profile.ProfileService/AddProfile',
-          ($0.AddProfileRequest value) => value.writeToBuffer(),
-          $0.ProfileResponse.fromBuffer);
-  static final _$deleteProfile =
-      $grpc.ClientMethod<$0.ProfileRequest, $2.Response>(
-          '/profile.ProfileService/DeleteProfile',
-          ($0.ProfileRequest value) => value.writeToBuffer(),
-          $2.Response.fromBuffer);
+  static final _$getProfile = $grpc.ClientMethod<$0.ProfileRequest, $0.ProfileResponse>(
+      '/profile.ProfileService/GetProfile',
+      ($0.ProfileRequest value) => value.writeToBuffer(),
+      $0.ProfileResponse.fromBuffer);
+  static final _$updateProfile = $grpc.ClientMethod<$1.ProfileEntity, $0.ProfileResponse>(
+      '/profile.ProfileService/UpdateProfile',
+      ($1.ProfileEntity value) => value.writeToBuffer(),
+      $0.ProfileResponse.fromBuffer);
+  static final _$getAllProfiles = $grpc.ClientMethod<$2.Empty, $0.MultiProfilesResponse>(
+      '/profile.ProfileService/GetAllProfiles',
+      ($2.Empty value) => value.writeToBuffer(),
+      $0.MultiProfilesResponse.fromBuffer);
+  static final _$getActiveProfile = $grpc.ClientMethod<$2.Empty, $0.ProfileResponse>(
+      '/profile.ProfileService/GetActiveProfile',
+      ($2.Empty value) => value.writeToBuffer(),
+      $0.ProfileResponse.fromBuffer);
+  static final _$setActiveProfile = $grpc.ClientMethod<$0.ProfileRequest, $2.Response>(
+      '/profile.ProfileService/SetActiveProfile',
+      ($0.ProfileRequest value) => value.writeToBuffer(),
+      $2.Response.fromBuffer);
+  static final _$addProfile = $grpc.ClientMethod<$0.AddProfileRequest, $0.ProfileResponse>(
+      '/profile.ProfileService/AddProfile',
+      ($0.AddProfileRequest value) => value.writeToBuffer(),
+      $0.ProfileResponse.fromBuffer);
+  static final _$deleteProfile = $grpc.ClientMethod<$0.ProfileRequest, $2.Response>(
+      '/profile.ProfileService/DeleteProfile',
+      ($0.ProfileRequest value) => value.writeToBuffer(),
+      $2.Response.fromBuffer);
 }
 
 @$pb.GrpcServiceName('profile.ProfileService')
@@ -194,59 +187,52 @@ abstract class ProfileServiceBase extends $grpc.Service {
         ($2.Response value) => value.writeToBuffer()));
   }
 
-  $async.Future<$0.ProfileResponse> getProfile_Pre($grpc.ServiceCall $call,
-      $async.Future<$0.ProfileRequest> $request) async {
+  $async.Future<$0.ProfileResponse> getProfile_Pre(
+      $grpc.ServiceCall $call, $async.Future<$0.ProfileRequest> $request) async {
     return getProfile($call, await $request);
   }
 
-  $async.Future<$0.ProfileResponse> getProfile(
-      $grpc.ServiceCall call, $0.ProfileRequest request);
+  $async.Future<$0.ProfileResponse> getProfile($grpc.ServiceCall call, $0.ProfileRequest request);
 
   $async.Future<$0.ProfileResponse> updateProfile_Pre(
       $grpc.ServiceCall $call, $async.Future<$1.ProfileEntity> $request) async {
     return updateProfile($call, await $request);
   }
 
-  $async.Future<$0.ProfileResponse> updateProfile(
-      $grpc.ServiceCall call, $1.ProfileEntity request);
+  $async.Future<$0.ProfileResponse> updateProfile($grpc.ServiceCall call, $1.ProfileEntity request);
 
   $async.Future<$0.MultiProfilesResponse> getAllProfiles_Pre(
       $grpc.ServiceCall $call, $async.Future<$2.Empty> $request) async {
     return getAllProfiles($call, await $request);
   }
 
-  $async.Future<$0.MultiProfilesResponse> getAllProfiles(
-      $grpc.ServiceCall call, $2.Empty request);
+  $async.Future<$0.MultiProfilesResponse> getAllProfiles($grpc.ServiceCall call, $2.Empty request);
 
   $async.Future<$0.ProfileResponse> getActiveProfile_Pre(
       $grpc.ServiceCall $call, $async.Future<$2.Empty> $request) async {
     return getActiveProfile($call, await $request);
   }
 
-  $async.Future<$0.ProfileResponse> getActiveProfile(
-      $grpc.ServiceCall call, $2.Empty request);
+  $async.Future<$0.ProfileResponse> getActiveProfile($grpc.ServiceCall call, $2.Empty request);
 
-  $async.Future<$2.Response> setActiveProfile_Pre($grpc.ServiceCall $call,
-      $async.Future<$0.ProfileRequest> $request) async {
+  $async.Future<$2.Response> setActiveProfile_Pre(
+      $grpc.ServiceCall $call, $async.Future<$0.ProfileRequest> $request) async {
     return setActiveProfile($call, await $request);
   }
 
-  $async.Future<$2.Response> setActiveProfile(
-      $grpc.ServiceCall call, $0.ProfileRequest request);
+  $async.Future<$2.Response> setActiveProfile($grpc.ServiceCall call, $0.ProfileRequest request);
 
-  $async.Future<$0.ProfileResponse> addProfile_Pre($grpc.ServiceCall $call,
-      $async.Future<$0.AddProfileRequest> $request) async {
+  $async.Future<$0.ProfileResponse> addProfile_Pre(
+      $grpc.ServiceCall $call, $async.Future<$0.AddProfileRequest> $request) async {
     return addProfile($call, await $request);
   }
 
-  $async.Future<$0.ProfileResponse> addProfile(
-      $grpc.ServiceCall call, $0.AddProfileRequest request);
+  $async.Future<$0.ProfileResponse> addProfile($grpc.ServiceCall call, $0.AddProfileRequest request);
 
-  $async.Future<$2.Response> deleteProfile_Pre($grpc.ServiceCall $call,
-      $async.Future<$0.ProfileRequest> $request) async {
+  $async.Future<$2.Response> deleteProfile_Pre(
+      $grpc.ServiceCall $call, $async.Future<$0.ProfileRequest> $request) async {
     return deleteProfile($call, await $request);
   }
 
-  $async.Future<$2.Response> deleteProfile(
-      $grpc.ServiceCall call, $0.ProfileRequest request);
+  $async.Future<$2.Response> deleteProfile($grpc.ServiceCall call, $0.ProfileRequest request);
 }

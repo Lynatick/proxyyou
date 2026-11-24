@@ -1,3 +1,4 @@
+import 'package:hiddify/core/utils/proxy_secret.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,6 +15,9 @@ class PreferencesMigration with InfraLogger {
     final migrationSteps = <PreferencesMigrationStep>[
       PreferencesVersion1Migration(sharedPreferences),
       PreferencesVersion2Migration(sharedPreferences),
+      PreferencesVersion3Migration(sharedPreferences),
+      PreferencesVersion4Migration(sharedPreferences),
+      PreferencesVersion5Migration(sharedPreferences),
     ];
 
     if (currentVersion == migrationSteps.length) {
@@ -48,7 +52,7 @@ class PreferencesVersion1Migration extends PreferencesMigrationStep with InfraLo
   Future<void> migrate() async {
     if (sharedPreferences.getString("service-mode") case final String serviceMode) {
       final newMode = switch (serviceMode) {
-        "proxy" || "system-proxy" || "vpn" => serviceMode,
+        "proxy" || "system-proxy" || "vpn" || "router" => serviceMode,
         "systemProxy" => "system-proxy",
         "tun" => "vpn",
         _ => PlatformUtils.isDesktop ? "system-proxy" : "vpn",
@@ -91,12 +95,12 @@ class PreferencesVersion1Migration extends PreferencesMigrationStep with InfraLo
     await sharedPreferences.remove("cron_profiles_update");
   }
 
+  /// IPv6 for the apps is off (ipv4_only) unless turned on; the retired "exclusive"/ipv6_only
+  /// becomes the preference nearest it, and "enable" the IPv4-first one.
   String _ipv6Mapper(String persisted) => switch (persisted) {
-    "ipv4_only" || "prefer_ipv4" || "prefer_ipv4" || "ipv6_only" => persisted,
-    "disable" => "ipv4_only",
+    "ipv4_only" || "prefer_ipv4" || "prefer_ipv6" => persisted,
     "enable" => "prefer_ipv4",
-    "prefer" => "prefer_ipv6",
-    "only" => "ipv6_only",
+    "prefer" || "only" || "ipv6_only" => "prefer_ipv6",
     _ => "ipv4_only",
   };
 
@@ -127,5 +131,53 @@ class PreferencesVersion2Migration extends PreferencesMigrationStep with InfraLo
         await sharedPreferences.setBool("per_app_proxy_enabled", true);
       }
     }
+  }
+}
+
+/// The unblocker's WARP clean IP chose the endpoint source as well: an address meant that address,
+/// the words auto/default/random (and auto4/auto6) a scan. The source is its own preference now,
+/// and the clean IP only the custom address.
+class PreferencesVersion3Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion3Migration(super.sharedPreferences);
+
+  @override
+  Future<void> migrate() async {
+    const cleanIpKey = "unblocker-warp-clean-ip";
+    const endpointKey = "unblocker-warp-endpoint";
+    if (sharedPreferences.containsKey(endpointKey)) return;
+    final cleanIp = sharedPreferences.getString(cleanIpKey)?.trim() ?? '';
+    if (cleanIp.isEmpty) return;
+    if (const ['auto', 'auto4', 'auto6', 'default', 'random'].contains(cleanIp.toLowerCase())) {
+      loggy.debug("unblocker WARP clean ip [$cleanIp] was a scan");
+      await sharedPreferences.setString(endpointKey, "scan");
+      await sharedPreferences.remove(cleanIpKey);
+    } else {
+      loggy.debug("unblocker WARP clean ip [$cleanIp] is its custom endpoint");
+      await sharedPreferences.setString(endpointKey, "custom");
+    }
+  }
+}
+
+/// The local SOCKS/HTTP port asks for a secret in proxy mode and from the local network, so every
+/// install gets one; it was made only once LAN sharing was turned on.
+class PreferencesVersion4Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion4Migration(super.sharedPreferences);
+
+  @override
+  Future<void> migrate() async {
+    const key = "lan_sharing_password";
+    if ((sharedPreferences.getString(key) ?? '').isNotEmpty) return;
+    loggy.debug("making the proxy secret");
+    await sharedPreferences.setString(key, generateProxySecret());
+  }
+}
+
+/// "Use xray-core when possible" is gone, so a value an older version saved is dropped.
+class PreferencesVersion5Migration extends PreferencesMigrationStep with InfraLogger {
+  PreferencesVersion5Migration(super.sharedPreferences);
+
+  @override
+  Future<void> migrate() async {
+    await sharedPreferences.remove("use-xray-core-when-possible");
   }
 }

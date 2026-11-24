@@ -65,26 +65,22 @@ class EzytelClient extends $grpc.Client {
 
   // method descriptors
 
-  static final _$getChannelInfo =
-      $grpc.ClientMethod<$0.ChannelInfoRequest, $0.ChannelInfo>(
-          '/ezytel.Ezytel/GetChannelInfo',
-          ($0.ChannelInfoRequest value) => value.writeToBuffer(),
-          $0.ChannelInfo.fromBuffer);
-  static final _$getChannelMessages =
-      $grpc.ClientMethod<$0.ChannelMessagesRequest, $0.ChannelMessagesResponse>(
-          '/ezytel.Ezytel/GetChannelMessages',
-          ($0.ChannelMessagesRequest value) => value.writeToBuffer(),
-          $0.ChannelMessagesResponse.fromBuffer);
-  static final _$proxyImage =
-      $grpc.ClientMethod<$0.ProxyImageRequest, $0.ProxyImageResponse>(
-          '/ezytel.Ezytel/ProxyImage',
-          ($0.ProxyImageRequest value) => value.writeToBuffer(),
-          $0.ProxyImageResponse.fromBuffer);
-  static final _$parseChannels =
-      $grpc.ClientMethod<$0.ParseChannelsRequest, $0.ParseChannelsResponse>(
-          '/ezytel.Ezytel/ParseChannels',
-          ($0.ParseChannelsRequest value) => value.writeToBuffer(),
-          $0.ParseChannelsResponse.fromBuffer);
+  static final _$getChannelInfo = $grpc.ClientMethod<$0.ChannelInfoRequest, $0.ChannelInfo>(
+      '/ezytel.Ezytel/GetChannelInfo',
+      ($0.ChannelInfoRequest value) => value.writeToBuffer(),
+      $0.ChannelInfo.fromBuffer);
+  static final _$getChannelMessages = $grpc.ClientMethod<$0.ChannelMessagesRequest, $0.ChannelMessagesResponse>(
+      '/ezytel.Ezytel/GetChannelMessages',
+      ($0.ChannelMessagesRequest value) => value.writeToBuffer(),
+      $0.ChannelMessagesResponse.fromBuffer);
+  static final _$proxyImage = $grpc.ClientMethod<$0.ProxyImageRequest, $0.ProxyImageResponse>(
+      '/ezytel.Ezytel/ProxyImage',
+      ($0.ProxyImageRequest value) => value.writeToBuffer(),
+      $0.ProxyImageResponse.fromBuffer);
+  static final _$parseChannels = $grpc.ClientMethod<$0.ParseChannelsRequest, $0.ParseChannelsResponse>(
+      '/ezytel.Ezytel/ParseChannels',
+      ($0.ParseChannelsRequest value) => value.writeToBuffer(),
+      $0.ParseChannelsResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('ezytel.Ezytel')
@@ -97,17 +93,14 @@ abstract class EzytelServiceBase extends $grpc.Service {
         getChannelInfo_Pre,
         false,
         false,
-        ($core.List<$core.int> value) =>
-            $0.ChannelInfoRequest.fromBuffer(value),
+        ($core.List<$core.int> value) => $0.ChannelInfoRequest.fromBuffer(value),
         ($0.ChannelInfo value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.ChannelMessagesRequest,
-            $0.ChannelMessagesResponse>(
+    $addMethod($grpc.ServiceMethod<$0.ChannelMessagesRequest, $0.ChannelMessagesResponse>(
         'GetChannelMessages',
         getChannelMessages_Pre,
         false,
         false,
-        ($core.List<$core.int> value) =>
-            $0.ChannelMessagesRequest.fromBuffer(value),
+        ($core.List<$core.int> value) => $0.ChannelMessagesRequest.fromBuffer(value),
         ($0.ChannelMessagesResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.ProxyImageRequest, $0.ProxyImageResponse>(
         'ProxyImage',
@@ -116,48 +109,41 @@ abstract class EzytelServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.ProxyImageRequest.fromBuffer(value),
         ($0.ProxyImageResponse value) => value.writeToBuffer()));
-    $addMethod(
-        $grpc.ServiceMethod<$0.ParseChannelsRequest, $0.ParseChannelsResponse>(
-            'ParseChannels',
-            parseChannels_Pre,
-            false,
-            false,
-            ($core.List<$core.int> value) =>
-                $0.ParseChannelsRequest.fromBuffer(value),
-            ($0.ParseChannelsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ParseChannelsRequest, $0.ParseChannelsResponse>(
+        'ParseChannels',
+        parseChannels_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.ParseChannelsRequest.fromBuffer(value),
+        ($0.ParseChannelsResponse value) => value.writeToBuffer()));
   }
 
-  $async.Future<$0.ChannelInfo> getChannelInfo_Pre($grpc.ServiceCall $call,
-      $async.Future<$0.ChannelInfoRequest> $request) async {
+  $async.Future<$0.ChannelInfo> getChannelInfo_Pre(
+      $grpc.ServiceCall $call, $async.Future<$0.ChannelInfoRequest> $request) async {
     return getChannelInfo($call, await $request);
   }
 
-  $async.Future<$0.ChannelInfo> getChannelInfo(
-      $grpc.ServiceCall call, $0.ChannelInfoRequest request);
+  $async.Future<$0.ChannelInfo> getChannelInfo($grpc.ServiceCall call, $0.ChannelInfoRequest request);
 
   $async.Future<$0.ChannelMessagesResponse> getChannelMessages_Pre(
-      $grpc.ServiceCall $call,
-      $async.Future<$0.ChannelMessagesRequest> $request) async {
+      $grpc.ServiceCall $call, $async.Future<$0.ChannelMessagesRequest> $request) async {
     return getChannelMessages($call, await $request);
   }
 
   $async.Future<$0.ChannelMessagesResponse> getChannelMessages(
       $grpc.ServiceCall call, $0.ChannelMessagesRequest request);
 
-  $async.Future<$0.ProxyImageResponse> proxyImage_Pre($grpc.ServiceCall $call,
-      $async.Future<$0.ProxyImageRequest> $request) async {
+  $async.Future<$0.ProxyImageResponse> proxyImage_Pre(
+      $grpc.ServiceCall $call, $async.Future<$0.ProxyImageRequest> $request) async {
     return proxyImage($call, await $request);
   }
 
-  $async.Future<$0.ProxyImageResponse> proxyImage(
-      $grpc.ServiceCall call, $0.ProxyImageRequest request);
+  $async.Future<$0.ProxyImageResponse> proxyImage($grpc.ServiceCall call, $0.ProxyImageRequest request);
 
   $async.Future<$0.ParseChannelsResponse> parseChannels_Pre(
-      $grpc.ServiceCall $call,
-      $async.Future<$0.ParseChannelsRequest> $request) async {
+      $grpc.ServiceCall $call, $async.Future<$0.ParseChannelsRequest> $request) async {
     return parseChannels($call, await $request);
   }
 
-  $async.Future<$0.ParseChannelsResponse> parseChannels(
-      $grpc.ServiceCall call, $0.ParseChannelsRequest request);
+  $async.Future<$0.ParseChannelsResponse> parseChannels($grpc.ServiceCall call, $0.ParseChannelsRequest request);
 }

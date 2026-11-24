@@ -9,7 +9,7 @@ part 'async_mutation.freezed.dart';
 // TODO: test and improve
 
 @freezed
-abstract class AsyncMutation with _$AsyncMutation {
+class AsyncMutation with _$AsyncMutation {
   const AsyncMutation._();
 
   const factory AsyncMutation.idle() = Idle;

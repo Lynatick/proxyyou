@@ -1,6 +1,39 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:hiddify/core/db/db.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
+import 'package:hiddify/utils/custom_loggers.dart';
+
+final _loggy = infraLogger('ProfileEntryMapper');
+
+/// A profile's saved headers, or null for none. A profile without headers saves the text `null`;
+/// headers that can not be read are left out, rather than the profile, and every other profile with
+/// it, failing to load.
+Map<String, dynamic>? decodeProfileHeaders(String? saved) {
+  if (saved == null) return null;
+  try {
+    return switch (jsonDecode(saved)) {
+      final Map<dynamic, dynamic> headers => headers.cast<String, dynamic>(),
+      _ => null,
+    };
+  } catch (error, stackTrace) {
+    _loggy.warning("a profile's saved headers can not be read, left out", error, stackTrace);
+    return null;
+  }
+}
+
+/// A profile's saved user override (the user's choices for it), or null for none. One that can not
+/// be read, saved by a version whose shape this one no longer takes, is left out: the profile loads
+/// with the subscription's own choices.
+UserOverride? decodeUserOverride(String? saved) {
+  try {
+    return UserOverride.fromStr(saved);
+  } catch (error, stackTrace) {
+    _loggy.warning("a profile's saved choices can not be read, left out", error, stackTrace);
+    return null;
+  }
+}
 
 extension ProfileEntityMapper on ProfileEntity {
   ProfileEntriesCompanion toInsertEntry() => map(
@@ -12,14 +45,8 @@ extension ProfileEntityMapper on ProfileEntity {
       url: Value(rp.url),
       lastUpdate: rp.lastUpdate,
       updateInterval: Value(rp.options?.updateInterval),
-      populatedHeaders: const Value(null),
-      userOverride: const Value(null),
-      overrideVersion: Value(rp.userOverride?.version),
-      overrideName: Value(rp.userOverride?.name),
-      overrideAutoUpdateDisable: Value(rp.userOverride?.isAutoUpdateDisable),
-      overrideUpdateInterval: Value(rp.userOverride?.updateInterval),
-      overrideExtraSecurity: Value(rp.userOverride?.extraSecurity),
-      overrideFragment: Value(rp.userOverride?.enableFragment),
+      populatedHeaders: Value(jsonEncode(rp.populatedHeaders)),
+      userOverride: Value(rp.userOverride?.toStr()),
       upload: Value(rp.subInfo?.upload),
       download: Value(rp.subInfo?.download),
       total: Value(rp.subInfo?.total),
@@ -34,14 +61,8 @@ extension ProfileEntityMapper on ProfileEntity {
       active: lp.active,
       name: lp.name,
       lastUpdate: lp.lastUpdate,
-      populatedHeaders: const Value(null),
-      userOverride: const Value(null),
-      overrideVersion: Value(lp.userOverride?.version),
-      overrideName: Value(lp.userOverride?.name),
-      overrideAutoUpdateDisable: Value(lp.userOverride?.isAutoUpdateDisable),
-      overrideUpdateInterval: Value(lp.userOverride?.updateInterval),
-      overrideExtraSecurity: Value(lp.userOverride?.extraSecurity),
-      overrideFragment: Value(lp.userOverride?.enableFragment),
+      populatedHeaders: Value(jsonEncode(lp.populatedHeaders)),
+      userOverride: Value(lp.userOverride?.toStr()),
       pinned: Value(lp.pinned),
     ),
   );
@@ -53,14 +74,8 @@ extension ProfileEntityMapper on ProfileEntity {
       name: Value(rp.name),
       lastUpdate: Value(rp.lastUpdate),
       updateInterval: Value(rp.options?.updateInterval),
-      populatedHeaders: const Value(null),
-      userOverride: const Value(null),
-      overrideVersion: Value(rp.userOverride?.version),
-      overrideName: Value(rp.userOverride?.name),
-      overrideAutoUpdateDisable: Value(rp.userOverride?.isAutoUpdateDisable),
-      overrideUpdateInterval: Value(rp.userOverride?.updateInterval),
-      overrideExtraSecurity: Value(rp.userOverride?.extraSecurity),
-      overrideFragment: Value(rp.userOverride?.enableFragment),
+      populatedHeaders: Value(jsonEncode(rp.populatedHeaders)),
+      userOverride: Value(rp.userOverride?.toStr()),
       upload: Value(rp.subInfo?.upload),
       download: Value(rp.subInfo?.download),
       total: Value(rp.subInfo?.total),
@@ -71,20 +86,14 @@ extension ProfileEntityMapper on ProfileEntity {
     local: (lp) => ProfileEntriesCompanion(
       name: Value(lp.name),
       lastUpdate: Value(lp.lastUpdate),
-      populatedHeaders: const Value(null),
-      userOverride: const Value(null),
-      overrideVersion: Value(lp.userOverride?.version),
-      overrideName: Value(lp.userOverride?.name),
-      overrideAutoUpdateDisable: Value(lp.userOverride?.isAutoUpdateDisable),
-      overrideUpdateInterval: Value(lp.userOverride?.updateInterval),
-      overrideExtraSecurity: Value(lp.userOverride?.extraSecurity),
-      overrideFragment: Value(lp.userOverride?.enableFragment),
+      populatedHeaders: Value(jsonEncode(lp.populatedHeaders)),
+      userOverride: Value(lp.userOverride?.toStr()),
     ),
   );
 }
 
 extension ProfileEntryMapper on ProfileEntry {
-  ProfileEntity toEntity({Map<String, dynamic>? headers}) {
+  ProfileEntity toEntity() {
     ProfileOptions? options;
     if (updateInterval != null) {
       options = ProfileOptions(updateInterval: updateInterval!);
@@ -94,30 +103,23 @@ extension ProfileEntryMapper on ProfileEntry {
     if (upload != null && download != null && total != null && expire != null) {
       subInfo = SubscriptionInfo(upload: upload!, download: download!, total: total!, expire: expire!);
     }
-    final override = overrideVersion == null
-        ? null
-        : UserOverride(
-            version: overrideVersion!,
-            name: overrideName,
-            isAutoUpdateDisable: overrideAutoUpdateDisable ?? true,
-            updateInterval: overrideUpdateInterval,
-            extraSecurity: overrideExtraSecurity,
-            enableFragment: overrideFragment,
-          );
+    final mPopulatedHeaders = decodeProfileHeaders(populatedHeaders);
+    final mUserOverride = decodeUserOverride(userOverride);
 
     return switch (type) {
       ProfileType.remote => RemoteProfileEntity(
         id: id,
         active: active,
         name: name,
-        url: url!,
+        // a remote profile saved without its URL still lists, to be fixed or removed
+        url: url ?? '',
         lastUpdate: lastUpdate,
         options: options,
         subInfo: subInfo,
         webPageUrl: webPageUrl,
         supportUrl: supportUrl,
-        populatedHeaders: headers,
-        userOverride: override,
+        populatedHeaders: mPopulatedHeaders,
+        userOverride: mUserOverride,
         pinned: pinned,
       ),
       ProfileType.local => LocalProfileEntity(
@@ -125,8 +127,8 @@ extension ProfileEntryMapper on ProfileEntry {
         active: active,
         name: name,
         lastUpdate: lastUpdate,
-        populatedHeaders: headers,
-        userOverride: override,
+        populatedHeaders: mPopulatedHeaders,
+        userOverride: mUserOverride,
         pinned: pinned,
       ),
     };

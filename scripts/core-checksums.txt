@@ -1,2 +1,0 @@
-6c4841f7aab23eb1fb17831349ecdfc3ca9c31553b8cbe5effd820cb12607f56  hiddify-lib-android.tar.gz
-0e92af2ad23e882f2c5348d6b71fc99f7b0434f95ea1bcaa67be1d5900f0b8db  hiddify-lib-macos.tar.gz

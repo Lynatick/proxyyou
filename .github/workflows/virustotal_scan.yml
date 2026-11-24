@@ -1,0 +1,111 @@
+# Upload release assets to VirusTotal for scanning, then write the detection counts
+# into the release notes as static badges. Live badge services (badges.cssnr.com)
+# share one VirusTotal key and show "Error 429" once it is over quota.
+# The iOS IPA is not scanned: VirusTotal rejects it with HTTP 409.
+# Pattern based on https://github.com/yuliskov/SmartTube/.github/workflows/virustotal_scan.yml
+# API: https://docs.virustotal.com/reference/overview
+name: VirusTotal Scan
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: 'Release tag to scan (e.g. draft, v1.2.3)'
+        required: true
+        type: string
+      asset_pattern:
+        description: 'Scan only assets matching this pattern (default: all Hiddify-* packages)'
+        required: false
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to scan'
+        required: true
+        type: string
+
+jobs:
+  virustotal_scan:
+    # One scan at a time: the draft and the release scan share the 4 requests/minute
+    # quota of the key, and uploading the same file twice at once fails.
+    concurrency:
+      group: virustotal-scan
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      HAS_VT_KEY: ${{ secrets.VIRUS_TOTAL_API_KEY != '' }}
+      TAG_NAME: ${{ inputs.release_tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download Release Assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET_PATTERN: ${{ inputs.asset_pattern }}
+        run: |
+          mkdir -p release_assets
+          if [ -n "$ASSET_PATTERN" ]; then
+            gh release download "$TAG_NAME" --dir release_assets --pattern "$ASSET_PATTERN"
+            ls -la release_assets
+            exit 0
+          fi
+          gh release download "$TAG_NAME" --dir release_assets \
+            --pattern "Hiddify-*.apk" \
+            --pattern "Hiddify-*.exe" \
+            --pattern "Hiddify-*.Msix" \
+            --pattern "Hiddify-*.msix" \
+            --pattern "Hiddify-*.zip" \
+            --pattern "Hiddify-*.tar.gz" \
+            --pattern "Hiddify-*.dmg" \
+            --pattern "Hiddify-*.pkg" \
+            --pattern "Hiddify-*.AppImage" \
+            --pattern "Hiddify-*.deb" \
+            --pattern "Hiddify-*.rpm"
+          ls -la release_assets
+
+      - name: VirusTotal Scan
+        if: ${{ env.HAS_VT_KEY == 'true' }}
+        id: vt
+        # One rejected file must not leave the others without a report and badge.
+        continue-on-error: true
+        uses: crazy-max/ghaction-virustotal@936d8c5c00afe97d3d9a1af26d017cfdf26800a2 # v5.0.0
+        with:
+          vt_api_key: ${{ secrets.VIRUS_TOTAL_API_KEY }}
+          files: |
+            release_assets/*
+          request_rate: 4
+
+      - name: Wait for VirusTotal engines
+        if: ${{ env.HAS_VT_KEY == 'true' }}
+        run: |
+          echo "Waiting 150s for VirusTotal engines to report..."
+          sleep 150
+
+      # Per-file detection table in the job summary + a warning per flagged asset,
+      # so a new false positive is visible on the run instead of in the badge only.
+      - name: VirusTotal detection report
+        if: ${{ env.HAS_VT_KEY == 'true' }}
+        env:
+          VIRUS_TOTAL_API_KEY: ${{ secrets.VIRUS_TOTAL_API_KEY }}
+        run: python3 .github/scripts/virustotal_report.py release_assets --json vt_results.json
+
+      - name: Write VirusTotal badges into the release notes
+        if: ${{ env.HAS_VT_KEY == 'true' && hashFiles('vt_results.json') != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release view "$TAG_NAME" --json body -q .body > release_notes.md
+          python3 .github/scripts/prepare_release_notes.py release_notes.md --vt-results vt_results.json
+          # Keep the body short (download + VT only); never re-append changelogs.
+          if [ "$(wc -c < release_notes.md)" -gt 120000 ]; then
+            echo "Release notes still too long; skipping notes edit" >&2
+            exit 0
+          fi
+          gh release edit "$TAG_NAME" --notes-file release_notes.md

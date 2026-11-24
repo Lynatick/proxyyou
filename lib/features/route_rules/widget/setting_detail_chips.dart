@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/utils/platform_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:installed_apps/installed_apps.dart';
@@ -112,6 +111,19 @@ class SettingDetailChips<T extends Object> extends HookConsumerWidget {
   }
 }
 
+/// `https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-apple.srs` → `raw.git…/geosite-apple`:
+/// the first characters of the host say where it comes from, the file name says what it is.
+String shortenRuleSetUrl(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+    return value.length > 20 ? '${value.substring(0, 10)}…${value.substring(value.length - 10)}' : value;
+  }
+  var name = uri.pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? '';
+  if (name.endsWith('.srs')) name = name.substring(0, name.length - 4);
+  final host = uri.host.length > 7 ? '${uri.host.substring(0, 7)}…' : uri.host;
+  return name.isEmpty ? host : '$host/$name';
+}
+
 class SettingDetailChip<T extends Object> extends ConsumerWidget {
   const SettingDetailChip({
     super.key,
@@ -141,10 +153,7 @@ class SettingDetailChip<T extends Object> extends ConsumerWidget {
   }
 
   Widget tText(String value, ThemeData theme) {
-    String text = value;
-    if (useEllipsis && value.length > 20) {
-      text = '${value.substring(0, 10)}...${value.substring(value.length - 10)}';
-    }
+    final text = useEllipsis ? shortenRuleSetUrl(value) : value;
     return Text(t == null ? text : t![text] ?? text, style: theme.textTheme.labelMedium);
   }
 
@@ -181,7 +190,7 @@ class AndroidAppInfo extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final app = useFuture<AppInfo?>(useMemoized(() => getAppInfo(), [packageName]));
-    if (app.hasData && app.data != null) {
+    if (app.hasData && app.data?.icon != null) {
       return Padding(
         padding: const EdgeInsetsDirectional.fromSTEB(4, 4, 8, 4),
         child: Row(
@@ -235,7 +244,7 @@ class ScrollBtn extends ConsumerWidget {
             borderRadius: borderRadius,
             boxShadow: [BoxShadow(color: theme.colorScheme.shadow, blurRadius: 12, offset: const Offset(0, 3))],
           ),
-          child: PlatformIcon(
+          child: Icon(
             isStart ? Icons.arrow_left_rounded : Icons.arrow_right_rounded,
             color: theme.colorScheme.onPrimaryContainer,
           ),

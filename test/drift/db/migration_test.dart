@@ -1,10 +1,10 @@
 // dart format width=80
 // ignore_for_file: unused_local_variable, unused_import
-import 'package:drift/drift.dart' hide isNull;
+import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
 import 'package:drift_dev/api/migrations_native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hiddify/core/db/db.dart';
-import 'package:hiddify/features/profile/data/profile_data_source.dart';
 
 import 'generated/schema.dart';
 import 'generated/schema_v1.dart' as v1;
@@ -18,6 +18,61 @@ void main() {
 
   setUpAll(() {
     verifier = SchemaVerifier(GeneratedHelper());
+  });
+
+  group('downgrade', () {
+    test('a database from a newer version is refused and left alone', () async {
+      final schema = await verifier.schemaAt(GeneratedHelper.versions.last);
+      schema.rawDatabase.userVersion = 99;
+
+      final db = Db(NativeDatabase.opened(schema.rawDatabase));
+      await expectLater(
+        db.customSelect('SELECT 1').get(),
+        throwsA(isA<DbNewerThanAppException>()),
+      );
+      expect(schema.rawDatabase.userVersion, 99);
+    });
+
+    test('upgrades again after an older app lowered the version', () async {
+      // An older app keeps the newer columns but writes its own lower version.
+      final schema = await verifier.schemaAt(GeneratedHelper.versions.last);
+      schema.rawDatabase.userVersion = 5;
+      final db = Db(schema.newConnection());
+      await verifier.migrateAndValidate(db, db.schemaVersion);
+      await db.close();
+    });
+
+    // Whichever version an older app lowered it to, every step from there on
+    // must take the newer columns that are already in place.
+    for (final lowered in GeneratedHelper.versions.skip(1)) {
+      test('upgrades a current database lowered to v$lowered', () async {
+        final schema = await verifier.schemaAt(GeneratedHelper.versions.last);
+        schema.rawDatabase.userVersion = lowered;
+        final db = Db(schema.newConnection());
+        await verifier.migrateAndValidate(db, db.schemaVersion);
+        await db.close();
+      });
+    }
+
+    test('upgrades a v4 database that has both test_url and profile_override (#2078)', () async {
+      final schema = await verifier.schemaAt(4);
+      schema.rawDatabase.execute(
+        'ALTER TABLE profile_entries ADD COLUMN profile_override TEXT',
+      );
+      final db = Db(schema.newConnection());
+      await verifier.migrateAndValidate(db, db.schemaVersion);
+      await db.close();
+    });
+
+    test('upgrades a v4 database that has profile_override but no test_url', () async {
+      final schema = await verifier.schemaAt(4);
+      schema.rawDatabase.execute(
+        'ALTER TABLE profile_entries RENAME COLUMN test_url TO profile_override',
+      );
+      final db = Db(schema.newConnection());
+      await verifier.migrateAndValidate(db, db.schemaVersion);
+      await db.close();
+    });
   });
 
   group('simple database migrations', () {
@@ -72,38 +127,10 @@ void main() {
     );
   });
 
-  test('v7 migration preserves subscription headers and explicit override choices as rows', () async {
-    final schema = await verifier.schemaAt(7);
-    addTearDown(() => schema.rawDatabase.close());
-    schema.rawDatabase.execute("""
-      INSERT INTO profile_entries(id,type,active,name,url,last_update,populated_headers,user_override,pinned)
-      VALUES('profile','remote',1,'Subscription','https://example.invalid/subscription','2026-10-26T12:00:00Z',
-      '{"etag":["first","second"],"extra-security":"warp","empty":[]}',
-      '{"version":1,"isAutoUpdateDisable":false,"enableWarp":true,"enableFragment":true,"name":"Custom"}',1)
-    """);
-    final database = Db(schema.newConnection());
-    await verifier.migrateAndValidate(database, 8);
-    final entry = await ProfileDao(database).getById('profile');
-    expect(entry?.pinned, isTrue);
-    expect(entry?.populatedHeaders, {
-      'etag': ['first', 'second'],
-      'extra-security': 'warp',
-      'empty': <String>[],
-    });
-    expect(entry?.userOverride?.extraSecurity, 'warp');
-    expect(entry?.userOverride?.isAutoUpdateDisable, isFalse);
-    expect(entry?.userOverride?.enableFragment, isTrue);
-    expect(entry?.userOverride?.name, 'Custom');
-    final row = await database.select(database.profileEntries).getSingle();
-    expect(row.userOverride, isNull);
-    expect(row.populatedHeaders, isNull);
-    await database.close();
-  });
-
   group('_columnExists-backed migrations', () {
     test('migration from v3 to v4 adds test_url when missing', () async {
       final schema = await verifier.schemaAt(3);
-      addTearDown(() => schema.rawDatabase.close());
+      addTearDown(() => schema.rawDatabase.dispose());
 
       final oldDb = v3.DatabaseAtV3(schema.newConnection());
       final oldColumns = await oldDb
@@ -135,7 +162,7 @@ void main() {
       'migration from v3 to v4 skips adding test_url when it already exists',
       () async {
         final schema = await verifier.schemaAt(3);
-        addTearDown(() => schema.rawDatabase.close());
+        addTearDown(() => schema.rawDatabase.dispose());
 
         schema.rawDatabase.execute(
           'ALTER TABLE profile_entries ADD COLUMN test_url TEXT NULL;',

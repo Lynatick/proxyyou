@@ -1,0 +1,26 @@
+# Manual build of a branch: tests, builds every platform and, with `upload-artifact`, publishes
+# the builds as the `draft` release and to TestFlight. See build.yml.
+# Run it from the Actions tab or with `gh workflow run ci.yml --ref <branch>`.
+name: CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload-artifact:
+        description: Sign the builds and publish them as the draft release
+        type: boolean
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  run:
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    # The most the jobs of build.yml can get; each of them asks for its own narrower scopes,
+    # except `release` (see there).
+    permissions: write-all
+    with:
+      upload-artifact: ${{ inputs.upload-artifact }}

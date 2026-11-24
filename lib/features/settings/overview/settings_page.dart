@@ -4,10 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/settings/notifier/config_option/config_option_notifier.dart';
 import 'package:hiddify/features/settings/notifier/reset_tunnel/reset_tunnel_notifier.dart';
+import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -134,7 +134,7 @@ class SettingsPage extends HookConsumerWidget {
                   controller.open();
                 }
               },
-              icon: const PlatformIcon(Icons.more_vert_rounded),
+              icon: const Icon(Icons.more_vert_rounded),
             ),
           ),
           const Gap(8),
@@ -175,11 +175,12 @@ class SettingsPage extends HookConsumerWidget {
             icon: Icons.content_cut_rounded,
             namedLocation: context.namedLocation('tlsTricks'),
           ),
-          if (PlatformUtils.isIOS)
+          if ((PlatformUtils.isIOS || PlatformUtils.isMacOS) &&
+              ref.watch(hiddifyCoreServiceProvider).core.hasVpnProfile)
             Material(
               child: ListTile(
                 title: Text(t.pages.settings.resetTunnel),
-                leading: const PlatformIcon(Icons.autorenew_rounded),
+                leading: const Icon(Icons.autorenew_rounded),
                 onTap: () async {
                   await ref.read(resetTunnelNotifierProvider.notifier).run();
                 },
@@ -220,10 +221,10 @@ class SettingsSection extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return ListTile(
-      leading: PlatformIcon(icon),
+      leading: Icon(icon),
       title: Text(title),
       subtitle: subtitle,
-      trailing: const PlatformIcon(Icons.chevron_right_rounded),
+      trailing: const Icon(Icons.chevron_right_rounded),
       onTap: () => context.go(namedLocation),
     );
   }

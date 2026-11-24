@@ -40,14 +40,11 @@ class ProfileRequest extends $pb.GeneratedMessage {
   factory ProfileRequest.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromBuffer(data, registry);
-  factory ProfileRequest.fromJson($core.String json,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+  factory ProfileRequest.fromJson($core.String json, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ProfileRequest',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'profile'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ProfileRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'profile'), createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'id')
     ..aOS(2, _omitFieldNames ? '' : 'name')
     ..aOS(3, _omitFieldNames ? '' : 'url')
@@ -57,8 +54,7 @@ class ProfileRequest extends $pb.GeneratedMessage {
   ProfileRequest clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ProfileRequest copyWith(void Function(ProfileRequest) updates) =>
-      super.copyWith((message) => updates(message as ProfileRequest))
-          as ProfileRequest;
+      super.copyWith((message) => updates(message as ProfileRequest)) as ProfileRequest;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -67,11 +63,9 @@ class ProfileRequest extends $pb.GeneratedMessage {
   static ProfileRequest create() => ProfileRequest._();
   @$core.override
   ProfileRequest createEmptyInstance() => create();
-  static $pb.PbList<ProfileRequest> createRepeated() =>
-      $pb.PbList<ProfileRequest>();
+  static $pb.PbList<ProfileRequest> createRepeated() => $pb.PbList<ProfileRequest>();
   @$core.pragma('dart2js:noInline')
-  static ProfileRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ProfileRequest>(create);
+  static ProfileRequest getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ProfileRequest>(create);
   static ProfileRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -129,10 +123,8 @@ class AddProfileRequest extends $pb.GeneratedMessage {
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'AddProfileRequest',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'profile'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'AddProfileRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'profile'), createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'url')
     ..aOS(2, _omitFieldNames ? '' : 'content')
     ..aOS(3, _omitFieldNames ? '' : 'name')
@@ -143,8 +135,7 @@ class AddProfileRequest extends $pb.GeneratedMessage {
   AddProfileRequest clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   AddProfileRequest copyWith(void Function(AddProfileRequest) updates) =>
-      super.copyWith((message) => updates(message as AddProfileRequest))
-          as AddProfileRequest;
+      super.copyWith((message) => updates(message as AddProfileRequest)) as AddProfileRequest;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -153,11 +144,10 @@ class AddProfileRequest extends $pb.GeneratedMessage {
   static AddProfileRequest create() => AddProfileRequest._();
   @$core.override
   AddProfileRequest createEmptyInstance() => create();
-  static $pb.PbList<AddProfileRequest> createRepeated() =>
-      $pb.PbList<AddProfileRequest>();
+  static $pb.PbList<AddProfileRequest> createRepeated() => $pb.PbList<AddProfileRequest>();
   @$core.pragma('dart2js:noInline')
-  static AddProfileRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<AddProfileRequest>(create);
+  static AddProfileRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<AddProfileRequest>(create);
   static AddProfileRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -217,18 +207,13 @@ class ProfileResponse extends $pb.GeneratedMessage {
   factory ProfileResponse.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromBuffer(data, registry);
-  factory ProfileResponse.fromJson($core.String json,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+  factory ProfileResponse.fromJson($core.String json, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ProfileResponse',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'profile'),
-      createEmptyInstance: create)
-    ..aOM<$1.ProfileEntity>(1, _omitFieldNames ? '' : 'profile',
-        subBuilder: $1.ProfileEntity.create)
-    ..aE<$2.ResponseCode>(2, _omitFieldNames ? '' : 'responseCode',
-        enumValues: $2.ResponseCode.values)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ProfileResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'profile'), createEmptyInstance: create)
+    ..aOM<$1.ProfileEntity>(1, _omitFieldNames ? '' : 'profile', subBuilder: $1.ProfileEntity.create)
+    ..aE<$2.ResponseCode>(2, _omitFieldNames ? '' : 'responseCode', enumValues: $2.ResponseCode.values)
     ..aOS(3, _omitFieldNames ? '' : 'message')
     ..hasRequiredFields = false;
 
@@ -236,8 +221,7 @@ class ProfileResponse extends $pb.GeneratedMessage {
   ProfileResponse clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ProfileResponse copyWith(void Function(ProfileResponse) updates) =>
-      super.copyWith((message) => updates(message as ProfileResponse))
-          as ProfileResponse;
+      super.copyWith((message) => updates(message as ProfileResponse)) as ProfileResponse;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -246,11 +230,10 @@ class ProfileResponse extends $pb.GeneratedMessage {
   static ProfileResponse create() => ProfileResponse._();
   @$core.override
   ProfileResponse createEmptyInstance() => create();
-  static $pb.PbList<ProfileResponse> createRepeated() =>
-      $pb.PbList<ProfileResponse>();
+  static $pb.PbList<ProfileResponse> createRepeated() => $pb.PbList<ProfileResponse>();
   @$core.pragma('dart2js:noInline')
-  static ProfileResponse getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ProfileResponse>(create);
+  static ProfileResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ProfileResponse>(create);
   static ProfileResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -307,24 +290,18 @@ class MultiProfilesResponse extends $pb.GeneratedMessage {
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'MultiProfilesResponse',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'profile'),
-      createEmptyInstance: create)
-    ..pPM<$1.ProfileEntity>(1, _omitFieldNames ? '' : 'profiles',
-        subBuilder: $1.ProfileEntity.create)
-    ..aE<$2.ResponseCode>(2, _omitFieldNames ? '' : 'responseCode',
-        enumValues: $2.ResponseCode.values)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'MultiProfilesResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'profile'), createEmptyInstance: create)
+    ..pPM<$1.ProfileEntity>(1, _omitFieldNames ? '' : 'profiles', subBuilder: $1.ProfileEntity.create)
+    ..aE<$2.ResponseCode>(2, _omitFieldNames ? '' : 'responseCode', enumValues: $2.ResponseCode.values)
     ..aOS(3, _omitFieldNames ? '' : 'message')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   MultiProfilesResponse clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  MultiProfilesResponse copyWith(
-          void Function(MultiProfilesResponse) updates) =>
-      super.copyWith((message) => updates(message as MultiProfilesResponse))
-          as MultiProfilesResponse;
+  MultiProfilesResponse copyWith(void Function(MultiProfilesResponse) updates) =>
+      super.copyWith((message) => updates(message as MultiProfilesResponse)) as MultiProfilesResponse;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -333,11 +310,10 @@ class MultiProfilesResponse extends $pb.GeneratedMessage {
   static MultiProfilesResponse create() => MultiProfilesResponse._();
   @$core.override
   MultiProfilesResponse createEmptyInstance() => create();
-  static $pb.PbList<MultiProfilesResponse> createRepeated() =>
-      $pb.PbList<MultiProfilesResponse>();
+  static $pb.PbList<MultiProfilesResponse> createRepeated() => $pb.PbList<MultiProfilesResponse>();
   @$core.pragma('dart2js:noInline')
-  static MultiProfilesResponse getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<MultiProfilesResponse>(create);
+  static MultiProfilesResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<MultiProfilesResponse>(create);
   static MultiProfilesResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -362,7 +338,5 @@ class MultiProfilesResponse extends $pb.GeneratedMessage {
   void clearMessage() => $_clearField(3);
 }
 
-const $core.bool _omitFieldNames =
-    $core.bool.fromEnvironment('protobuf.omit_field_names');
-const $core.bool _omitMessageNames =
-    $core.bool.fromEnvironment('protobuf.omit_message_names');
+const $core.bool _omitFieldNames = $core.bool.fromEnvironment('protobuf.omit_field_names');
+const $core.bool _omitMessageNames = $core.bool.fromEnvironment('protobuf.omit_message_names');

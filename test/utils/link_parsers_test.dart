@@ -78,4 +78,31 @@ void main() {
       expect(link.name, equals("Name"));
     });
   });
+
+  group("LinkParser.generateSubShareLink", () {
+    test("keeps a non-default port", () {
+      expect(
+        LinkParser.generateSubShareLink("https://panel.example.com:2053/sub/abc", "Name"),
+        equals("https://panel.example.com:2053/sub/abc#Name"),
+      );
+    });
+
+    test("keeps userinfo, path and query", () {
+      expect(
+        LinkParser.generateSubShareLink("https://user:pw@example.com/sub/abc?x=1", "Name"),
+        equals("https://user:pw@example.com/sub/abc?x=1#Name"),
+      );
+    });
+
+    test("keeps the original fragment when no name is given", () {
+      expect(LinkParser.generateSubShareLink("https://example.com/sub#Old"), equals("https://example.com/sub#Old"));
+    });
+
+    test("encodes the name as the fragment", () {
+      expect(
+        LinkParser.generateSubShareLink("https://example.com/sub", "My Profile"),
+        equals("https://example.com/sub#My%20Profile"),
+      );
+    });
+  });
 }

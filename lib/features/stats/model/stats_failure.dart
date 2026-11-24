@@ -4,7 +4,7 @@ import 'package:hiddify/core/model/failures.dart';
 
 part 'stats_failure.freezed.dart';
 
-@Freezed(copyWith: false)
+@freezed
 sealed class StatsFailure with _$StatsFailure, Failure {
   const StatsFailure._();
 

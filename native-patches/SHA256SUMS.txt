@@ -1,4 +1,0 @@
-54172963f798aab5f13a734fde7dffeec45fd69d0481a254a437c0ecaf7126b4  hiddify-core/bin/hiddify-core.dylib
-40c1e79b84cba73437741cd318255ab9fcc71201807c48ef9e5824273f71362b  android/app/libs/hiddify-core.aar
-8d8b497df5059966845f6ca13c5f83af9131d1858c3e32561fca34351f2ef24d  hiddify-core/windows-x64/hiddify-core.dll
-0a75ee82c0c1b67ce43a44cb2f2499115a4f6256117e028fcd75b1e597ad6ef5  hiddify-core/windows-x64/HiddifyCli.exe

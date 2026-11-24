@@ -1,10 +1,6 @@
 targets:
   $default:
     builders:
-      riverpod_generator:
-        options:
-          # Keep the provider names used throughout the app before Riverpod 3.
-          provider_name_strip_pattern: ''
       json_serializable:
         options:
           explicit_to_json: true
@@ -14,6 +10,16 @@ targets:
             db: "lib/core/db/db.dart"
           schema_dir: "lib/core/db/schemas"
           store_date_time_values_as_text: true
+      slang_build_runner:
+        options:
+          base_locale: en
+          fallback_strategy: base_locale
+          input_directory: assets/translations
+          input_file_pattern: .i18n.json
+          output_directory: lib/gen
+          output_file_name: translations.g.dart
+          translation_class_visibility: public
+          locale_handling: false
       # protoc_builder:
       #   options:
       #     protobuf_version: "3.1.0"

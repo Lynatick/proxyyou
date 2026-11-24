@@ -3,16 +3,23 @@ import 'package:flutter/services.dart';
 import 'package:hiddify/utils/utils.dart';
 
 abstract class Constants {
-  static const appName = "ProxyYou";
-  static const allowAppUpdates = false;
-  static const allowUpdateNotifications = true;
-  static const downloadPageUrl = "https://lynatick.github.io/proxyyou/";
-  static const githubUrl = "https://github.com/lynatick/proxyyou";
-  static const licenseUrl = "https://github.com/lynatick/proxyyou/blob/main/LICENSE.md";
-  static const githubReleasesApiUrl = "https://api.github.com/repos/lynatick/proxyyou/releases";
-  static const githubLatestReleaseUrl = "https://github.com/lynatick/proxyyou/releases/latest";
-  static const appCastUrl = "https://raw.githubusercontent.com/lynatick/proxyyou/main/appcast.xml";
+  static const appName = "Hiddify";
+  static const githubUrl = "https://github.com/hiddify/hiddify-next";
+  static const licenseUrl = "https://github.com/hiddify/hiddify-next?tab=License-1-ov-file#readme";
+  static const githubReleasesApiUrl = "https://api.github.com/repos/hiddify/hiddify-app/releases";
+  static const githubLatestReleaseUrl = "https://github.com/hiddify/hiddify-app/releases/latest";
   static const telegramChannelUrl = "https://t.me/hiddify";
+  static const telegramChannelHandle = "@hiddify";
+
+  /// Opens the channel in the Telegram app; [telegramChannelUrl] when the app is not there.
+  static const telegramChannelAppUrl = "tg://resolve?domain=hiddify";
+  static const bugReportEmail = "bug@hiddify.com";
+
+  /// The bot that turns a report into an issue; the app starts it with the device's details
+  /// (telegram_report_link.dart).
+  static const bugReportTelegramBot = "hiddify_issues_bot";
+  static const bugReportTelegramName = "@$bugReportTelegramBot";
+  static const bugReportGithubIssueUrl = "https://github.com/hiddify/hiddify-app/issues/new";
   static const privacyPolicyUrl = "https://hiddify.com/privacy-policy/";
   static const termsAndConditionsUrl = "https://hiddify.com/terms/";
   static const cfWarpPrivacyPolicy = "https://www.cloudflare.com/application/privacypolicy/";
@@ -38,6 +45,16 @@ abstract class AlertDialogConst {
   static const minWidth = 280.0;
   static const maxWidth = 560.0;
   static const boxConstraints = BoxConstraints(minWidth: minWidth, maxWidth: maxWidth);
+}
+
+abstract class QrCodeDialogConst {
+  static const qrBoxSize = 208.0;
+
+  /// The shared proxy's name, carried in its link and QR code, also the dialog's title.
+  static const lanProfileName = 'LAN only';
+
+  /// The shared proxy's name when it falls back to 127.0.0.1.
+  static const localhostProfileName = 'Localhost only';
 }
 
 abstract class BottomSheetConst {
@@ -79,10 +96,12 @@ abstract class ProfileTileConst {
 abstract class IntroConst {
   static const maxwidth = 620;
   static const termsAndConditionsKey = 'terms-and-conditions';
+  static const privacyPolicyKey = 'privacy-policy';
   static const githubKey = 'github';
   static const licenseKey = 'license';
   static const url = <String, String>{
     IntroConst.termsAndConditionsKey: Constants.termsAndConditionsUrl,
+    IntroConst.privacyPolicyKey: Constants.privacyPolicyUrl,
     IntroConst.githubKey: Constants.githubUrl,
     IntroConst.licenseKey: Constants.licenseUrl,
   };
@@ -117,7 +136,12 @@ abstract class KeyboardConst {
   };
   static final horizontalArrows = {LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowRight};
   static final verticalArrows = {LogicalKeyboardKey.arrowUp, LogicalKeyboardKey.arrowDown};
-  static final select = {LogicalKeyboardKey.select, LogicalKeyboardKey.enter, LogicalKeyboardKey.tab};
+  static final select = {LogicalKeyboardKey.select, LogicalKeyboardKey.enter, LogicalKeyboardKey.numpadEnter};
+
+  /// Keys that open a focused link. Never Tab: its key-down moves focus onto the
+  /// link and its key-up then lands there, so a link would open just by being
+  /// reached with Tab.
+  static final activate = {...select, LogicalKeyboardKey.space};
 }
 
 abstract class ChainConst {

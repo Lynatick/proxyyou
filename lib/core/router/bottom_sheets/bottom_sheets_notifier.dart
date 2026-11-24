@@ -6,6 +6,7 @@ import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/router/go_router/go_router_notifier.dart';
 import 'package:hiddify/features/app_based_routing/model/app_package_info.dart';
 import 'package:hiddify/features/app_based_routing/overview/app_list_share_modal.dart';
+import 'package:hiddify/features/connection/widget/connection_health_sheet.dart';
 import 'package:hiddify/features/log/overview/logs_modals.dart';
 import 'package:hiddify/features/profile/add/add_profile_modal.dart';
 import 'package:hiddify/features/profile/overview/profiles_modal.dart';
@@ -24,26 +25,25 @@ class BottomSheetsNotifier extends _$BottomSheetsNotifier {
     final context = rootNavKey.currentContext;
     if (context == null) return null;
     // ref.read(popupCountNotifierProvider.notifier).increase();
-    return await Navigator.of(context)
-        .push<T>(
-          ModalBottomSheetRoute(
-            constraints: BottomSheetConst.boxConstraints,
-            isScrollControlled: isScrollControlled,
-            builder: (context) => ClipRRect(
-              borderRadius: BottomSheetConst.borderRadius,
-              child: Material(
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-                  child: child,
-                ),
-              ),
-            ),
+    // showModalBottomSheet also gives the dimmed layer behind the sheet its screen reader label and hint
+    return await showModalBottomSheet<T>(
+      context: context,
+      useRootNavigator: true,
+      constraints: BottomSheetConst.boxConstraints,
+      isScrollControlled: isScrollControlled,
+      builder: (context) => ClipRRect(
+        borderRadius: BottomSheetConst.borderRadius,
+        child: Material(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+            child: child,
           ),
-        )
-        .then((value) {
-          // ref.read(popupCountNotifierProvider.notifier).decrease();
-          return value;
-        });
+        ),
+      ),
+    ).then((value) {
+      // ref.read(popupCountNotifierProvider.notifier).decrease();
+      return value;
+    });
   }
 
   /// The host the deep link would actually fetch from, for the confirmation
@@ -80,6 +80,9 @@ class BottomSheetsNotifier extends _$BottomSheetsNotifier {
   Future<void> showLogsShare() async => await _show(isScrollControlled: false, child: const LogsShareModal());
 
   Future<void> showLogsRecent() async => await _show(isScrollControlled: false, child: const LogsRecentModal());
+
+  Future<void> showConnectionHealth() async =>
+      await _show(isScrollControlled: true, child: const ConnectionHealthSheet());
 
   Future<void> showAppListShare({
     required List<String> added,

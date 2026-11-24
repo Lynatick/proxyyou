@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=PROXYYOU
-Comment=Прокси-клиент
-Exec=hiddify
-Icon=proxyyou
-Terminal=false
-Categories=Network;

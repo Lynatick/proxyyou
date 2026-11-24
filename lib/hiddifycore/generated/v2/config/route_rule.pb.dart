@@ -34,14 +34,11 @@ class RouteRule extends $pb.GeneratedMessage {
   factory RouteRule.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromBuffer(data, registry);
-  factory RouteRule.fromJson($core.String json,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+  factory RouteRule.fromJson($core.String json, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'RouteRule',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'config'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'RouteRule',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'config'), createEmptyInstance: create)
     ..pPM<Rule>(1, _omitFieldNames ? '' : 'rules', subBuilder: Rule.create)
     ..hasRequiredFields = false;
 
@@ -60,8 +57,7 @@ class RouteRule extends $pb.GeneratedMessage {
   RouteRule createEmptyInstance() => create();
   static $pb.PbList<RouteRule> createRepeated() => $pb.PbList<RouteRule>();
   @$core.pragma('dart2js:noInline')
-  static RouteRule getDefault() =>
-      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<RouteRule>(create);
+  static RouteRule getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<RouteRule>(create);
   static RouteRule? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -100,8 +96,7 @@ class Rule extends $pb.GeneratedMessage {
     if (processPaths != null) result.processPaths.addAll(processPaths);
     if (network != null) result.network = network;
     if (portRanges != null) result.portRanges.addAll(portRanges);
-    if (sourcePortRanges != null)
-      result.sourcePortRanges.addAll(sourcePortRanges);
+    if (sourcePortRanges != null) result.sourcePortRanges.addAll(sourcePortRanges);
     if (protocols != null) result.protocols.addAll(protocols);
     if (ipCidrs != null) result.ipCidrs.addAll(ipCidrs);
     if (sourceIpCidrs != null) result.sourceIpCidrs.addAll(sourceIpCidrs);
@@ -114,53 +109,38 @@ class Rule extends $pb.GeneratedMessage {
 
   Rule._();
 
-  factory Rule.fromBuffer($core.List<$core.int> data,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+  factory Rule.fromBuffer($core.List<$core.int> data, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromBuffer(data, registry);
-  factory Rule.fromJson($core.String json,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+  factory Rule.fromJson($core.String json, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'Rule',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'config'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'Rule',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'config'), createEmptyInstance: create)
     ..aI(1, _omitFieldNames ? '' : 'list_order', fieldType: $pb.PbFieldType.OU3)
     ..aOB(2, _omitFieldNames ? '' : 'enabled')
     ..aOS(3, _omitFieldNames ? '' : 'name')
-    ..aE<Outbound>(4, _omitFieldNames ? '' : 'outbound',
-        enumValues: Outbound.values)
+    ..aE<Outbound>(4, _omitFieldNames ? '' : 'outbound', enumValues: Outbound.values)
     ..pPS(5, _omitFieldNames ? '' : 'rule_set', protoName: 'rule_sets')
     ..pPS(6, _omitFieldNames ? '' : 'package_name', protoName: 'package_names')
     ..pPS(7, _omitFieldNames ? '' : 'process_name', protoName: 'process_names')
     ..pPS(8, _omitFieldNames ? '' : 'process_path', protoName: 'process_paths')
-    ..aE<Network>(9, _omitFieldNames ? '' : 'network',
-        enumValues: Network.values)
+    ..aE<Network>(9, _omitFieldNames ? '' : 'network', enumValues: Network.values)
     ..pPS(10, _omitFieldNames ? '' : 'port_range', protoName: 'port_ranges')
-    ..pPS(11, _omitFieldNames ? '' : 'source_port_range',
-        protoName: 'source_port_ranges')
+    ..pPS(11, _omitFieldNames ? '' : 'source_port_range', protoName: 'source_port_ranges')
     ..pc<Protocol>(12, _omitFieldNames ? '' : 'protocol', $pb.PbFieldType.KE,
-        protoName: 'protocols',
-        valueOf: Protocol.valueOf,
-        enumValues: Protocol.values,
-        defaultEnumValue: Protocol.tls)
+        protoName: 'protocols', valueOf: Protocol.valueOf, enumValues: Protocol.values, defaultEnumValue: Protocol.tls)
     ..pPS(13, _omitFieldNames ? '' : 'ip_cidr', protoName: 'ip_cidrs')
-    ..pPS(14, _omitFieldNames ? '' : 'source_ip_cidr',
-        protoName: 'source_ip_cidrs')
+    ..pPS(14, _omitFieldNames ? '' : 'source_ip_cidr', protoName: 'source_ip_cidrs')
     ..pPS(15, _omitFieldNames ? '' : 'domain', protoName: 'domains')
-    ..pPS(16, _omitFieldNames ? '' : 'domain_suffix',
-        protoName: 'domain_suffixes')
-    ..pPS(17, _omitFieldNames ? '' : 'domain_keyword',
-        protoName: 'domain_keywords')
-    ..pPS(18, _omitFieldNames ? '' : 'domain_regex',
-        protoName: 'domain_regexes')
+    ..pPS(16, _omitFieldNames ? '' : 'domain_suffix', protoName: 'domain_suffixes')
+    ..pPS(17, _omitFieldNames ? '' : 'domain_keyword', protoName: 'domain_keywords')
+    ..pPS(18, _omitFieldNames ? '' : 'domain_regex', protoName: 'domain_regexes')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   Rule clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  Rule copyWith(void Function(Rule) updates) =>
-      super.copyWith((message) => updates(message as Rule)) as Rule;
+  Rule copyWith(void Function(Rule) updates) => super.copyWith((message) => updates(message as Rule)) as Rule;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -171,8 +151,7 @@ class Rule extends $pb.GeneratedMessage {
   Rule createEmptyInstance() => create();
   static $pb.PbList<Rule> createRepeated() => $pb.PbList<Rule>();
   @$core.pragma('dart2js:noInline')
-  static Rule getDefault() =>
-      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<Rule>(create);
+  static Rule getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<Rule>(create);
   static Rule? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -260,7 +239,5 @@ class Rule extends $pb.GeneratedMessage {
   $pb.PbList<$core.String> get domainRegexes => $_getList(17);
 }
 
-const $core.bool _omitFieldNames =
-    $core.bool.fromEnvironment('protobuf.omit_field_names');
-const $core.bool _omitMessageNames =
-    $core.bool.fromEnvironment('protobuf.omit_message_names');
+const $core.bool _omitFieldNames = $core.bool.fromEnvironment('protobuf.omit_field_names');
+const $core.bool _omitMessageNames = $core.bool.fromEnvironment('protobuf.omit_message_names');

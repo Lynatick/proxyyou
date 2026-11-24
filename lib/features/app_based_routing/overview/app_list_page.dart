@@ -8,7 +8,6 @@ import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/app_based_routing/data/selected_data_provider.dart';
 import 'package:hiddify/features/app_based_routing/model/app_package_info.dart';
 import 'package:hiddify/features/app_based_routing/model/pkg_flag.dart';
@@ -49,7 +48,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
     final localizations = MaterialLocalizations.of(context);
 
     final mode = ref.watch(Preferences.perAppProxyModeInUse);
-    final selectedApps = ref.watch(appListProvider(mode));
+    final selectedApps = ref.watch(AppListProvider(mode));
 
     final hideSystemApps = useState(false);
     final isSearching = useState(false);
@@ -94,7 +93,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
     );
 
     if (mode != null) {
-      ref.listen(appListProvider(mode), (previous, next) {
+      ref.listen(AppListProvider(mode), (previous, next) {
         if (previous != null) {
           if ((previous, next) case (AsyncData(value: final prevData), AsyncData(value: final nextData))) {
             if (nextData.isNotEmpty) {
@@ -124,7 +123,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
     final appBasedRouting = t.pages.settings.routing.appBasedRouting;
     // the auto picks you removed: the chip brings them back, and the toast can take that back
     final removed = [
-      for (final entry in (selectedApps.value ?? const <String, int>{}).entries)
+      for (final entry in (selectedApps.valueOrNull ?? const <String, int>{}).entries)
         if (PkgFlag.autoSelection.check(entry.value) && PkgFlag.forceDeselection.check(entry.value)) entry.key,
     ];
     Future<void> restoreRemoved() async {
@@ -170,7 +169,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
               Center(
                 child: ActionChip(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  avatar: const PlatformIcon(Icons.undo_rounded),
+                  avatar: const Icon(Icons.undo_rounded),
                   label: Text(appBasedRouting.autoSelection.restore(n: removed.length)),
                   onPressed: restoreRemoved,
                 ),
@@ -183,7 +182,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
 
     // the apps you added that auto selection didn't pick; with the removed auto picks, this is what Share sends
     final added = [
-      for (final entry in (selectedApps.value ?? const <String, int>{}).entries)
+      for (final entry in (selectedApps.valueOrNull ?? const <String, int>{}).entries)
         if (PkgFlag.userSelection.check(entry.value) && !PkgFlag.autoSelection.check(entry.value)) entry.key,
     ];
     final autoOn = ref.watch(Preferences.autoAppsSelectionRegion) != null;
@@ -232,7 +231,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
                   searchQuery.value = "";
                   isSearching.value = false;
                 },
-                icon: const PlatformIcon(Icons.close),
+                icon: const Icon(Icons.close),
                 tooltip: localizations.cancelButtonLabel,
               ),
               bottom: chips,
@@ -241,7 +240,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
               title: Text(mode?.listTitle(t) ?? t.pages.settings.routing.appBasedRouting.title),
               actions: [
                 IconButton(
-                  icon: const PlatformIcon(FluentIcons.search_24_regular),
+                  icon: const Icon(FluentIcons.search_24_regular),
                   onPressed: () => isSearching.value = true,
                   tooltip: localizations.searchFieldLabel,
                 ),
@@ -258,7 +257,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
                                 message: t.dialogs.confirmation.appList.import.msg,
                               )
                               .then((shouldImport) async {
-                                if (shouldImport) await ref.read(appListProvider(mode).notifier).importClipboard();
+                                if (shouldImport) await ref.read(AppListProvider(mode).notifier).importClipboard();
                               }),
                         ),
                         MenuItemButton(
@@ -270,7 +269,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
                                 message: t.pages.settings.routing.appBasedRouting.options.import.msg,
                               )
                               .then((shouldImport) async {
-                                if (shouldImport) await ref.read(appListProvider(mode).notifier).importFile();
+                                if (shouldImport) await ref.read(AppListProvider(mode).notifier).importFile();
                               }),
                         ),
                       ],
@@ -280,11 +279,11 @@ class AppListPage extends HookConsumerWidget with PresLogger {
                       menuChildren: <Widget>[
                         MenuItemButton(
                           child: Text(t.pages.settings.routing.appBasedRouting.options.export.clipboard),
-                          onPressed: () async => await ref.read(appListProvider(mode).notifier).exportClipboard(),
+                          onPressed: () async => await ref.read(AppListProvider(mode).notifier).exportClipboard(),
                         ),
                         MenuItemButton(
                           child: Text(t.pages.settings.routing.appBasedRouting.options.export.file),
-                          onPressed: () async => await ref.read(appListProvider(mode).notifier).exportFile(),
+                          onPressed: () async => await ref.read(AppListProvider(mode).notifier).exportFile(),
                         ),
                       ],
                       child: Text(t.common.export),
@@ -292,7 +291,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
                     const PopupMenuDivider(),
                     MenuItemButton(
                       child: Text(t.pages.settings.routing.appBasedRouting.options.clearAllSelections),
-                      onPressed: () => ref.read(appListProvider(mode).notifier).clearAll(),
+                      onPressed: () => ref.read(AppListProvider(mode).notifier).clearAll(),
                     ),
                   ],
                   builder: (context, controller, child) => IconButton(
@@ -303,7 +302,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
                         controller.open();
                       }
                     },
-                    icon: const PlatformIcon(Icons.more_vert_rounded),
+                    icon: const Icon(Icons.more_vert_rounded),
                   ),
                 ),
               ],
@@ -313,7 +312,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
           ? FloatingActionButton(
               onPressed: () =>
                   scrollController.animateTo(0.0, duration: const Duration(milliseconds: 500), curve: Curves.easeOut),
-              child: const PlatformIcon(Icons.keyboard_arrow_up_rounded),
+              child: const Icon(Icons.keyboard_arrow_up_rounded),
             )
           : null,
       body: displayedApps.when(
@@ -344,7 +343,7 @@ class AppListPage extends HookConsumerWidget with PresLogger {
               ),
               value: flag == null ? false : PkgFlag.checkboxValue(flag),
               tristate: true,
-              onChanged: (_) => ref.read(appListProvider(mode).notifier).updatePkg(package.packageName),
+              onChanged: (_) => ref.read(AppListProvider(mode).notifier).updatePkg(package.packageName),
               secondary: package.icon == null
                   ? null
                   : Image.memory(package.icon!, width: 48, height: 48, cacheWidth: 48, cacheHeight: 48),

@@ -1,71 +1,27 @@
-name: Release ProxyYou
+# A version tag: tests, builds every platform and publishes the GitHub release of the tag, the
+# `draft` release, TestFlight and Google Play (open testing for .dev tags, production for releases). See build.yml.
+name: Release
+
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Версия, например v4.1.18 (должна совпадать с pubspec.yaml)'
-        required: true
-        type: string
-      operation:
-        description: 'Создать черновик или опубликовать проверенный черновик'
-        required: true
-        type: choice
-        options: [prepare, publish]
-      artifacts_verified:
-        description: 'Для публикации: файлы проверены, статус подписей указан в описании'
-        type: boolean
-        default: false
-      include_macos:
-        description: 'Включить macOS Apple Silicon; выключите для выпуска только Android и Windows'
-        type: boolean
-        default: true
-      include_windows:
-        description: 'Включить Windows x64'
-        type: boolean
-        default: true
-      windows_only:
-        description: 'Выпустить только Windows x64'
-        type: boolean
-        default: false
-permissions:
-  contents: read
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+.*'
+
 concurrency:
-  group: release-proxyyou
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  release:
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write
-      checks: read
-      actions: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      RELEASE_TAG: ${{ inputs.tag }}
-      OPERATION: ${{ inputs.operation }}
-      ARTIFACTS_VERIFIED: ${{ inputs.artifacts_verified }}
-      INCLUDE_MACOS: ${{ inputs.include_macos }}
-      INCLUDE_WINDOWS: ${{ inputs.include_windows }}
-      WINDOWS_ONLY: ${{ inputs.windows_only }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - name: Verify version and release policy
-        run: |
-          python3 scripts/github_release.py preflight
-      - name: Create draft release
-        if: inputs.operation == 'prepare'
-        run: |
-          gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --draft --title "PROXYYOU ${RELEASE_TAG#v}" --notes 'Черновик: загрузите проверенные пакеты выбранных платформ и SHA256SUMS.txt. Публикация выполняется workflow Release ProxyYou.'
-      - name: Verify and publish existing draft
-        if: inputs.operation == 'publish'
-        run: |
-          python3 scripts/github_release.py verify-draft
-          gh release edit "$RELEASE_TAG" --draft=false --latest
-      - name: Refresh published download page
-        if: inputs.operation == 'publish'
-        run: gh workflow run pages.yml --ref main
+  build-release:
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    # Same grant as ci.yml: with a narrowed block GITHUB_TOKEN got "Resource not accessible by
+    # integration" (403) from the create-release API on the v5.2.0 run. The jobs of build.yml
+    # ask for their own narrower scopes, except `release`.
+    permissions: write-all
+    with:
+      upload-artifact: true
+      tag-name: ${{ github.ref_name }}
+      # v5.5.6.dev is a dev build, v5.5.6 a prod one.
+      channel: ${{ endsWith(github.ref_name, 'dev') && 'dev' || 'prod' }}

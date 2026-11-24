@@ -1,28 +1,29 @@
 package com.hiddify.hiddify
 
-import android.app.UiModeManager
-import android.content.Context
-import android.content.res.Configuration
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
+import android.os.Bundle
 import android.util.Log
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.lifecycleScope
+import com.hiddify.hiddify.bg.BoxService
 import com.hiddify.hiddify.bg.ServiceConnection
 import com.hiddify.hiddify.bg.ServiceNotification
 import com.hiddify.hiddify.constant.Alert
 import com.hiddify.hiddify.constant.ServiceMode
 import com.hiddify.hiddify.constant.Status
 import io.flutter.embedding.android.FlutterFragmentActivity
-import io.flutter.plugin.common.MethodChannel
 import io.flutter.embedding.engine.FlutterEngine
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -38,8 +39,6 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
         const val NOTIFICATION_PERMISSION_REQUEST_CODE = 1010
     }
 
-    private var playbackProbe: YoutubePlaybackProbe? = null
-
     private val connection = ServiceConnection(this, this)
 
     val logList = LinkedList<String>()
@@ -47,21 +46,17 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     val serviceStatus = MutableLiveData(Status.Stopped)
     val serviceAlerts = MutableLiveData<ServiceEvent?>(null)
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        Application.initialize(this)
+        super.onCreate(savedInstanceState)
+        // Android 15 draws apps targeting SDK 35 edge-to-edge; this does the same on older
+        // versions, with transparent bars the Flutter UI draws behind. After super, which
+        // tints the status bar for its own fullscreen look.
+        enableEdgeToEdge()
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        playbackProbe = YoutubePlaybackProbe(this, MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.proxyyou/playback"))
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.proxyyou/device")
-            .setMethodCallHandler { call, result ->
-                if (call.method == "isTelevision") {
-                    val mode = getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
-                    result.success(
-                        mode.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION ||
-                            packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
-                    )
-                } else {
-                    result.notImplemented()
-                }
-            }
         instance = this
         reconnect()
         flutterEngine.plugins.add(MethodHandler(lifecycleScope))
@@ -77,13 +72,28 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
         connection.reconnect()
     }
 
+    // The start that is still waiting on a permission dialog. Every path that ends a start
+    // completes it exactly once: true once the service is asked to start, false once it
+    // cannot start (the reason goes out separately as a service alert). Main thread only.
+    private var pendingStart: CompletableDeferred<Boolean>? = null
+
+    /** Returns only after the permission dialogs are answered: true if the service was asked to start. */
     @SuppressLint("NewApi")
-    fun startService() {
+    suspend fun startService(): Boolean = withContext(Dispatchers.Main) {
+        // A second start while the dialogs are open waits for them instead of opening more.
+        pendingStart?.let { return@withContext it.await() }
+        val start = CompletableDeferred<Boolean>().also { pendingStart = it }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !ServiceNotification.checkPermission()) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            return
+        } else {
+            startService0()
         }
-        startService0()
+        start.await()
+    }
+
+    private fun finishStart(started: Boolean) {
+        pendingStart?.complete(started)
+        pendingStart = null
     }
 
     private fun startService0() {
@@ -96,14 +106,20 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
                     return@launch
                 }
             }
+            // the app starts the core itself, over gRPC, once the service is up
             val intent = Intent(Application.application, Settings.serviceClass())
+                .putExtra(BoxService.EXTRA_START_CORE, false)
             withContext(Dispatchers.Main) {
-                ContextCompat.startForegroundService(this@MainActivity, intent)
+                val started = runCatching { ContextCompat.startForegroundService(this@MainActivity, intent) }
+                    .onFailure { onServiceAlert(Alert.StartService, it.message) }
+                    .isSuccess
+                if (started) Settings.startedByUser = true
+                finishStart(started)
             }
-            Settings.startedByUser = true
         }
     }
 
+    /** True when the start cannot go on now: the VPN dialog is open, or preparing failed. */
     private suspend fun prepare() = withContext(Dispatchers.Main) {
         try {
             val intent = VpnService.prepare(this@MainActivity)
@@ -115,6 +131,7 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
             }
         } catch (e: Exception) {
             onServiceAlert(Alert.RequestVPNPermission, e.message)
+            finishStart(false)
             true
         }
     }
@@ -124,6 +141,7 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
         ) { isGranted ->
             if (Settings.dynamicNotification && !isGranted) {
                 onServiceAlert(Alert.RequestNotificationPermission, null)
+                finishStart(false)
             } else {
                 startService0()
             }
@@ -137,6 +155,7 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
                 startService0()
             } else {
                 onServiceAlert(Alert.RequestVPNPermission, null)
+                finishStart(false)
             }
         }
 
@@ -152,9 +171,26 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
 
 
     override fun onDestroy() {
-        playbackProbe?.close()
         connection.disconnect()
         super.onDestroy()
+    }
+
+    /**
+     * The app picked in a share sheet opens in its own task. Without this the system starts it
+     * in Hiddify's task, on top of this activity: after sharing a log to Telegram, the Hiddify
+     * icon and its recents card brought back Telegram's share screen instead of Hiddify.
+     * share_plus starts the sheet from here and has no option for it, so the flag is added to
+     * the intent inside every chooser this activity starts (startActivity comes through here).
+     */
+    @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
+    override fun startActivityForResult(intent: Intent, requestCode: Int, options: Bundle?) {
+        if (intent.action == Intent.ACTION_CHOOSER) {
+            IntentCompat.getParcelableExtra(intent, Intent.EXTRA_INTENT, Intent::class.java)?.let { target ->
+                target.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                intent.putExtra(Intent.EXTRA_INTENT, target)
+            }
+        }
+        super.startActivityForResult(intent, requestCode, options)
     }
 
     @SuppressLint("NewApi")
@@ -175,7 +211,7 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     ) {
         if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                startService()
+                lifecycleScope.launch { startService() }
             } else onServiceAlert(Alert.RequestNotificationPermission, null)
         }
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -184,10 +220,10 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == VPN_PERMISSION_REQUEST_CODE) {
-            if (resultCode == RESULT_OK) startService()
+            if (resultCode == RESULT_OK) lifecycleScope.launch { startService() }
             else onServiceAlert(Alert.RequestVPNPermission, null)
         } else if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
-            if (resultCode == RESULT_OK) startService()
+            if (resultCode == RESULT_OK) lifecycleScope.launch { startService() }
             else onServiceAlert(Alert.RequestNotificationPermission, null)
         }
     }

@@ -7,11 +7,14 @@ import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/theme/app_theme_mode.dart';
 import 'package:hiddify/core/theme/theme_preferences.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
+import 'package:hiddify/features/proxy/active/ip_widget.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class LocalePrefTile extends ConsumerWidget {
-  const LocalePrefTile({super.key});
+  const LocalePrefTile({super.key, this.onChanged});
+
+  /// Called after the user picks a language (not on reset).
+  final ValueChanged<AppLocale>? onChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -21,10 +24,38 @@ class LocalePrefTile extends ConsumerWidget {
     return ListTile(
       title: Text(t.pages.settings.general.locale),
       subtitle: Text(locale.localeName),
-      leading: const PlatformIcon(Icons.translate_rounded),
+      leading: const Icon(Icons.translate_rounded),
+      trailing: _localeFlag(locale, size: 40),
+      onTap: () async {
+        final selectedLocale = await ref
+            .read(dialogNotifierProvider.notifier)
+            .showSettingPicker<AppLocale>(
+              title: t.pages.settings.general.locale,
+              selected: locale,
+              onReset: () => ref.read(localePreferencesProvider.notifier).changeLocale(AppLocale.en),
+              options: _localeOrder,
+              getTitle: (e) => e.localeName,
+              getSecondary: _localeFlag,
+            );
+        if (selectedLocale != null) {
+          await ref.read(localePreferencesProvider.notifier).changeLocale(selectedLocale);
+          onChanged?.call(selectedLocale);
+        }
+      },
     );
   }
 }
+
+/// English first, Persian second, then the rest as declared.
+final _localeOrder = [
+  AppLocale.en,
+  AppLocale.fa,
+  ...AppLocale.values.where((e) => e != AppLocale.en && e != AppLocale.fa),
+];
+
+/// The language's flag (Persian's with the lion and sun); none for a language without one.
+Widget? _localeFlag(AppLocale locale, {double size = 32}) =>
+    locale.flagCountryCode.isEmpty ? null : IPCountryFlag(countryCode: locale.flagCountryCode, size: size);
 
 class EnableAnalyticsPrefTile extends ConsumerWidget {
   const EnableAnalyticsPrefTile({super.key, this.onChanged});
@@ -40,7 +71,7 @@ class EnableAnalyticsPrefTile extends ConsumerWidget {
     return SwitchListTile.adaptive(
       title: Text(t.pages.settings.general.enableAnalytics),
       subtitle: Text(t.pages.settings.general.enableAnalyticsMsg, style: Theme.of(context).textTheme.bodySmall),
-      secondary: const PlatformIcon(Icons.analytics_rounded),
+      secondary: const Icon(Icons.analytics_rounded),
       value: enabled,
       onChanged: (value) async {
         if (onChanged != null) {
@@ -68,7 +99,7 @@ class ThemeModePrefTile extends ConsumerWidget {
     return ListTile(
       title: Text(t.pages.settings.general.themeMode),
       subtitle: Text(themeMode.present(t)),
-      leading: PlatformIcon(switch (ref.watch(themePreferencesProvider)) {
+      leading: Icon(switch (ref.watch(themePreferencesProvider)) {
         AppThemeMode.system => Icons.auto_awesome_rounded,
         AppThemeMode.light => Icons.light_mode_rounded,
         AppThemeMode.dark => Icons.dark_mode_rounded,
@@ -104,7 +135,7 @@ class ClosingPrefTile extends ConsumerWidget {
     return ListTile(
       title: Text(t.pages.settings.general.actionAtClosing),
       subtitle: Text(action.present(t)),
-      leading: const PlatformIcon(Icons.logout_rounded),
+      leading: const Icon(Icons.logout_rounded),
       onTap: () async {
         final selectedAction = await ref.read(dialogNotifierProvider.notifier).showActionAtClosing(selected: action);
         if (selectedAction != null) {

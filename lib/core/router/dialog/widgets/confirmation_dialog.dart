@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class ConfirmationDialog extends HookConsumerWidget {
@@ -16,7 +15,7 @@ class ConfirmationDialog extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
     return AlertDialog(
-      icon: icon != null ? PlatformIcon(icon) : null,
+      icon: icon != null ? Icon(icon) : null,
       title: Text(title),
       content: ConstrainedBox(constraints: AlertDialogConst.boxConstraints, child: Text(message)),
       actions: [

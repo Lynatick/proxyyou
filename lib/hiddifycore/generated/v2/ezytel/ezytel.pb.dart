@@ -28,8 +28,7 @@ class ChannelInfoRequest extends $pb.GeneratedMessage {
     final result = create();
     if (channelId != null) result.channelId = channelId;
     if (lastRead != null) result.lastRead = lastRead;
-    if (disableInlineImages != null)
-      result.disableInlineImages = disableInlineImages;
+    if (disableInlineImages != null) result.disableInlineImages = disableInlineImages;
     return result;
   }
 
@@ -42,10 +41,8 @@ class ChannelInfoRequest extends $pb.GeneratedMessage {
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ChannelInfoRequest',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'ezytel'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ChannelInfoRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'ezytel'), createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'channelId')
     ..aInt64(2, _omitFieldNames ? '' : 'lastRead')
     ..aOB(3, _omitFieldNames ? '' : 'disableInlineImages')
@@ -55,8 +52,7 @@ class ChannelInfoRequest extends $pb.GeneratedMessage {
   ChannelInfoRequest clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ChannelInfoRequest copyWith(void Function(ChannelInfoRequest) updates) =>
-      super.copyWith((message) => updates(message as ChannelInfoRequest))
-          as ChannelInfoRequest;
+      super.copyWith((message) => updates(message as ChannelInfoRequest)) as ChannelInfoRequest;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -65,11 +61,10 @@ class ChannelInfoRequest extends $pb.GeneratedMessage {
   static ChannelInfoRequest create() => ChannelInfoRequest._();
   @$core.override
   ChannelInfoRequest createEmptyInstance() => create();
-  static $pb.PbList<ChannelInfoRequest> createRepeated() =>
-      $pb.PbList<ChannelInfoRequest>();
+  static $pb.PbList<ChannelInfoRequest> createRepeated() => $pb.PbList<ChannelInfoRequest>();
   @$core.pragma('dart2js:noInline')
-  static ChannelInfoRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ChannelInfoRequest>(create);
+  static ChannelInfoRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ChannelInfoRequest>(create);
   static ChannelInfoRequest? _defaultInstance;
 
   /// Channel id, e.g. "durov" — without "@" or "t.me/".
@@ -135,14 +130,11 @@ class ChannelInfo extends $pb.GeneratedMessage {
   factory ChannelInfo.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromBuffer(data, registry);
-  factory ChannelInfo.fromJson($core.String json,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+  factory ChannelInfo.fromJson($core.String json, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ChannelInfo',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'ezytel'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ChannelInfo',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'ezytel'), createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'name')
     ..aOS(2, _omitFieldNames ? '' : 'description')
     ..aOS(3, _omitFieldNames ? '' : 'avatarPath')
@@ -157,8 +149,7 @@ class ChannelInfo extends $pb.GeneratedMessage {
   ChannelInfo clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ChannelInfo copyWith(void Function(ChannelInfo) updates) =>
-      super.copyWith((message) => updates(message as ChannelInfo))
-          as ChannelInfo;
+      super.copyWith((message) => updates(message as ChannelInfo)) as ChannelInfo;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -169,8 +160,7 @@ class ChannelInfo extends $pb.GeneratedMessage {
   ChannelInfo createEmptyInstance() => create();
   static $pb.PbList<ChannelInfo> createRepeated() => $pb.PbList<ChannelInfo>();
   @$core.pragma('dart2js:noInline')
-  static ChannelInfo getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ChannelInfo>(create);
+  static ChannelInfo getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ChannelInfo>(create);
   static ChannelInfo? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -267,8 +257,7 @@ class ChannelMessagesRequest extends $pb.GeneratedMessage {
     final result = create();
     if (channelId != null) result.channelId = channelId;
     if (before != null) result.before = before;
-    if (disableInlineImages != null)
-      result.disableInlineImages = disableInlineImages;
+    if (disableInlineImages != null) result.disableInlineImages = disableInlineImages;
     return result;
   }
 
@@ -281,10 +270,8 @@ class ChannelMessagesRequest extends $pb.GeneratedMessage {
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ChannelMessagesRequest',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'ezytel'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ChannelMessagesRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'ezytel'), createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'channelId')
     ..aInt64(2, _omitFieldNames ? '' : 'before')
     ..aOB(3, _omitFieldNames ? '' : 'disableInlineImages')
@@ -293,10 +280,8 @@ class ChannelMessagesRequest extends $pb.GeneratedMessage {
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ChannelMessagesRequest clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  ChannelMessagesRequest copyWith(
-          void Function(ChannelMessagesRequest) updates) =>
-      super.copyWith((message) => updates(message as ChannelMessagesRequest))
-          as ChannelMessagesRequest;
+  ChannelMessagesRequest copyWith(void Function(ChannelMessagesRequest) updates) =>
+      super.copyWith((message) => updates(message as ChannelMessagesRequest)) as ChannelMessagesRequest;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -305,11 +290,10 @@ class ChannelMessagesRequest extends $pb.GeneratedMessage {
   static ChannelMessagesRequest create() => ChannelMessagesRequest._();
   @$core.override
   ChannelMessagesRequest createEmptyInstance() => create();
-  static $pb.PbList<ChannelMessagesRequest> createRepeated() =>
-      $pb.PbList<ChannelMessagesRequest>();
+  static $pb.PbList<ChannelMessagesRequest> createRepeated() => $pb.PbList<ChannelMessagesRequest>();
   @$core.pragma('dart2js:noInline')
-  static ChannelMessagesRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ChannelMessagesRequest>(create);
+  static ChannelMessagesRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ChannelMessagesRequest>(create);
   static ChannelMessagesRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -369,10 +353,8 @@ class ChannelMessagesResponse extends $pb.GeneratedMessage {
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ChannelMessagesResponse',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'ezytel'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ChannelMessagesResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'ezytel'), createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'html')
     ..aOS(2, _omitFieldNames ? '' : 'channelAvatar')
     ..aInt64(3, _omitFieldNames ? '' : 'lastPostId')
@@ -381,10 +363,8 @@ class ChannelMessagesResponse extends $pb.GeneratedMessage {
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ChannelMessagesResponse clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  ChannelMessagesResponse copyWith(
-          void Function(ChannelMessagesResponse) updates) =>
-      super.copyWith((message) => updates(message as ChannelMessagesResponse))
-          as ChannelMessagesResponse;
+  ChannelMessagesResponse copyWith(void Function(ChannelMessagesResponse) updates) =>
+      super.copyWith((message) => updates(message as ChannelMessagesResponse)) as ChannelMessagesResponse;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -393,11 +373,10 @@ class ChannelMessagesResponse extends $pb.GeneratedMessage {
   static ChannelMessagesResponse create() => ChannelMessagesResponse._();
   @$core.override
   ChannelMessagesResponse createEmptyInstance() => create();
-  static $pb.PbList<ChannelMessagesResponse> createRepeated() =>
-      $pb.PbList<ChannelMessagesResponse>();
+  static $pb.PbList<ChannelMessagesResponse> createRepeated() => $pb.PbList<ChannelMessagesResponse>();
   @$core.pragma('dart2js:noInline')
-  static ChannelMessagesResponse getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ChannelMessagesResponse>(create);
+  static ChannelMessagesResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ChannelMessagesResponse>(create);
   static ChannelMessagesResponse? _defaultInstance;
 
   /// Pre-rendered HTML fragment ready to be injected into .main_block.
@@ -458,10 +437,8 @@ class ProxyImageRequest extends $pb.GeneratedMessage {
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ProxyImageRequest',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'ezytel'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ProxyImageRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'ezytel'), createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'hexUrl')
     ..hasRequiredFields = false;
 
@@ -469,8 +446,7 @@ class ProxyImageRequest extends $pb.GeneratedMessage {
   ProxyImageRequest clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ProxyImageRequest copyWith(void Function(ProxyImageRequest) updates) =>
-      super.copyWith((message) => updates(message as ProxyImageRequest))
-          as ProxyImageRequest;
+      super.copyWith((message) => updates(message as ProxyImageRequest)) as ProxyImageRequest;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -479,11 +455,10 @@ class ProxyImageRequest extends $pb.GeneratedMessage {
   static ProxyImageRequest create() => ProxyImageRequest._();
   @$core.override
   ProxyImageRequest createEmptyInstance() => create();
-  static $pb.PbList<ProxyImageRequest> createRepeated() =>
-      $pb.PbList<ProxyImageRequest>();
+  static $pb.PbList<ProxyImageRequest> createRepeated() => $pb.PbList<ProxyImageRequest>();
   @$core.pragma('dart2js:noInline')
-  static ProxyImageRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ProxyImageRequest>(create);
+  static ProxyImageRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ProxyImageRequest>(create);
   static ProxyImageRequest? _defaultInstance;
 
   /// Hex-encoded source URL without the "https://" prefix, exactly as the
@@ -520,12 +495,9 @@ class ProxyImageResponse extends $pb.GeneratedMessage {
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ProxyImageResponse',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'ezytel'),
-      createEmptyInstance: create)
-    ..a<$core.List<$core.int>>(
-        1, _omitFieldNames ? '' : 'data', $pb.PbFieldType.OY)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ProxyImageResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'ezytel'), createEmptyInstance: create)
+    ..a<$core.List<$core.int>>(1, _omitFieldNames ? '' : 'data', $pb.PbFieldType.OY)
     ..aOS(2, _omitFieldNames ? '' : 'contentType')
     ..aOS(3, _omitFieldNames ? '' : 'cacheName')
     ..hasRequiredFields = false;
@@ -534,8 +506,7 @@ class ProxyImageResponse extends $pb.GeneratedMessage {
   ProxyImageResponse clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ProxyImageResponse copyWith(void Function(ProxyImageResponse) updates) =>
-      super.copyWith((message) => updates(message as ProxyImageResponse))
-          as ProxyImageResponse;
+      super.copyWith((message) => updates(message as ProxyImageResponse)) as ProxyImageResponse;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -544,11 +515,10 @@ class ProxyImageResponse extends $pb.GeneratedMessage {
   static ProxyImageResponse create() => ProxyImageResponse._();
   @$core.override
   ProxyImageResponse createEmptyInstance() => create();
-  static $pb.PbList<ProxyImageResponse> createRepeated() =>
-      $pb.PbList<ProxyImageResponse>();
+  static $pb.PbList<ProxyImageResponse> createRepeated() => $pb.PbList<ProxyImageResponse>();
   @$core.pragma('dart2js:noInline')
-  static ProxyImageResponse getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ProxyImageResponse>(create);
+  static ProxyImageResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ProxyImageResponse>(create);
   static ProxyImageResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -601,10 +571,8 @@ class ParseChannelsRequest extends $pb.GeneratedMessage {
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ParseChannelsRequest',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'ezytel'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ParseChannelsRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'ezytel'), createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'raw')
     ..hasRequiredFields = false;
 
@@ -612,8 +580,7 @@ class ParseChannelsRequest extends $pb.GeneratedMessage {
   ParseChannelsRequest clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ParseChannelsRequest copyWith(void Function(ParseChannelsRequest) updates) =>
-      super.copyWith((message) => updates(message as ParseChannelsRequest))
-          as ParseChannelsRequest;
+      super.copyWith((message) => updates(message as ParseChannelsRequest)) as ParseChannelsRequest;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -622,11 +589,10 @@ class ParseChannelsRequest extends $pb.GeneratedMessage {
   static ParseChannelsRequest create() => ParseChannelsRequest._();
   @$core.override
   ParseChannelsRequest createEmptyInstance() => create();
-  static $pb.PbList<ParseChannelsRequest> createRepeated() =>
-      $pb.PbList<ParseChannelsRequest>();
+  static $pb.PbList<ParseChannelsRequest> createRepeated() => $pb.PbList<ParseChannelsRequest>();
   @$core.pragma('dart2js:noInline')
-  static ParseChannelsRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ParseChannelsRequest>(create);
+  static ParseChannelsRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ParseChannelsRequest>(create);
   static ParseChannelsRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -657,20 +623,16 @@ class ParseChannelsResponse extends $pb.GeneratedMessage {
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ParseChannelsResponse',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'ezytel'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ParseChannelsResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'ezytel'), createEmptyInstance: create)
     ..pPS(1, _omitFieldNames ? '' : 'channelIds')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ParseChannelsResponse clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  ParseChannelsResponse copyWith(
-          void Function(ParseChannelsResponse) updates) =>
-      super.copyWith((message) => updates(message as ParseChannelsResponse))
-          as ParseChannelsResponse;
+  ParseChannelsResponse copyWith(void Function(ParseChannelsResponse) updates) =>
+      super.copyWith((message) => updates(message as ParseChannelsResponse)) as ParseChannelsResponse;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -679,18 +641,15 @@ class ParseChannelsResponse extends $pb.GeneratedMessage {
   static ParseChannelsResponse create() => ParseChannelsResponse._();
   @$core.override
   ParseChannelsResponse createEmptyInstance() => create();
-  static $pb.PbList<ParseChannelsResponse> createRepeated() =>
-      $pb.PbList<ParseChannelsResponse>();
+  static $pb.PbList<ParseChannelsResponse> createRepeated() => $pb.PbList<ParseChannelsResponse>();
   @$core.pragma('dart2js:noInline')
-  static ParseChannelsResponse getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ParseChannelsResponse>(create);
+  static ParseChannelsResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ParseChannelsResponse>(create);
   static ParseChannelsResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
   $pb.PbList<$core.String> get channelIds => $_getList(0);
 }
 
-const $core.bool _omitFieldNames =
-    $core.bool.fromEnvironment('protobuf.omit_field_names');
-const $core.bool _omitMessageNames =
-    $core.bool.fromEnvironment('protobuf.omit_message_names');
+const $core.bool _omitFieldNames = $core.bool.fromEnvironment('protobuf.omit_field_names');
+const $core.bool _omitMessageNames = $core.bool.fromEnvironment('protobuf.omit_message_names');

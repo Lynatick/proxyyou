@@ -18,7 +18,9 @@ class FreeProfileConsentDialog extends HookConsumerWidget {
       content: ConstrainedBox(
         constraints: AlertDialogConst.boxConstraints,
         child: MarkdownBody(
-          data: consent,
+          // a space between a link's text and its address, "[text] (https://…)", breaks the link in
+          // markdown; the consents come from a remote list, so the dialog doesn't rely on it
+          data: consent.replaceAllMapped(RegExp(r'\]\s+\((https?://)'), (m) => '](${m[1]}'),
           // styleSheet: MarkdownStyleSheet(textAlign: WrapAlignment.spaceBetween),
           onTapLink: (text, href, title) => UriUtils.tryLaunch(Uri.parse(href!)),
         ),

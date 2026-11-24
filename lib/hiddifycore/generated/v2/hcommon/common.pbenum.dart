@@ -16,10 +16,8 @@ import 'package:protobuf/protobuf.dart' as $pb;
 
 class ResponseCode extends $pb.ProtobufEnum {
   static const ResponseCode OK = ResponseCode._(0, _omitEnumNames ? '' : 'OK');
-  static const ResponseCode FAILED =
-      ResponseCode._(1, _omitEnumNames ? '' : 'FAILED');
-  static const ResponseCode AUTH_NEED =
-      ResponseCode._(2, _omitEnumNames ? '' : 'AUTH_NEED');
+  static const ResponseCode FAILED = ResponseCode._(1, _omitEnumNames ? '' : 'FAILED');
+  static const ResponseCode AUTH_NEED = ResponseCode._(2, _omitEnumNames ? '' : 'AUTH_NEED');
 
   static const $core.List<ResponseCode> values = <ResponseCode>[
     OK,
@@ -27,13 +25,10 @@ class ResponseCode extends $pb.ProtobufEnum {
     AUTH_NEED,
   ];
 
-  static final $core.List<ResponseCode?> _byValue =
-      $pb.ProtobufEnum.$_initByValueList(values, 2);
-  static ResponseCode? valueOf($core.int value) =>
-      value < 0 || value >= _byValue.length ? null : _byValue[value];
+  static final $core.List<ResponseCode?> _byValue = $pb.ProtobufEnum.$_initByValueList(values, 2);
+  static ResponseCode? valueOf($core.int value) => value < 0 || value >= _byValue.length ? null : _byValue[value];
 
   const ResponseCode._(super.value, super.name);
 }
 
-const $core.bool _omitEnumNames =
-    $core.bool.fromEnvironment('protobuf.omit_enum_names');
+const $core.bool _omitEnumNames = $core.bool.fromEnvironment('protobuf.omit_enum_names');

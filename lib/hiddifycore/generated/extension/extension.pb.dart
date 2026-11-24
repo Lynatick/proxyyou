@@ -43,23 +43,18 @@ class ExtensionActionResult extends $pb.GeneratedMessage {
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ExtensionActionResult',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'extension'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ExtensionActionResult',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'extension'), createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'extensionId')
-    ..aE<$0.ResponseCode>(2, _omitFieldNames ? '' : 'code',
-        enumValues: $0.ResponseCode.values)
+    ..aE<$0.ResponseCode>(2, _omitFieldNames ? '' : 'code', enumValues: $0.ResponseCode.values)
     ..aOS(3, _omitFieldNames ? '' : 'message')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ExtensionActionResult clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  ExtensionActionResult copyWith(
-          void Function(ExtensionActionResult) updates) =>
-      super.copyWith((message) => updates(message as ExtensionActionResult))
-          as ExtensionActionResult;
+  ExtensionActionResult copyWith(void Function(ExtensionActionResult) updates) =>
+      super.copyWith((message) => updates(message as ExtensionActionResult)) as ExtensionActionResult;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -68,11 +63,10 @@ class ExtensionActionResult extends $pb.GeneratedMessage {
   static ExtensionActionResult create() => ExtensionActionResult._();
   @$core.override
   ExtensionActionResult createEmptyInstance() => create();
-  static $pb.PbList<ExtensionActionResult> createRepeated() =>
-      $pb.PbList<ExtensionActionResult>();
+  static $pb.PbList<ExtensionActionResult> createRepeated() => $pb.PbList<ExtensionActionResult>();
   @$core.pragma('dart2js:noInline')
-  static ExtensionActionResult getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ExtensionActionResult>(create);
+  static ExtensionActionResult getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ExtensionActionResult>(create);
   static ExtensionActionResult? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -117,24 +111,19 @@ class ExtensionList extends $pb.GeneratedMessage {
   factory ExtensionList.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromBuffer(data, registry);
-  factory ExtensionList.fromJson($core.String json,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+  factory ExtensionList.fromJson($core.String json, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ExtensionList',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'extension'),
-      createEmptyInstance: create)
-    ..pPM<ExtensionMsg>(1, _omitFieldNames ? '' : 'extensions',
-        subBuilder: ExtensionMsg.create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ExtensionList',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'extension'), createEmptyInstance: create)
+    ..pPM<ExtensionMsg>(1, _omitFieldNames ? '' : 'extensions', subBuilder: ExtensionMsg.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ExtensionList clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ExtensionList copyWith(void Function(ExtensionList) updates) =>
-      super.copyWith((message) => updates(message as ExtensionList))
-          as ExtensionList;
+      super.copyWith((message) => updates(message as ExtensionList)) as ExtensionList;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -143,11 +132,9 @@ class ExtensionList extends $pb.GeneratedMessage {
   static ExtensionList create() => ExtensionList._();
   @$core.override
   ExtensionList createEmptyInstance() => create();
-  static $pb.PbList<ExtensionList> createRepeated() =>
-      $pb.PbList<ExtensionList>();
+  static $pb.PbList<ExtensionList> createRepeated() => $pb.PbList<ExtensionList>();
   @$core.pragma('dart2js:noInline')
-  static ExtensionList getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ExtensionList>(create);
+  static ExtensionList getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ExtensionList>(create);
   static ExtensionList? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -174,10 +161,8 @@ class EditExtensionRequest extends $pb.GeneratedMessage {
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'EditExtensionRequest',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'extension'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'EditExtensionRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'extension'), createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'extensionId')
     ..aOB(2, _omitFieldNames ? '' : 'enable')
     ..hasRequiredFields = false;
@@ -186,8 +171,7 @@ class EditExtensionRequest extends $pb.GeneratedMessage {
   EditExtensionRequest clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   EditExtensionRequest copyWith(void Function(EditExtensionRequest) updates) =>
-      super.copyWith((message) => updates(message as EditExtensionRequest))
-          as EditExtensionRequest;
+      super.copyWith((message) => updates(message as EditExtensionRequest)) as EditExtensionRequest;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -196,11 +180,10 @@ class EditExtensionRequest extends $pb.GeneratedMessage {
   static EditExtensionRequest create() => EditExtensionRequest._();
   @$core.override
   EditExtensionRequest createEmptyInstance() => create();
-  static $pb.PbList<EditExtensionRequest> createRepeated() =>
-      $pb.PbList<EditExtensionRequest>();
+  static $pb.PbList<EditExtensionRequest> createRepeated() => $pb.PbList<EditExtensionRequest>();
   @$core.pragma('dart2js:noInline')
-  static EditExtensionRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<EditExtensionRequest>(create);
+  static EditExtensionRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<EditExtensionRequest>(create);
   static EditExtensionRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -242,14 +225,11 @@ class ExtensionMsg extends $pb.GeneratedMessage {
   factory ExtensionMsg.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromBuffer(data, registry);
-  factory ExtensionMsg.fromJson($core.String json,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+  factory ExtensionMsg.fromJson($core.String json, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ExtensionMsg',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'extension'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ExtensionMsg',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'extension'), createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'id')
     ..aOS(2, _omitFieldNames ? '' : 'title')
     ..aOS(3, _omitFieldNames ? '' : 'description')
@@ -260,8 +240,7 @@ class ExtensionMsg extends $pb.GeneratedMessage {
   ExtensionMsg clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ExtensionMsg copyWith(void Function(ExtensionMsg) updates) =>
-      super.copyWith((message) => updates(message as ExtensionMsg))
-          as ExtensionMsg;
+      super.copyWith((message) => updates(message as ExtensionMsg)) as ExtensionMsg;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -270,11 +249,9 @@ class ExtensionMsg extends $pb.GeneratedMessage {
   static ExtensionMsg create() => ExtensionMsg._();
   @$core.override
   ExtensionMsg createEmptyInstance() => create();
-  static $pb.PbList<ExtensionMsg> createRepeated() =>
-      $pb.PbList<ExtensionMsg>();
+  static $pb.PbList<ExtensionMsg> createRepeated() => $pb.PbList<ExtensionMsg>();
   @$core.pragma('dart2js:noInline')
-  static ExtensionMsg getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ExtensionMsg>(create);
+  static ExtensionMsg getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ExtensionMsg>(create);
   static ExtensionMsg? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -334,10 +311,8 @@ class ExtensionRequest extends $pb.GeneratedMessage {
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ExtensionRequest',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'extension'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ExtensionRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'extension'), createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'extensionId')
     ..m<$core.String, $core.String>(2, _omitFieldNames ? '' : 'data',
         entryClassName: 'ExtensionRequest.DataEntry',
@@ -350,8 +325,7 @@ class ExtensionRequest extends $pb.GeneratedMessage {
   ExtensionRequest clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ExtensionRequest copyWith(void Function(ExtensionRequest) updates) =>
-      super.copyWith((message) => updates(message as ExtensionRequest))
-          as ExtensionRequest;
+      super.copyWith((message) => updates(message as ExtensionRequest)) as ExtensionRequest;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -360,11 +334,10 @@ class ExtensionRequest extends $pb.GeneratedMessage {
   static ExtensionRequest create() => ExtensionRequest._();
   @$core.override
   ExtensionRequest createEmptyInstance() => create();
-  static $pb.PbList<ExtensionRequest> createRepeated() =>
-      $pb.PbList<ExtensionRequest>();
+  static $pb.PbList<ExtensionRequest> createRepeated() => $pb.PbList<ExtensionRequest>();
   @$core.pragma('dart2js:noInline')
-  static ExtensionRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ExtensionRequest>(create);
+  static ExtensionRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ExtensionRequest>(create);
   static ExtensionRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -402,10 +375,8 @@ class SendExtensionDataRequest extends $pb.GeneratedMessage {
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'SendExtensionDataRequest',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'extension'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'SendExtensionDataRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'extension'), createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'extensionId')
     ..aOS(2, _omitFieldNames ? '' : 'button')
     ..m<$core.String, $core.String>(3, _omitFieldNames ? '' : 'data',
@@ -418,10 +389,8 @@ class SendExtensionDataRequest extends $pb.GeneratedMessage {
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   SendExtensionDataRequest clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
-  SendExtensionDataRequest copyWith(
-          void Function(SendExtensionDataRequest) updates) =>
-      super.copyWith((message) => updates(message as SendExtensionDataRequest))
-          as SendExtensionDataRequest;
+  SendExtensionDataRequest copyWith(void Function(SendExtensionDataRequest) updates) =>
+      super.copyWith((message) => updates(message as SendExtensionDataRequest)) as SendExtensionDataRequest;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -430,11 +399,10 @@ class SendExtensionDataRequest extends $pb.GeneratedMessage {
   static SendExtensionDataRequest create() => SendExtensionDataRequest._();
   @$core.override
   SendExtensionDataRequest createEmptyInstance() => create();
-  static $pb.PbList<SendExtensionDataRequest> createRepeated() =>
-      $pb.PbList<SendExtensionDataRequest>();
+  static $pb.PbList<SendExtensionDataRequest> createRepeated() => $pb.PbList<SendExtensionDataRequest>();
   @$core.pragma('dart2js:noInline')
-  static SendExtensionDataRequest getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<SendExtensionDataRequest>(create);
+  static SendExtensionDataRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<SendExtensionDataRequest>(create);
   static SendExtensionDataRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -481,12 +449,9 @@ class ExtensionResponse extends $pb.GeneratedMessage {
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ExtensionResponse',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'extension'),
-      createEmptyInstance: create)
-    ..aE<ExtensionResponseType>(1, _omitFieldNames ? '' : 'type',
-        enumValues: ExtensionResponseType.values)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ExtensionResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'extension'), createEmptyInstance: create)
+    ..aE<ExtensionResponseType>(1, _omitFieldNames ? '' : 'type', enumValues: ExtensionResponseType.values)
     ..aOS(2, _omitFieldNames ? '' : 'extensionId')
     ..aOS(3, _omitFieldNames ? '' : 'jsonUi')
     ..hasRequiredFields = false;
@@ -495,8 +460,7 @@ class ExtensionResponse extends $pb.GeneratedMessage {
   ExtensionResponse clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ExtensionResponse copyWith(void Function(ExtensionResponse) updates) =>
-      super.copyWith((message) => updates(message as ExtensionResponse))
-          as ExtensionResponse;
+      super.copyWith((message) => updates(message as ExtensionResponse)) as ExtensionResponse;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -505,11 +469,10 @@ class ExtensionResponse extends $pb.GeneratedMessage {
   static ExtensionResponse create() => ExtensionResponse._();
   @$core.override
   ExtensionResponse createEmptyInstance() => create();
-  static $pb.PbList<ExtensionResponse> createRepeated() =>
-      $pb.PbList<ExtensionResponse>();
+  static $pb.PbList<ExtensionResponse> createRepeated() => $pb.PbList<ExtensionResponse>();
   @$core.pragma('dart2js:noInline')
-  static ExtensionResponse getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ExtensionResponse>(create);
+  static ExtensionResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ExtensionResponse>(create);
   static ExtensionResponse? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -540,7 +503,5 @@ class ExtensionResponse extends $pb.GeneratedMessage {
   void clearJsonUi() => $_clearField(3);
 }
 
-const $core.bool _omitFieldNames =
-    $core.bool.fromEnvironment('protobuf.omit_field_names');
-const $core.bool _omitMessageNames =
-    $core.bool.fromEnvironment('protobuf.omit_message_names');
+const $core.bool _omitFieldNames = $core.bool.fromEnvironment('protobuf.omit_field_names');
+const $core.bool _omitMessageNames = $core.bool.fromEnvironment('protobuf.omit_message_names');

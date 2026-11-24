@@ -17,8 +17,7 @@ import 'package:protobuf/protobuf.dart' as $pb;
 class Outbound extends $pb.ProtobufEnum {
   static const Outbound proxy = Outbound._(0, _omitEnumNames ? '' : 'proxy');
   static const Outbound direct = Outbound._(1, _omitEnumNames ? '' : 'direct');
-  static const Outbound direct_with_fragment =
-      Outbound._(2, _omitEnumNames ? '' : 'direct_with_fragment');
+  static const Outbound direct_with_fragment = Outbound._(2, _omitEnumNames ? '' : 'direct_with_fragment');
   static const Outbound block = Outbound._(3, _omitEnumNames ? '' : 'block');
 
   static const $core.List<Outbound> values = <Outbound>[
@@ -28,10 +27,8 @@ class Outbound extends $pb.ProtobufEnum {
     block,
   ];
 
-  static final $core.List<Outbound?> _byValue =
-      $pb.ProtobufEnum.$_initByValueList(values, 3);
-  static Outbound? valueOf($core.int value) =>
-      value < 0 || value >= _byValue.length ? null : _byValue[value];
+  static final $core.List<Outbound?> _byValue = $pb.ProtobufEnum.$_initByValueList(values, 3);
+  static Outbound? valueOf($core.int value) => value < 0 || value >= _byValue.length ? null : _byValue[value];
 
   const Outbound._(super.value, super.name);
 }
@@ -47,10 +44,8 @@ class Network extends $pb.ProtobufEnum {
     udp,
   ];
 
-  static final $core.List<Network?> _byValue =
-      $pb.ProtobufEnum.$_initByValueList(values, 2);
-  static Network? valueOf($core.int value) =>
-      value < 0 || value >= _byValue.length ? null : _byValue[value];
+  static final $core.List<Network?> _byValue = $pb.ProtobufEnum.$_initByValueList(values, 2);
+  static Network? valueOf($core.int value) => value < 0 || value >= _byValue.length ? null : _byValue[value];
 
   const Network._(super.value, super.name);
 }
@@ -61,8 +56,7 @@ class Protocol extends $pb.ProtobufEnum {
   static const Protocol quic = Protocol._(2, _omitEnumNames ? '' : 'quic');
   static const Protocol stun = Protocol._(3, _omitEnumNames ? '' : 'stun');
   static const Protocol dns = Protocol._(4, _omitEnumNames ? '' : 'dns');
-  static const Protocol bittorrent =
-      Protocol._(5, _omitEnumNames ? '' : 'bittorrent');
+  static const Protocol bittorrent = Protocol._(5, _omitEnumNames ? '' : 'bittorrent');
 
   static const $core.List<Protocol> values = <Protocol>[
     tls,
@@ -73,13 +67,10 @@ class Protocol extends $pb.ProtobufEnum {
     bittorrent,
   ];
 
-  static final $core.List<Protocol?> _byValue =
-      $pb.ProtobufEnum.$_initByValueList(values, 5);
-  static Protocol? valueOf($core.int value) =>
-      value < 0 || value >= _byValue.length ? null : _byValue[value];
+  static final $core.List<Protocol?> _byValue = $pb.ProtobufEnum.$_initByValueList(values, 5);
+  static Protocol? valueOf($core.int value) => value < 0 || value >= _byValue.length ? null : _byValue[value];
 
   const Protocol._(super.value, super.name);
 }
 
-const $core.bool _omitEnumNames =
-    $core.bool.fromEnvironment('protobuf.omit_enum_names');
+const $core.bool _omitEnumNames = $core.bool.fromEnvironment('protobuf.omit_enum_names');

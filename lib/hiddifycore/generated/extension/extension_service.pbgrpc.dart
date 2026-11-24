@@ -31,8 +31,7 @@ class ExtensionHostServiceClient extends $grpc.Client {
     '',
   ];
 
-  ExtensionHostServiceClient(super.channel,
-      {super.options, super.interceptors});
+  ExtensionHostServiceClient(super.channel, {super.options, super.interceptors});
 
   $grpc.ResponseFuture<$1.ExtensionList> listExtensions(
     $0.Empty request, {
@@ -45,9 +44,7 @@ class ExtensionHostServiceClient extends $grpc.Client {
     $1.ExtensionRequest request, {
     $grpc.CallOptions? options,
   }) {
-    return $createStreamingCall(
-        _$connect, $async.Stream.fromIterable([request]),
-        options: options);
+    return $createStreamingCall(_$connect, $async.Stream.fromIterable([request]), options: options);
   }
 
   $grpc.ResponseFuture<$1.ExtensionActionResult> editExtension(
@@ -80,36 +77,30 @@ class ExtensionHostServiceClient extends $grpc.Client {
 
   // method descriptors
 
-  static final _$listExtensions =
-      $grpc.ClientMethod<$0.Empty, $1.ExtensionList>(
-          '/extension.ExtensionHostService/ListExtensions',
-          ($0.Empty value) => value.writeToBuffer(),
-          $1.ExtensionList.fromBuffer);
-  static final _$connect =
-      $grpc.ClientMethod<$1.ExtensionRequest, $1.ExtensionResponse>(
-          '/extension.ExtensionHostService/Connect',
-          ($1.ExtensionRequest value) => value.writeToBuffer(),
-          $1.ExtensionResponse.fromBuffer);
-  static final _$editExtension =
-      $grpc.ClientMethod<$1.EditExtensionRequest, $1.ExtensionActionResult>(
-          '/extension.ExtensionHostService/EditExtension',
-          ($1.EditExtensionRequest value) => value.writeToBuffer(),
-          $1.ExtensionActionResult.fromBuffer);
-  static final _$submitForm =
-      $grpc.ClientMethod<$1.SendExtensionDataRequest, $1.ExtensionActionResult>(
-          '/extension.ExtensionHostService/SubmitForm',
-          ($1.SendExtensionDataRequest value) => value.writeToBuffer(),
-          $1.ExtensionActionResult.fromBuffer);
-  static final _$close =
-      $grpc.ClientMethod<$1.ExtensionRequest, $1.ExtensionActionResult>(
-          '/extension.ExtensionHostService/Close',
-          ($1.ExtensionRequest value) => value.writeToBuffer(),
-          $1.ExtensionActionResult.fromBuffer);
-  static final _$getUI =
-      $grpc.ClientMethod<$1.ExtensionRequest, $1.ExtensionActionResult>(
-          '/extension.ExtensionHostService/GetUI',
-          ($1.ExtensionRequest value) => value.writeToBuffer(),
-          $1.ExtensionActionResult.fromBuffer);
+  static final _$listExtensions = $grpc.ClientMethod<$0.Empty, $1.ExtensionList>(
+      '/extension.ExtensionHostService/ListExtensions',
+      ($0.Empty value) => value.writeToBuffer(),
+      $1.ExtensionList.fromBuffer);
+  static final _$connect = $grpc.ClientMethod<$1.ExtensionRequest, $1.ExtensionResponse>(
+      '/extension.ExtensionHostService/Connect',
+      ($1.ExtensionRequest value) => value.writeToBuffer(),
+      $1.ExtensionResponse.fromBuffer);
+  static final _$editExtension = $grpc.ClientMethod<$1.EditExtensionRequest, $1.ExtensionActionResult>(
+      '/extension.ExtensionHostService/EditExtension',
+      ($1.EditExtensionRequest value) => value.writeToBuffer(),
+      $1.ExtensionActionResult.fromBuffer);
+  static final _$submitForm = $grpc.ClientMethod<$1.SendExtensionDataRequest, $1.ExtensionActionResult>(
+      '/extension.ExtensionHostService/SubmitForm',
+      ($1.SendExtensionDataRequest value) => value.writeToBuffer(),
+      $1.ExtensionActionResult.fromBuffer);
+  static final _$close = $grpc.ClientMethod<$1.ExtensionRequest, $1.ExtensionActionResult>(
+      '/extension.ExtensionHostService/Close',
+      ($1.ExtensionRequest value) => value.writeToBuffer(),
+      $1.ExtensionActionResult.fromBuffer);
+  static final _$getUI = $grpc.ClientMethod<$1.ExtensionRequest, $1.ExtensionActionResult>(
+      '/extension.ExtensionHostService/GetUI',
+      ($1.ExtensionRequest value) => value.writeToBuffer(),
+      $1.ExtensionActionResult.fromBuffer);
 }
 
 @$pb.GrpcServiceName('extension.ExtensionHostService')
@@ -131,91 +122,74 @@ abstract class ExtensionHostServiceBase extends $grpc.Service {
         true,
         ($core.List<$core.int> value) => $1.ExtensionRequest.fromBuffer(value),
         ($1.ExtensionResponse value) => value.writeToBuffer()));
-    $addMethod(
-        $grpc.ServiceMethod<$1.EditExtensionRequest, $1.ExtensionActionResult>(
-            'EditExtension',
-            editExtension_Pre,
-            false,
-            false,
-            ($core.List<$core.int> value) =>
-                $1.EditExtensionRequest.fromBuffer(value),
-            ($1.ExtensionActionResult value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$1.SendExtensionDataRequest,
-            $1.ExtensionActionResult>(
+    $addMethod($grpc.ServiceMethod<$1.EditExtensionRequest, $1.ExtensionActionResult>(
+        'EditExtension',
+        editExtension_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $1.EditExtensionRequest.fromBuffer(value),
+        ($1.ExtensionActionResult value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.SendExtensionDataRequest, $1.ExtensionActionResult>(
         'SubmitForm',
         submitForm_Pre,
         false,
         false,
-        ($core.List<$core.int> value) =>
-            $1.SendExtensionDataRequest.fromBuffer(value),
+        ($core.List<$core.int> value) => $1.SendExtensionDataRequest.fromBuffer(value),
         ($1.ExtensionActionResult value) => value.writeToBuffer()));
-    $addMethod(
-        $grpc.ServiceMethod<$1.ExtensionRequest, $1.ExtensionActionResult>(
-            'Close',
-            close_Pre,
-            false,
-            false,
-            ($core.List<$core.int> value) =>
-                $1.ExtensionRequest.fromBuffer(value),
-            ($1.ExtensionActionResult value) => value.writeToBuffer()));
-    $addMethod(
-        $grpc.ServiceMethod<$1.ExtensionRequest, $1.ExtensionActionResult>(
-            'GetUI',
-            getUI_Pre,
-            false,
-            false,
-            ($core.List<$core.int> value) =>
-                $1.ExtensionRequest.fromBuffer(value),
-            ($1.ExtensionActionResult value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.ExtensionRequest, $1.ExtensionActionResult>(
+        'Close',
+        close_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $1.ExtensionRequest.fromBuffer(value),
+        ($1.ExtensionActionResult value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.ExtensionRequest, $1.ExtensionActionResult>(
+        'GetUI',
+        getUI_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $1.ExtensionRequest.fromBuffer(value),
+        ($1.ExtensionActionResult value) => value.writeToBuffer()));
   }
 
-  $async.Future<$1.ExtensionList> listExtensions_Pre(
-      $grpc.ServiceCall $call, $async.Future<$0.Empty> $request) async {
+  $async.Future<$1.ExtensionList> listExtensions_Pre($grpc.ServiceCall $call, $async.Future<$0.Empty> $request) async {
     return listExtensions($call, await $request);
   }
 
-  $async.Future<$1.ExtensionList> listExtensions(
-      $grpc.ServiceCall call, $0.Empty request);
+  $async.Future<$1.ExtensionList> listExtensions($grpc.ServiceCall call, $0.Empty request);
 
-  $async.Stream<$1.ExtensionResponse> connect_Pre($grpc.ServiceCall $call,
-      $async.Future<$1.ExtensionRequest> $request) async* {
+  $async.Stream<$1.ExtensionResponse> connect_Pre(
+      $grpc.ServiceCall $call, $async.Future<$1.ExtensionRequest> $request) async* {
     yield* connect($call, await $request);
   }
 
-  $async.Stream<$1.ExtensionResponse> connect(
-      $grpc.ServiceCall call, $1.ExtensionRequest request);
+  $async.Stream<$1.ExtensionResponse> connect($grpc.ServiceCall call, $1.ExtensionRequest request);
 
   $async.Future<$1.ExtensionActionResult> editExtension_Pre(
-      $grpc.ServiceCall $call,
-      $async.Future<$1.EditExtensionRequest> $request) async {
+      $grpc.ServiceCall $call, $async.Future<$1.EditExtensionRequest> $request) async {
     return editExtension($call, await $request);
   }
 
-  $async.Future<$1.ExtensionActionResult> editExtension(
-      $grpc.ServiceCall call, $1.EditExtensionRequest request);
+  $async.Future<$1.ExtensionActionResult> editExtension($grpc.ServiceCall call, $1.EditExtensionRequest request);
 
   $async.Future<$1.ExtensionActionResult> submitForm_Pre(
-      $grpc.ServiceCall $call,
-      $async.Future<$1.SendExtensionDataRequest> $request) async {
+      $grpc.ServiceCall $call, $async.Future<$1.SendExtensionDataRequest> $request) async {
     return submitForm($call, await $request);
   }
 
-  $async.Future<$1.ExtensionActionResult> submitForm(
-      $grpc.ServiceCall call, $1.SendExtensionDataRequest request);
+  $async.Future<$1.ExtensionActionResult> submitForm($grpc.ServiceCall call, $1.SendExtensionDataRequest request);
 
-  $async.Future<$1.ExtensionActionResult> close_Pre($grpc.ServiceCall $call,
-      $async.Future<$1.ExtensionRequest> $request) async {
+  $async.Future<$1.ExtensionActionResult> close_Pre(
+      $grpc.ServiceCall $call, $async.Future<$1.ExtensionRequest> $request) async {
     return close($call, await $request);
   }
 
-  $async.Future<$1.ExtensionActionResult> close(
-      $grpc.ServiceCall call, $1.ExtensionRequest request);
+  $async.Future<$1.ExtensionActionResult> close($grpc.ServiceCall call, $1.ExtensionRequest request);
 
-  $async.Future<$1.ExtensionActionResult> getUI_Pre($grpc.ServiceCall $call,
-      $async.Future<$1.ExtensionRequest> $request) async {
+  $async.Future<$1.ExtensionActionResult> getUI_Pre(
+      $grpc.ServiceCall $call, $async.Future<$1.ExtensionRequest> $request) async {
     return getUI($call, await $request);
   }
 
-  $async.Future<$1.ExtensionActionResult> getUI(
-      $grpc.ServiceCall call, $1.ExtensionRequest request);
+  $async.Future<$1.ExtensionActionResult> getUI($grpc.ServiceCall call, $1.ExtensionRequest request);
 }

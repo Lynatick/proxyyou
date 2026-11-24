@@ -1,23 +1,15 @@
 {
-  "pins": [
+  "originHash" : "78526aafdff3d7bb5fccbf1f4499af4d3ea88e16e8819bf30db26c60f51192d8",
+  "pins" : [
     {
-      "identity": "launchatlogin-legacy",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/sindresorhus/LaunchAtLogin-Legacy",
-      "state": {
-        "branch": "main",
-        "revision": "9a894d799269cb591037f9f9cb0961510d4dca81"
-      }
-    },
-    {
-      "identity": "sentry-cocoa",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/getsentry/sentry-cocoa",
-      "state": {
-        "revision": "e0fa062817b277fd9ab597b54b8e2f92dc65b009",
-        "version": "8.46.0"
+      "identity" : "launchatlogin-legacy",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/sindresorhus/LaunchAtLogin-Legacy",
+      "state" : {
+        "branch" : "main",
+        "revision" : "9a894d799269cb591037f9f9cb0961510d4dca81"
       }
     }
   ],
-  "version": 2
+  "version" : 2
 }

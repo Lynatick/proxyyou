@@ -26,6 +26,13 @@ import com.hiddify.core.libbox.NetworkInterface as LibboxNetworkInterface
 
 import android.system.OsConstants
 import com.hiddify.core.libbox.ConnectionOwner
+import com.hiddify.core.libbox.AutoRedirectHandler
+import com.hiddify.core.libbox.AutoRedirectSession
+import com.hiddify.core.libbox.BridgeOptions
+import com.hiddify.core.libbox.BridgeSession
+import com.hiddify.core.libbox.NeighborUpdateListener
+import com.hiddify.core.libbox.PlatformUser
+import com.hiddify.core.libbox.ShellSession
 import com.hiddify.core.libbox.LocalDNSTransport
 import java.security.KeyStore
 import kotlin.io.encoding.Base64
@@ -40,8 +47,6 @@ interface PlatformInterfaceWrapper : PlatformInterface {
     override fun openTun(options: TunOptions): Int {
         error("invalid argument")
     }
-
-    override fun useProcFS(): Boolean =  Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
 
     @RequiresApi(Build.VERSION_CODES.Q)
     override fun findConnectionOwner(
@@ -65,7 +70,7 @@ interface PlatformInterfaceWrapper : PlatformInterface {
             if (uid!=Process.INVALID_UID) {
                 val packages = Application.packageManager.getPackagesForUid(uid)
                 owner.userName = packages?.firstOrNull() ?: ""
-                owner.androidPackageName = packages?.firstOrNull() ?: ""
+                owner.setAndroidPackageNames(StringArray(packages.orEmpty().iterator()))
             }
             return owner
         } catch (e: Exception) {
@@ -175,7 +180,63 @@ interface PlatformInterfaceWrapper : PlatformInterface {
         return StringArray(certificates.iterator())
     }
 
-    // This adapter targets the released Hiddify Core 4.1.0 PlatformInterface.
+    // Neighbor monitor, platform shell, bridge and auto-redirect need root helpers
+    // (RootClient in sing-box-for-android) which Hiddify does not ship; keep them disabled.
+    override fun startNeighborMonitor(listener: NeighborUpdateListener?) {
+    }
+
+    override fun closeNeighborMonitor(listener: NeighborUpdateListener?) {
+    }
+
+    override fun registerMyInterface(name: String?) {
+    }
+
+    override fun usePlatformShell(): Boolean = false
+
+    override fun checkPlatformShell() {
+        error("platform shell not supported")
+    }
+
+    override fun openShellSession(
+        user: PlatformUser?,
+        command: String?,
+        environ: StringIterator?,
+        term: String?,
+        rows: Int,
+        cols: Int,
+    ): ShellSession {
+        error("platform shell not supported")
+    }
+
+    override fun lookupUser(username: String?): PlatformUser {
+        error("platform shell not supported")
+    }
+
+    override fun lookupSFTPServer(): String {
+        error("not supported")
+    }
+
+    override fun readSystemSSHHostKey(): String {
+        error("not supported")
+    }
+
+    override fun tailscaleHostname(): String = android.provider.Settings.Global.getString(
+        Application.application.contentResolver,
+        android.provider.Settings.Global.DEVICE_NAME,
+    )?.takeIf { it.isNotBlank() }
+        ?: "${Build.MANUFACTURER} ${Build.MODEL}"
+
+    override fun usePlatformBridge(): Boolean = false
+
+    override fun createBridge(options: BridgeOptions?): BridgeSession {
+        error("platform bridge not supported")
+    }
+
+    override fun usePlatformAutoRedirect(): Boolean = false
+
+    override fun createAutoRedirect(options: ByteArray?, handler: AutoRedirectHandler?): AutoRedirectSession {
+        error("platform auto redirect not supported")
+    }
 
     private class InterfaceArray(private val iterator: Iterator<LibboxNetworkInterface>) : NetworkInterfaceIterator {
         override fun hasNext(): Boolean = iterator.hasNext()

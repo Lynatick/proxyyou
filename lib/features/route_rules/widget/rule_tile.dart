@@ -3,7 +3,6 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/route_rules/notifier/rules_notifier.dart';
 import 'package:hiddify/features/route_rules/widget/setting_detail_chips.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
@@ -60,49 +59,84 @@ class RuleTile extends HookConsumerWidget {
     ref.listen(rulesNotifierProvider, (_, _) {
       if (scrollController.offset > 0) scrollController.jumpTo(0);
     });
+    Future<void> handleDuplicate() async {
+      final order = await ref.read(rulesNotifierProvider.notifier).duplicateRule(rule.listOrder);
+      if (context.mounted) context.goNamed('rule', pathParameters: {'orderId': order.toString()});
+    }
+
+    void showActions(Offset offset) => showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(offset.dx, offset.dy, offset.dx, offset.dy),
+      items: [
+        PopupMenuItem(
+          onTap: handleDuplicate,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.copy_rounded),
+            title: Text(t.pages.settings.routing.routeRule.duplicate),
+          ),
+        ),
+        // a built-in rule stays: it can be duplicated, not deleted
+        if (builtin == null)
+          PopupMenuItem(
+            onTap: () async => await handleDelete(context, ref),
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.delete_outline_rounded),
+              title: Text(t.pages.settings.routing.routeRule.delete),
+            ),
+          ),
+      ],
+    );
+
     return Material(
       child: InkWell(
-        // a built-in rule can only be switched and moved
-        onTap: builtin != null
-            ? null
-            : () => context.goNamed('rule', pathParameters: {'orderId': rule.listOrder.toString()}),
-        onLongPress: builtin != null ? null : () async => await handleDelete(context, ref),
-        onSecondaryTapUp: builtin == null && PlatformUtils.isDesktop
-            ? (details) {
-                final offset = details.globalPosition;
-                showMenu(
-                  context: context,
-                  position: RelativeRect.fromLTRB(offset.dx, offset.dy, offset.dx, offset.dy),
-                  items: [
-                    PopupMenuItem(
-                      child: Text(t.pages.settings.routing.routeRule.delete),
-                      onTap: () async => await handleDelete(context, ref),
-                    ),
-                  ],
-                );
-              }
-            : null,
+        // a built-in rule opens read-only: it can only be switched and moved
+        onTap: () => context.goNamed('rule', pathParameters: {'orderId': rule.listOrder.toString()}),
+        onLongPress: () {
+          final box = context.findRenderObject() as RenderBox?;
+          final origin = box?.localToGlobal(box.size.center(Offset.zero)) ?? Offset.zero;
+          showActions(origin);
+        },
+        onSecondaryTapUp: PlatformUtils.isDesktop ? (details) => showActions(details.globalPosition) : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ListTile(
-              title: Text.rich(
-                TextSpan(
-                  text: t.pages.settings.routing.routeRule.rule.outbound[rule.outbound.name] ?? rule.outbound.name,
-                  children: [
-                    if (builtin != null) ...[
-                      const TextSpan(text: ' · '),
-                      TextSpan(
-                        text: t.pages.settings.routing.builtinRules.tag,
-                        style: TextStyle(color: theme.colorScheme.primary),
-                      ),
-                    ],
-                  ],
-                ),
-                style: Theme.of(context).textTheme.labelMedium,
+              // the outbound in its own colour, so direct, proxy and block tell apart at a glance
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(_outboundIcon(rule.outbound), size: 14, color: _outboundColor(rule.outbound, theme)),
+                  const SizedBox(width: 4),
+                  Text(
+                    t.pages.settings.routing.routeRule.rule.outbound[rule.outbound.name] ?? rule.outbound.name,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: _outboundColor(rule.outbound, theme),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
-              subtitle: Text(builtin?.present(t, region) ?? rule.name, style: Theme.of(context).textTheme.bodyLarge),
-              leading: ReorderableDragStartListener(index: index, child: const PlatformIcon(Icons.drag_handle_rounded)),
+              subtitle: Text(
+                builtin?.present(t, region) ?? rule.name,
+                style: theme.textTheme.bodyLarge,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              leading: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ReorderableDragStartListener(index: index, child: const Icon(Icons.drag_handle_rounded)),
+                  // a built-in rule: switch and move it, nothing else
+                  if (builtin != null) ...[
+                    const SizedBox(width: 6),
+                    Icon(Icons.lock_outline_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                  ],
+                ],
+              ),
               trailing: Switch(
                 value: rule.enabled,
                 onChanged: (value) async =>
@@ -124,3 +158,15 @@ class RuleTile extends HookConsumerWidget {
     );
   }
 }
+
+IconData _outboundIcon(Outbound outbound) => switch (outbound) {
+  Outbound.block => Icons.block_rounded,
+  Outbound.proxy => Icons.vpn_lock_rounded,
+  _ => Icons.arrow_outward_rounded,
+};
+
+Color _outboundColor(Outbound outbound, ThemeData theme) => switch (outbound) {
+  Outbound.block => theme.colorScheme.error,
+  Outbound.proxy => theme.colorScheme.primary,
+  _ => Colors.green.shade700,
+};

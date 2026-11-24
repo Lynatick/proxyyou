@@ -9,15 +9,8 @@ abstract class LinkParser {
   static String generateSubShareLink(String url, [String? name]) {
     final uri = Uri.tryParse(url);
     if (uri == null) return '';
-    final modifiedUri = Uri(
-      scheme: uri.scheme,
-      host: uri.host,
-      path: uri.path,
-      query: uri.query,
-      fragment: name ?? uri.fragment,
-    );
-    // return 'hiddify://import/$modifiedUri';
-    return '$modifiedUri';
+    // replace keeps port and userinfo, which the Uri constructor drops
+    return uri.replace(fragment: name).toString();
   }
 
   // protocols schemas

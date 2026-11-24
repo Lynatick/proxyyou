@@ -1,41 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:hiddify/core/model/constants.dart';
 
+/// Text that changes with Material's fade through: the old text fades out first, then the new one
+/// fades in, growing slightly. Nothing slides, so a change reads calmly.
 class AnimatedText extends Text {
-  const AnimatedText(
-    super.data, {
-    super.key,
-    super.style,
-    this.duration = kAnimationDuration,
-    this.size = true,
-    this.slide = true,
-  });
+  const AnimatedText(super.data, {super.key, super.style, this.duration = const Duration(milliseconds: 600)});
 
   final Duration duration;
-  final bool size;
-  final bool slide;
 
   @override
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
       duration: duration,
-      transitionBuilder: (incomingChild, animation) {
-        Widget child = FadeTransition(opacity: animation, child: incomingChild);
-        if (size) {
-          child = SizeTransition(
-            axis: Axis.horizontal,
-            fixedCrossAxisSizeFactor: 1,
-            sizeFactor: Tween<double>(begin: 0.88, end: 1).animate(animation),
-            child: child,
-          );
-        }
-        if (slide) {
-          child = SlideTransition(
-            position: Tween<Offset>(begin: const Offset(0.0, -0.2), end: Offset.zero).animate(animation),
-            child: child,
-          );
-        }
-        return child;
+      layoutBuilder: (current, previous) => Stack(alignment: Alignment.center, children: [...previous, ?current]),
+      transitionBuilder: (child, animation) {
+        // the old text leaves in the first third, the new one comes in after it.
+        // drive(), not CurvedAnimation: the switcher calls this builder again on every rebuild
+        // (the closure is new each time), and a CurvedAnimation registers itself on the
+        // switcher's controller and is never disposed, so each rebuild leaked one for good.
+        final shown = animation.drive(
+          CurveTween(
+            curve: child.key == ValueKey<String>(data!)
+                ? const Interval(.35, 1, curve: Curves.easeOut)
+                : const Interval(.65, 1, curve: Curves.easeIn),
+          ),
+        );
+        return FadeTransition(
+          opacity: shown,
+          child: ScaleTransition(scale: shown.drive(Tween(begin: .94, end: 1.0)), child: child),
+        );
       },
       child: Text(data!, key: ValueKey<String>(data!), style: style),
     );

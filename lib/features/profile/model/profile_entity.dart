@@ -24,6 +24,7 @@ sealed class ProfileEntity with _$ProfileEntity {
     SubscriptionInfo? subInfo,
     // `profile-web-page-url` / `support-url` headers; independent of subInfo,
     // which only exists when the `subscription-userinfo` header is present.
+    // Custom IP lookup uses `ipinfo-url` in [populatedHeaders] only.
     String? webPageUrl,
     String? supportUrl,
     Map<String, dynamic>? populatedHeaders,
@@ -41,17 +42,17 @@ sealed class ProfileEntity with _$ProfileEntity {
     @Default(false) bool pinned,
   }) = LocalProfileEntity;
 
-  Map<String, dynamic> profileOverride() =>
+  String profileOverride() =>
       ProfileParser.profileOverride(populatedHeaders: populatedHeaders, userOverride: userOverride);
 }
 
 @freezed
-abstract class ProfileOptions with _$ProfileOptions {
+class ProfileOptions with _$ProfileOptions {
   const factory ProfileOptions({@Default(Duration.zero) Duration updateInterval}) = _ProfileOptions;
 }
 
 @freezed
-abstract class SubscriptionInfo with _$SubscriptionInfo {
+class SubscriptionInfo with _$SubscriptionInfo {
   const SubscriptionInfo._();
 
   const factory SubscriptionInfo({
@@ -72,7 +73,19 @@ abstract class SubscriptionInfo with _$SubscriptionInfo {
   double get remainingRatio => min(remaining.inDays, 30) / 30;
 }
 
-const int latestUserOverrideVersion = 2;
+const int latestUserOverrideVersion = 3;
+
+/// Per-profile preference for elevated admin_bgservice on Windows/Linux.
+enum UserAdminPreference {
+  /// Ask when optional admin is needed (Mode C).
+  unset,
+
+  /// Skip the dialog and use admin_bgservice.
+  preferAdmin,
+
+  /// Skip the dialog and continue without admin (strip privileged features).
+  preferNoAdmin,
+}
 
 @freezed
 abstract class UserOverride with _$UserOverride {
@@ -81,7 +94,7 @@ abstract class UserOverride with _$UserOverride {
   const factory UserOverride({
     @Default(latestUserOverrideVersion) int version,
     String? name,
-    @Default(true) bool isAutoUpdateDisable,
+    @Default(false) bool isAutoUpdateDisable,
     // hours
     int? updateInterval,
 
@@ -94,6 +107,30 @@ abstract class UserOverride with _$UserOverride {
     /// Unlike the `fragment` subscription header it carries no values, since
     /// the user's settings already hold them.
     bool? enableFragment,
+
+    /// How many of the profile's proxies run: the fastest of them by their first pings, the others
+    /// stopped; -1 runs them all. Null until the user chose, and then the subscription's `keep-top`
+    /// header decides, or the user is asked when the profile is big (see keep_top.dart).
+    int? keepTop,
+
+    /// Lets keep top pick the fastest before every proxy is tested: once the ones still to test
+    /// were slower last time, and every one not tested in the last day has been. Null is on.
+    bool? keepTopQuick,
+
+    /// The countries keep top keeps proxies of (two-letter codes); null or empty for any.
+    List<String>? keepTopCountries,
+
+    /// The tags of the profile's proxies keep top keeps loaded whatever their ping, beside the
+    /// fastest: the ones the user asked for in a proxy's details.
+    List<String>? keepTopPinned,
+
+    /// The tags of the profile's proxies the user chose to run, and only them, whatever [keepTop]
+    /// says, while any of them is still in the profile. Null until the user chose some.
+    List<String>? keepTags,
+
+    /// Windows/Linux: whether to prefer elevated admin_bgservice for privileged
+    /// proxy features. Subscription sync must not overwrite this field.
+    @Default(UserAdminPreference.unset) UserAdminPreference adminPreference,
   }) = _UserOverride;
 
   factory UserOverride.fromJson(Map<String, Object?> json) => _$UserOverrideFromJson(json);
@@ -118,6 +155,8 @@ abstract class UserOverride with _$UserOverride {
       if (json.remove('enableWarp') == true) json['extraSecurity'] = 'warp';
       if (json.remove('enablePsiphon') == true) json['extraSecurity'] = 'psiphon';
     }
+    // v2 -> v3: add adminPreference (defaults to unset).
+    json['adminPreference'] ??= 'unset';
     json['version'] = latestUserOverrideVersion;
     return json;
   }

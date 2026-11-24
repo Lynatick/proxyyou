@@ -8,10 +8,10 @@ import 'package:logging/logging.dart';
 /// loading or error case left to model.
 class LogsOverviewState {
   const LogsOverviewState({
+    required this.minLevel,
     this.logs = const [],
     this.paused = false,
     this.text = '',
-    this.minLevel = Level.WARNING,
     this.category,
   });
 
@@ -29,9 +29,6 @@ class LogsOverviewState {
   /// Not nullable: the filter is a floor, and trace is the lowest level
   /// anything is written at, so trace already means "everything". An "All"
   /// beside it would be the same option twice.
-  ///
-  /// Starts at warn: below that the page is mostly the app narrating itself,
-  /// which buries the lines somebody opened this page to find.
   final Level minLevel;
 
   /// which group of loggers to show. Null means all of them.

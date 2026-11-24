@@ -37,8 +37,7 @@ class ProfileEntity extends $pb.GeneratedMessage {
     if (lastUpdate != null) result.lastUpdate = lastUpdate;
     if (options != null) result.options = options;
     if (subInfo != null) result.subInfo = subInfo;
-    if (overrideHiddifyOptions != null)
-      result.overrideHiddifyOptions = overrideHiddifyOptions;
+    if (overrideHiddifyOptions != null) result.overrideHiddifyOptions = overrideHiddifyOptions;
     return result;
   }
 
@@ -47,32 +46,25 @@ class ProfileEntity extends $pb.GeneratedMessage {
   factory ProfileEntity.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromBuffer(data, registry);
-  factory ProfileEntity.fromJson($core.String json,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+  factory ProfileEntity.fromJson($core.String json, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ProfileEntity',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'profile'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ProfileEntity',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'profile'), createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'id')
     ..aOS(3, _omitFieldNames ? '' : 'name')
     ..aOS(4, _omitFieldNames ? '' : 'url')
     ..aInt64(5, _omitFieldNames ? '' : 'lastUpdate')
-    ..aOM<ProfileOptions>(6, _omitFieldNames ? '' : 'options',
-        subBuilder: ProfileOptions.create)
-    ..aOM<SubscriptionInfo>(7, _omitFieldNames ? '' : 'subInfo',
-        subBuilder: SubscriptionInfo.create)
-    ..aOM<$0.HiddifyOptions>(8, _omitFieldNames ? '' : 'overrideHiddifyOptions',
-        subBuilder: $0.HiddifyOptions.create)
+    ..aOM<ProfileOptions>(6, _omitFieldNames ? '' : 'options', subBuilder: ProfileOptions.create)
+    ..aOM<SubscriptionInfo>(7, _omitFieldNames ? '' : 'subInfo', subBuilder: SubscriptionInfo.create)
+    ..aOM<$0.HiddifyOptions>(8, _omitFieldNames ? '' : 'overrideHiddifyOptions', subBuilder: $0.HiddifyOptions.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ProfileEntity clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ProfileEntity copyWith(void Function(ProfileEntity) updates) =>
-      super.copyWith((message) => updates(message as ProfileEntity))
-          as ProfileEntity;
+      super.copyWith((message) => updates(message as ProfileEntity)) as ProfileEntity;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -81,11 +73,9 @@ class ProfileEntity extends $pb.GeneratedMessage {
   static ProfileEntity create() => ProfileEntity._();
   @$core.override
   ProfileEntity createEmptyInstance() => create();
-  static $pb.PbList<ProfileEntity> createRepeated() =>
-      $pb.PbList<ProfileEntity>();
+  static $pb.PbList<ProfileEntity> createRepeated() => $pb.PbList<ProfileEntity>();
   @$core.pragma('dart2js:noInline')
-  static ProfileEntity getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ProfileEntity>(create);
+  static ProfileEntity getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ProfileEntity>(create);
   static ProfileEntity? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -174,14 +164,11 @@ class ProfileOptions extends $pb.GeneratedMessage {
   factory ProfileOptions.fromBuffer($core.List<$core.int> data,
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromBuffer(data, registry);
-  factory ProfileOptions.fromJson($core.String json,
-          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+  factory ProfileOptions.fromJson($core.String json, [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'ProfileOptions',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'profile'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'ProfileOptions',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'profile'), createEmptyInstance: create)
     ..aInt64(1, _omitFieldNames ? '' : 'updateInterval')
     ..hasRequiredFields = false;
 
@@ -189,8 +176,7 @@ class ProfileOptions extends $pb.GeneratedMessage {
   ProfileOptions clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   ProfileOptions copyWith(void Function(ProfileOptions) updates) =>
-      super.copyWith((message) => updates(message as ProfileOptions))
-          as ProfileOptions;
+      super.copyWith((message) => updates(message as ProfileOptions)) as ProfileOptions;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -199,11 +185,9 @@ class ProfileOptions extends $pb.GeneratedMessage {
   static ProfileOptions create() => ProfileOptions._();
   @$core.override
   ProfileOptions createEmptyInstance() => create();
-  static $pb.PbList<ProfileOptions> createRepeated() =>
-      $pb.PbList<ProfileOptions>();
+  static $pb.PbList<ProfileOptions> createRepeated() => $pb.PbList<ProfileOptions>();
   @$core.pragma('dart2js:noInline')
-  static ProfileOptions getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<ProfileOptions>(create);
+  static ProfileOptions getDefault() => _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<ProfileOptions>(create);
   static ProfileOptions? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -245,10 +229,8 @@ class SubscriptionInfo extends $pb.GeneratedMessage {
           [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
       create()..mergeFromJson(json, registry);
 
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      _omitMessageNames ? '' : 'SubscriptionInfo',
-      package: const $pb.PackageName(_omitMessageNames ? '' : 'profile'),
-      createEmptyInstance: create)
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(_omitMessageNames ? '' : 'SubscriptionInfo',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'profile'), createEmptyInstance: create)
     ..aInt64(1, _omitFieldNames ? '' : 'upload')
     ..aInt64(2, _omitFieldNames ? '' : 'download')
     ..aInt64(3, _omitFieldNames ? '' : 'total')
@@ -261,8 +243,7 @@ class SubscriptionInfo extends $pb.GeneratedMessage {
   SubscriptionInfo clone() => deepCopy();
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
   SubscriptionInfo copyWith(void Function(SubscriptionInfo) updates) =>
-      super.copyWith((message) => updates(message as SubscriptionInfo))
-          as SubscriptionInfo;
+      super.copyWith((message) => updates(message as SubscriptionInfo)) as SubscriptionInfo;
 
   @$core.override
   $pb.BuilderInfo get info_ => _i;
@@ -271,11 +252,10 @@ class SubscriptionInfo extends $pb.GeneratedMessage {
   static SubscriptionInfo create() => SubscriptionInfo._();
   @$core.override
   SubscriptionInfo createEmptyInstance() => create();
-  static $pb.PbList<SubscriptionInfo> createRepeated() =>
-      $pb.PbList<SubscriptionInfo>();
+  static $pb.PbList<SubscriptionInfo> createRepeated() => $pb.PbList<SubscriptionInfo>();
   @$core.pragma('dart2js:noInline')
-  static SubscriptionInfo getDefault() => _defaultInstance ??=
-      $pb.GeneratedMessage.$_defaultFor<SubscriptionInfo>(create);
+  static SubscriptionInfo getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<SubscriptionInfo>(create);
   static SubscriptionInfo? _defaultInstance;
 
   @$pb.TagNumber(1)
@@ -333,7 +313,5 @@ class SubscriptionInfo extends $pb.GeneratedMessage {
   void clearSupportUrl() => $_clearField(6);
 }
 
-const $core.bool _omitFieldNames =
-    $core.bool.fromEnvironment('protobuf.omit_field_names');
-const $core.bool _omitMessageNames =
-    $core.bool.fromEnvironment('protobuf.omit_message_names');
+const $core.bool _omitFieldNames = $core.bool.fromEnvironment('protobuf.omit_field_names');
+const $core.bool _omitMessageNames = $core.bool.fromEnvironment('protobuf.omit_message_names');

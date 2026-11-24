@@ -15,30 +15,23 @@ import 'dart:core' as $core;
 import 'package:protobuf/protobuf.dart' as $pb;
 
 class ExtensionResponseType extends $pb.ProtobufEnum {
-  static const ExtensionResponseType NOTHING =
-      ExtensionResponseType._(0, _omitEnumNames ? '' : 'NOTHING');
-  static const ExtensionResponseType UPDATE_UI =
-      ExtensionResponseType._(1, _omitEnumNames ? '' : 'UPDATE_UI');
-  static const ExtensionResponseType SHOW_DIALOG =
-      ExtensionResponseType._(2, _omitEnumNames ? '' : 'SHOW_DIALOG');
-  static const ExtensionResponseType END =
-      ExtensionResponseType._(3, _omitEnumNames ? '' : 'END');
+  static const ExtensionResponseType NOTHING = ExtensionResponseType._(0, _omitEnumNames ? '' : 'NOTHING');
+  static const ExtensionResponseType UPDATE_UI = ExtensionResponseType._(1, _omitEnumNames ? '' : 'UPDATE_UI');
+  static const ExtensionResponseType SHOW_DIALOG = ExtensionResponseType._(2, _omitEnumNames ? '' : 'SHOW_DIALOG');
+  static const ExtensionResponseType END = ExtensionResponseType._(3, _omitEnumNames ? '' : 'END');
 
-  static const $core.List<ExtensionResponseType> values =
-      <ExtensionResponseType>[
+  static const $core.List<ExtensionResponseType> values = <ExtensionResponseType>[
     NOTHING,
     UPDATE_UI,
     SHOW_DIALOG,
     END,
   ];
 
-  static final $core.List<ExtensionResponseType?> _byValue =
-      $pb.ProtobufEnum.$_initByValueList(values, 3);
+  static final $core.List<ExtensionResponseType?> _byValue = $pb.ProtobufEnum.$_initByValueList(values, 3);
   static ExtensionResponseType? valueOf($core.int value) =>
       value < 0 || value >= _byValue.length ? null : _byValue[value];
 
   const ExtensionResponseType._(super.value, super.name);
 }
 
-const $core.bool _omitEnumNames =
-    $core.bool.fromEnvironment('protobuf.omit_enum_names');
+const $core.bool _omitEnumNames = $core.bool.fromEnvironment('protobuf.omit_enum_names');

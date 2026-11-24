@@ -5,7 +5,6 @@ import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 bool _testExperimentalNotice = false;
@@ -38,15 +37,15 @@ class ExperimentalFeatureNoticeDialog extends HookConsumerWidget {
               CheckboxListTile(
                 value: disableNotice,
                 title: Text(t.dialogs.experimentalNotice.disable),
-                secondary: const PlatformIcon(FluentIcons.eye_off_24_regular),
+                secondary: const Icon(FluentIcons.eye_off_24_regular),
                 onChanged: (value) async =>
                     await ref.read(disableExperimentalFeatureNoticeProvider.notifier).update(value ?? false),
                 dense: true,
               ),
               ListTile(
                 title: Text(t.pages.settings.title),
-                leading: const PlatformIcon(FluentIcons.box_edit_24_regular),
-                trailing: const PlatformIcon(FluentIcons.chevron_right_20_regular),
+                leading: const Icon(FluentIcons.box_edit_24_regular),
+                trailing: const Icon(FluentIcons.chevron_right_20_regular),
                 onTap: () {
                   context.pop(false);
                   context.goNamed('settings');

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class SettingDivider extends ConsumerWidget {
@@ -15,7 +14,7 @@ class SettingDivider extends ConsumerWidget {
     return Row(
       children: [
         const Expanded(child: Divider(indent: 16, endIndent: 8, height: 1)),
-        const PlatformIcon(size: 16, Icons.warning_rounded, color: Colors.amber),
+        const Icon(size: 16, Icons.warning_rounded, color: Colors.amber),
         const Gap(2),
         Text(title!, style: theme.textTheme.titleSmall!.copyWith(color: theme.colorScheme.onSurface)),
         const Expanded(child: Divider(indent: 8, endIndent: 16, height: 1)),

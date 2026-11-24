@@ -55,7 +55,7 @@ class AppDirectories extends _$AppDirectories with InfraLogger {
   static Future<Directory> _getAndroidWorkingDirectory() async {
     try {
       final extDir = await getExternalStorageDirectory();
-      if (extDir == null) return await getApplicationDocumentsDirectory();
+      if (extDir == null) return getApplicationDocumentsDirectory();
       if (extDir.existsSync()) return extDir;
       await extDir.create(recursive: true);
       return extDir;

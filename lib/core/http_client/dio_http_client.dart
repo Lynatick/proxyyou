@@ -19,6 +19,24 @@ class DioHttpClient with InfraLogger {
           headers: {"User-Agent": userAgent},
         ),
       );
+      // First, so the retries of a request carry it too: no request leaves with the user agent of
+      // dart:io ("Dart/3.x (dart:io)"). Servers tell a sing-box client from a browser by it and
+      // answer with what that client can parse; a Dart one gets a config meant for something else.
+      _dio[mode]!.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            final current = options.headers.entries
+                .where((header) => header.key.toLowerCase() == 'user-agent')
+                .map((header) => header.value?.toString() ?? '')
+                .firstOrNull;
+            if (current == null || current.trim().isEmpty || current.startsWith('Dart')) {
+              options.headers.removeWhere((key, _) => key.toLowerCase() == 'user-agent');
+              options.headers['User-Agent'] = userAgent;
+            }
+            handler.next(options);
+          },
+        ),
+      );
       _dio[mode]!.interceptors.add(
         RetryInterceptor(
           dio: _dio[mode]!,
@@ -31,14 +49,17 @@ class DioHttpClient with InfraLogger {
 
       _dio[mode]!.httpClientAdapter = IOHttpClientAdapter(
         createHttpClient: () {
-          final client = HttpClient();
+          // what dart:io sends when a request has no user agent of its own, a redirect for one
+          final client = HttpClient()..userAgent = userAgent;
           client.findProxy = (url) {
+            // the secret, when the local port asks for it; one that does not ignores it
+            final proxy = secret.isEmpty ? "localhost:$port" : "hiddify:$secret@localhost:$port";
             if (mode == "proxy") {
-              return "PROXY localhost:$port";
+              return "PROXY $proxy";
             } else if (mode == "direct") {
               return "DIRECT";
             } else {
-              return "PROXY localhost:$port; DIRECT";
+              return "PROXY $proxy; DIRECT";
             }
           };
           return client;
@@ -52,6 +73,9 @@ class DioHttpClient with InfraLogger {
   }
 
   int port = 0;
+
+  /// The secret of the local port, empty when it asks for none.
+  String secret = "";
 
   String userAgent;
   // bool isPortOpen(String host, int port, {Duration timeout = const Duration(milliseconds: 200)}) async{
@@ -89,10 +113,13 @@ class DioHttpClient with InfraLogger {
     String? userAgent,
     ({String username, String password})? credentials,
     bool proxyOnly = false,
+    ResponseType? responseType,
   }) async {
-    final mode = proxyOnly
+    // in VPN mode the local port is closed, and the VPN carries the request instead
+    final portOpen = await isPortOpen("127.0.0.1", port);
+    final mode = proxyOnly && portOpen
         ? "proxy"
-        : await isPortOpen("127.0.0.1", port)
+        : portOpen
         ? "both"
         : "direct";
     final dio = _dio[mode]!;
@@ -100,7 +127,7 @@ class DioHttpClient with InfraLogger {
     return dio.get<T>(
       url,
       cancelToken: cancelToken,
-      options: _options(url, userAgent: userAgent, credentials: credentials),
+      options: _options(url, userAgent: userAgent, credentials: credentials, responseType: responseType),
     );
   }
 
@@ -111,9 +138,9 @@ class DioHttpClient with InfraLogger {
     String? userAgent,
     ({String username, String password})? credentials,
     bool proxyOnly = false,
-    Map<String, String>? headers,
-    bool acceptNotModified = false,
-    int? maxBytes,
+    ProgressCallback? onReceiveProgress,
+    // false: one attempt, so a failure is reported at once
+    bool retry = true,
   }) async {
     final mode = proxyOnly
         ? "proxy"
@@ -121,23 +148,21 @@ class DioHttpClient with InfraLogger {
         ? "both"
         : "direct";
     final dio = _dio[mode]!;
-    final options = _options(url, userAgent: userAgent, credentials: credentials);
-    options.headers?.addAll(headers ?? const {});
-    if (acceptNotModified) options.validateStatus = (status) => status == 200 || status == 304;
     return dio.download(
       url,
       path,
       cancelToken: cancelToken,
-      options: options,
-      onReceiveProgress: maxBytes == null
-          ? null
-          : (received, total) {
-              if (received > maxBytes || total > maxBytes) cancelToken?.cancel('Subscription exceeds size limit');
-            },
+      onReceiveProgress: onReceiveProgress,
+      options: _options(url, userAgent: userAgent, credentials: credentials)..disableRetry = !retry,
     );
   }
 
-  Options _options(String url, {String? userAgent, ({String username, String password})? credentials}) {
+  Options _options(
+    String url, {
+    String? userAgent,
+    ({String username, String password})? credentials,
+    ResponseType? responseType,
+  }) {
     final uri = Uri.parse(url);
 
     String? userInfo;
@@ -153,8 +178,9 @@ class DioHttpClient with InfraLogger {
     }
 
     return Options(
+      responseType: responseType,
       headers: {
-        if (userAgent != null) "User-Agent": userAgent,
+        "User-Agent": userAgent ?? this.userAgent,
         if (basicAuth != null) "authorization": basicAuth,
         // "Accept": "application/json",
         // "Content-Type": "application/json",

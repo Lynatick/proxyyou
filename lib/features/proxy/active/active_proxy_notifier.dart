@@ -1,72 +1,47 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:fpdart/fpdart.dart' show unit;
 import 'package:hiddify/core/haptic/haptic_service.dart';
+import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
+import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/utils/throttler.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
+import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
-import 'package:hiddify/features/proxy/model/ip_info_entity.dart' as oldipinfo;
+import 'package:hiddify/features/proxy/data/proxy_repository.dart';
+import 'package:hiddify/features/proxy/model/connection_health.dart';
+import 'package:hiddify/features/proxy/model/ip_info_entity.dart';
+import 'package:hiddify/features/proxy/model/proxy_entity.dart';
 import 'package:hiddify/features/proxy/model/proxy_failure.dart';
-import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
+import 'package:hiddify/features/proxy/widget/upload_speed.dart';
+import 'package:hiddify/features/settings/data/config_option_repository.dart';
+import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart' hide IpInfo;
+import 'package:hiddify/hiddifycore/init_signal.dart';
+import 'package:hiddify/singbox/model/singbox_config_enum.dart';
+
 import 'package:hiddify/utils/riverpod_utils.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:meta/meta.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:rxdart/rxdart.dart';
 
 part 'active_proxy_notifier.g.dart';
 
-// The native snapshot includes the selection of every group, including groups
-// outside the active route. Follow only the main selector's selected path.
-OutboundInfo connectedOutbound(List<OutboundGroup> groups) {
-  final byTag = {for (final group in groups) group.tag: group};
-  var group = byTag['select'] ?? groups.firstOrNull;
-  final visited = <String>{};
-  while (group != null && visited.add(group.tag)) {
-    final selectedTag = group.selected;
-    final selected = selectedTag.isNotEmpty
-        ? group.items.where((item) => item.tag == selectedTag).firstOrNull
-        : group.items.where((item) => item.isSelected).firstOrNull ??
-              (group.items.length == 1 ? group.items.first : null);
-    if (selected == null) return OutboundInfo();
-    if (!selected.isGroup) return selected;
-    group = byTag[selected.tag];
-  }
-  return OutboundInfo();
+String? _ipinfoUrlFromHeaders(Map<String, dynamic>? headers) {
+  final value = headers?['ipinfo-url'];
+  if (value is! String) return null;
+  final url = value.trim();
+  return isUrl(url) ? url : null;
 }
-
-// One native stream is shared by the selected server and the routing-mode label.
-final activeProxyGroupsProvider = StreamProvider<List<OutboundGroup>>((ref) {
-  if (!ref.watch(serviceRunningProvider)) return Stream.value(const []);
-  return ref
-      .watch(proxyRepositoryProvider)
-      .watchActiveProxies()
-      .map((event) => event.getOrElse((_) => const <OutboundGroup>[]));
-});
-
-String? connectedRoutingMode(List<OutboundGroup> groups) {
-  // Read the actual main selection, never a server name containing these words.
-  final main = groups.where((group) => group.tag == 'select').firstOrNull;
-  if (main == null) return null;
-  for (final item in main.items) {
-    if (item.isGroup &&
-        (item.tag == main.selected || item.isSelected) &&
-        (item.tag == 'balance' || item.tag == 'lowest')) {
-      return item.tag;
-    }
-  }
-  return null;
-}
-
-final activeRoutingModeProvider = Provider<String?>(
-  (ref) => connectedRoutingMode(ref.watch(activeProxyGroupsProvider).value ?? const []),
-);
 
 @riverpod
 class IpInfoNotifier extends _$IpInfoNotifier with AppLogger {
   @override
-  Future<oldipinfo.IpInfo> build() async {
+  Future<IpInfo> build() async {
     ref.disposeDelay(const Duration(seconds: 20));
     final cancelToken = CancelToken();
     Timer? timer;
@@ -90,11 +65,16 @@ class IpInfoNotifier extends _$IpInfoNotifier with AppLogger {
     }
 
     _forceCheck = false;
-    final info = await ref.watch(proxyRepositoryProvider).getCurrentIpInfo(cancelToken).getOrElse((err) {
-      loggy.warning("error getting proxy ip info", err, StackTrace.current);
-      // throw err; //hiddify: remove exception to be logged
-      throw const UnknownIp();
-    }).run();
+    final customIpInfoUrl = _ipinfoUrlFromHeaders(ref.watch(activeProfileProvider).valueOrNull?.populatedHeaders);
+    final info = await ref
+        .watch(proxyRepositoryProvider)
+        .getCurrentIpInfo(cancelToken, customIpInfoUrl: customIpInfoUrl)
+        .getOrElse((err) {
+          loggy.warning("error getting proxy ip info", err, StackTrace.current);
+          // throw err; //hiddify: remove exception to be logged
+          throw const UnknownIp();
+        })
+        .run();
 
     timer = Timer(const Duration(seconds: 10), () {
       loggy.debug("entering idle mode");
@@ -118,35 +98,68 @@ class IpInfoNotifier extends _$IpInfoNotifier with AppLogger {
   }
 }
 
+/// The core's main proxy list: each group with only the item it selected, and the active chain
+/// hop. The active proxy and the home proxy card share this one stream.
 @Riverpod(keepAlive: true)
-class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
+class MainOutboundsNotifier extends _$MainOutboundsNotifier with AppLogger {
   @override
-  Stream<OutboundInfo> build() {
+  Stream<OutboundGroupList> build() {
     // ref.disposeDelay(const Duration(seconds: 20));
     final serviceRunning = ref.watch(serviceRunningProvider);
-    _wasConnectionValid = false;
-    if (!serviceRunning) {
-      return Stream.error(const ServiceNotRunning());
+    // The core is set up again when the app comes back from the background, on
+    // a new gRPC channel. The stream below lives on the old one, so it has to be
+    // opened again; serviceRunning stays true throughout and would not do it.
+    ref.watch(coreRestartSignalProvider);
+    if (serviceRunning != _lastServiceRunning) {
+      _lastServiceRunning = serviceRunning;
+      _wasConnectionValid = false;
+      _resubscribeDelay = _minResubscribeDelay;
     }
-    final controller = StreamController<OutboundInfo>();
-    ref.onDispose(controller.close);
-    ref.listen(activeProxyGroupsProvider, (_, next) {
-      next.when(
-        data: (groups) {
-          final info = connectedOutbound(groups);
-          _handleConnectionHaptic(info.urlTestDelay);
-          controller.add(info);
-        },
-        error: controller.addError,
-        loading: () {},
-      );
-    }, fireImmediately: true);
-    return controller.stream;
+    if (!serviceRunning) {
+      // Emit an empty list, so the active proxy becomes an empty outbound (delay 0) and
+      // disconnect clears the last ping. Stream.error alone kept the previous AsyncData via
+      // copyWithPrevious, so the tray/dock stayed green and the UI still showed the old ms value.
+      return Stream.value(OutboundGroupList());
+    }
+    Timer? resubscribe;
+    ref.onDispose(() => resubscribe?.cancel());
+    var received = 0;
+    return _proxyRepo
+        .watchActiveProxies()
+        // A failed stream used to become an empty outbound with no delay, which the
+        // connection button shows as a yellow "connecting" that never clears. The
+        // tunnel itself is fine, so the last known outbound stays and the stream is
+        // opened again below.
+        .where((event) => event.isRight())
+        .map((event) => event.getOrElse((l) => OutboundGroupList()))
+        .doOnData((list) {
+          // The first event is the core service's cached list, sent even when
+          // the call fails; only a later one shows the stream really works.
+          if (++received > 1) _resubscribeDelay = _minResubscribeDelay;
+          _handleConnectionHaptic(_activeOf(list, ref.read(ConfigOptions.chainStatus)).urlTestDelay);
+        })
+        .doOnDone(() {
+          // gRPC ends the stream when its connection drops, e.g. once iOS suspends
+          // the app or the Mac sleeps. Nothing else would ever open it again.
+          // While it keeps failing the wait doubles, so a core that stays
+          // unreachable is not retried, and logged as an error, every 2 seconds.
+          loggy.debug("active proxy stream ended, resubscribing in $_resubscribeDelay");
+          resubscribe = Timer(_resubscribeDelay, ref.invalidateSelf);
+          final doubled = _resubscribeDelay * 2;
+          _resubscribeDelay = doubled < _maxResubscribeDelay ? doubled : _maxResubscribeDelay;
+        });
   }
+
+  ProxyRepository get _proxyRepo => ref.read(proxyRepositoryProvider);
 
   /// Whether the tunnel currently has a valid ping. Tracked so haptics fire only
   /// on real transitions (connect / timeout / recover), not on every ping update.
   bool _wasConnectionValid = false;
+  bool? _lastServiceRunning;
+
+  static const _minResubscribeDelay = Duration(seconds: 2);
+  static const _maxResubscribeDelay = Duration(seconds: 30);
+  Duration _resubscribeDelay = _minResubscribeDelay;
 
   void _handleConnectionHaptic(int urlTestDelay) {
     final isValid = ConnectionConst.isValidDelay(urlTestDelay);
@@ -161,6 +174,23 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
       haptic.mediumImpact();
       Future.delayed(const Duration(milliseconds: 150), haptic.heavyImpact);
     }
+  }
+}
+
+/// The outbound the traffic leaves through, whose ping tells whether the whole path works: with
+/// extra security the hop (it dials through the user's pick), else the pick, the main group's only item.
+OutboundInfo _activeOf(OutboundGroupList list, ChainStatus chain) => chain.isExtraSecurity() && list.hasChainHop()
+    ? list.chainHop
+    : list.items.firstOrNull?.items.firstOrNull ?? OutboundInfo();
+
+@Riverpod(keepAlive: true)
+class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
+  // Follows the shared list state for state, loading and error alike, so readers see what
+  // they saw when this notifier owned the stream.
+  @override
+  AsyncValue<OutboundInfo> build() {
+    final chain = ref.watch(ConfigOptions.chainStatus);
+    return ref.watch(mainOutboundsNotifierProvider).whenData((list) => _activeOf(list, chain));
   }
 
   final _urlTestThrottler = Throttler(const Duration(seconds: 1));
@@ -177,4 +207,90 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
       }
     });
   }
+
+  /// Tests the upload speed of what the traffic leaves through, as its ping does.
+  Future<void> uploadTest() async {
+    final bytes = uploadTestBytes(ref);
+    await ref.read(hapticServiceProvider.notifier).lightImpact();
+    await ref.read(proxyRepositoryProvider).uploadTest("", bytes).getOrElse((err) {
+      loggy.warning("error testing upload", err);
+      final t = ref.read(translationsProvider).requireValue;
+      ref.read(inAppNotificationControllerProvider).showErrorToast(t.pages.proxies.upload.failed);
+      return unit;
+    }).run();
+  }
+
+  /// Tests the download speed of what the traffic leaves through.
+  Future<void> downloadTest() async {
+    final bytes = uploadTestBytes(ref);
+    await ref.read(hapticServiceProvider.notifier).lightImpact();
+    await ref.read(proxyRepositoryProvider).downloadTest("", bytes).getOrElse((err) {
+      loggy.warning("error testing download", err);
+      final t = ref.read(translationsProvider).requireValue;
+      ref.read(inAppNotificationControllerProvider).showErrorToast(t.pages.proxies.upload.failed);
+      return unit;
+    }).run();
+  }
+
+  /// Hands [mainGroup]'s choice to the lowest-delay group.
+  Future<void> switchToLowest(String mainGroup) async {
+    await ref.read(hapticServiceProvider.notifier).lightImpact();
+    await ref.read(proxyRepositoryProvider).selectProxy(mainGroup, lowestGroupTag).map((_) => true).getOrElse((err) {
+      loggy.warning("error switching to lowest", err);
+      final t = ref.read(translationsProvider).requireValue;
+      ref.read(inAppNotificationControllerProvider).showErrorToast(t.pages.proxies.switchFailed);
+      return false;
+    }).run();
+  }
+}
+
+/// What the home proxy card shows; null until the core has sent a message.
+@Riverpod(keepAlive: true)
+class ActiveProxyCard extends _$ActiveProxyCard {
+  /// The chain and mode whose hop is connecting, and since when.
+  ({String hop, DateTime since})? _connecting;
+
+  @visibleForTesting
+  DateTime now() => DateTime.now();
+
+  @override
+  ActiveProxyCardData? build() {
+    final list = ref.watch(mainOutboundsNotifierProvider).valueOrNull;
+    if (list == null) return null;
+    final chain = ref.watch(ConfigOptions.chainStatus);
+    final card = ActiveProxyCardData.from(
+      list,
+      chain: chain,
+      hopMode: ref.watch(chain.isUnblocker() ? ConfigOptions.unblockerMode : ConfigOptions.extraSecurityMode),
+    );
+    if (card == null || card.hopStatus != StepStatus.connecting) {
+      _connecting = null;
+      return card;
+    }
+    // Another chain or mode is another hop: its wait starts over.
+    final hop = '${chain.name}/${card.hopMode.name}';
+    if (_connecting?.hop != hop) _connecting = (hop: hop, since: now());
+    final waited = now().difference(_connecting!.since);
+    // build again when the hop turns slow, then failed
+    final next = [
+      ActiveProxyCardData.hopSlowAfter,
+      ActiveProxyCardData.hopFailAfter,
+    ].where((d) => d > waited).firstOrNull;
+    if (next != null) {
+      final timer = Timer(next - waited, ref.invalidateSelf);
+      ref.onDispose(timer.cancel);
+    }
+    return card.hopWaited(waited);
+  }
+}
+
+/// Each step of the path the traffic takes; null while the core is not running or has not sent
+/// its list yet.
+@Riverpod(keepAlive: true)
+ConnectionHealth? connectionHealth(Ref ref) {
+  final status = ref.watch(connectionNotifierProvider).valueOrNull;
+  if (status == null || !status.isRunning) return null;
+  final list = ref.watch(mainOutboundsNotifierProvider).valueOrNull;
+  if (list == null) return null;
+  return ConnectionHealth.from(status, list, ref.watch(ConfigOptions.chainStatus));
 }

@@ -1,30 +1,15 @@
 name: hiddify
 description: Cross Platform Multi Protocol Proxy Frontend.
 publish_to: "none"
-version: 4.1.35+40135
-
-# Flutter and the core must share one SQLite implementation in each process.
-# Independent copies cannot coordinate POSIX locks and WAL lifetimes.
-hooks:
-  user_defines:
-    sqlite3:
-      source:
-        android: system
-        macos: system
-        windows: system
-        default: sqlite3
-      name:
-        android: hiddify-core
-        macos: "@rpath/hiddify-core.dylib"
-        windows: hiddify-core
+version: 5.9.15+50915
 
 environment:
-  sdk: ^3.13.5
+  sdk: ^3.10.4
   # ! IMPORTANT !
   # This SDK version is strictly required and must not be removed.
   # It is parsed/grep-ed by Makefile and Dockerfile to configure the build environment.
   # Ensure this matches the target Flutter version.
-  flutter: ^3.47.7
+  flutter: ^3.38.5
   
 dependencies:
   flutter:
@@ -41,23 +26,21 @@ dependencies:
   # re_highlight: ^0.0.3
   # json_editor_flutter: ^1.4.2
 
-  slang: ^4.19.2
-  slang_flutter: ^4.19.0
+  slang: ^4.8.1
+  slang_flutter: ^4.8.0
   fpdart: ^1.1.0
-  freezed_annotation: ^3.1.0
-  json_annotation: ^4.12.0
-  hooks_riverpod: ^3.4.3
-  flutter_hooks: ^0.21.3
-  riverpod_annotation: ^4.0.7
+  freezed_annotation: ^2.4.1
+  json_annotation: ^4.9.0
+  hooks_riverpod: ^2.4.10
+  flutter_hooks: ^0.20.5
+  riverpod_annotation: ^2.3.4
   rxdart: ^0.28.0
-  drift: ^2.35.2
-  drift_flutter: ^0.3.1
-  sqlite3: ^3.7.1
+  drift: ^2.21.0
+  drift_flutter: ^0.2.1
   shared_preferences: ^2.5.2
   # shared_preferences_android: ^2.4.8
-  crypto: ^3.0.6
-  collection: ^1.19.1
   dio: ^5.4.1
+  crypto: ^3.0.6
   ffi: ^2.1.2
   path_provider: ^2.1.1
   mobile_scanner: ^7.2.0
@@ -65,7 +48,7 @@ dependencies:
   flutter_native_splash: ^2.3.10
   share_plus: ^10.1.0
   window_manager: ^0.5.0
-  tray_manager: ^0.5.0
+  tray_manager: ^0.5.3
   # get list of connected monitors (on Desktops), including their size and position
   screen_retriever: ^0.2.0
 
@@ -76,6 +59,8 @@ dependencies:
   launch_at_startup: ^0.5.1
   sentry_flutter: ^8.14.0
   sentry_dart_plugin: ^2.4.1
+  sqlite3: ^2.7.5
+  sqlite3_flutter_libs: ^0.5.28
 
   path: ^1.9.0
   logging: ^1.3.0
@@ -91,15 +76,14 @@ dependencies:
   gap: ^3.0.1
   # percent_indicator_premium: ^0.0.2
   sliver_tools: ^0.2.12
-  font_awesome_flutter: ^11.0.0
+  font_awesome_flutter: ^10.7.0
   upgrader: ^11.3.0
-  toastification: ^3.2.0
   version: ^3.0.2
   qr_flutter: ^4.1.0
-  flutter_displaymode: ^0.7.0
+  flutter_displaymode: ^0.6.0
   dio_smart_retry: ^7.0.1
   cupertino_http: ^2.0.1
-  dart_mappable: ^4.10.0
+  dart_mappable: ^4.2.1
   fluentui_system_icons: ^1.1.229
   json_path: ^0.7.1
   # permission_handler: ^11.3.0 # is not compatible with windows
@@ -107,7 +91,9 @@ dependencies:
   # flutter_easy_permission:
   #   git: https://github.com/MichaelStH/flutter_easy_permission.git
   in_app_review: ^2.0.10
-  circle_flags: ^5.0.1
+  # circle_flags: ^4.0.2
+  circle_flags:
+    git: https://github.com/hiddify-com/flutter_circle_flags.git
   fixnum: ^1.1.0
   # # for using protobuf install protoc from this link -> https://github.com/protocolbuffers/protobuf/releases
   # # then add path to "environment variable" e.g. -> C:\src\protoc-28.3-win64\bin
@@ -118,13 +104,15 @@ dependencies:
   dynamic_color: ^1.7.0
   flutter_typeahead: ^5.0.1
   # flutter_platform_widgets: ^7.0.1
-  simple_icons: ^16.23.0
+  simple_icons: ^10.1.3
   basic_utils: ^5.7.0
   text_scroll: ^0.2.0
   flutter_markdown_plus: ^1.0.6
   # platform-specific  settings
   # https://github.com/miguelpruivo/flutter_file_picker/wiki/Setup
   file_picker: ^8.1.7
+  # Used for reading the .zip files picked in the profile file import
+  archive: ^4.0.4
   installed_apps: ^2.2.1
 
   # change case of text
@@ -138,32 +126,45 @@ dependencies:
   # Used for registering custom schemes in the Windows registry
   win32: ^5.12.0
   humanizer: ^3.0.1
+  battery_plus: ^7.1.2
 
 dev_dependencies:
-  url_launcher_platform_interface: ^2.3.2
   flutter_test:
     sdk: flutter
   lint: ^2.3.0
-  build_web_compilers: ^4.8.12
-  build_runner: ^2.16.2
-  json_serializable: ^6.14.1
-  freezed: ^4.0.2
-  riverpod_generator: ^4.0.9
-  drift_dev: ^2.35.1
-  ffigen: ^23.0.0
-  flutter_gen_runner: ^5.15.0
-  dart_mappable_builder: ^4.10.0
+  build_web_compilers: ^4.0.11
+  build_runner: ^2.4.13
+  json_serializable: ^6.7.1
+  freezed: ^2.4.7
+  riverpod_generator: ^2.4.3
+  drift_dev: ^2.21.0
+  ffigen: ^19.1.0
+  slang_build_runner: ^4.4.0
+  flutter_gen_runner: ^5.4.0
+  dart_mappable_builder: ^4.2.1
   # protoc_builder: ^0.4.1
   # google_protobuf: ^3.20.1;
+  # the tests build the HTTP/2 errors grpc reports; the version is the override below
+  http2: any
+
+# grpc still allows only http2 2.x, but http2 3.1.0 fixes a cancelled call
+# taking down the whole connection (dart-lang/http#1799). Remove this once
+# grpc allows http2 3.x.
+dependency_overrides:
+  http2: ^3.1.0
+  # flutter_animate 4.5.2 builds a CurvedAnimation for every effect on every rebuild and never
+  # disposes it, so each one stays registered on the Animate controller for the widget's life
+  # (gskinner/flutter_animate#155). A proxy list re-rendering once a second grew the app by
+  # gigabytes per day. third_party/flutter_animate is 4.5.2 with the one-method fix of upstream
+  # PR #166 (drive(CurveTween)); drop the override once a release carries it.
+  flutter_animate:
+    path: third_party/flutter_animate
 
 flutter:
   uses-material-design: true
   assets:
     # - assets/core/geoip.db
     # - assets/core/geosite.db
-    - assets/playback/proof.js
-    - assets/playback/controls.js
-    - assets/images/windows/
     - assets/images/logo.svg
     - assets/images/tray_icon.ico
     - assets/images/tray_icon.png
@@ -171,6 +172,8 @@ flutter:
     - assets/images/tray_icon_dark.png
     - assets/images/tray_icon_connected.ico
     - assets/images/tray_icon_connected.png
+    - assets/images/tray_icon_connected_light.png
+    - assets/images/tray_icon_connected_dark.png
     - assets/images/tray_icon_disconnected.ico
     - assets/images/tray_icon_disconnected.png
     - assets/images/connect_norouz.PNG
@@ -194,12 +197,16 @@ flutter_gen:
   integrations:
     flutter_svg: true
 
+# Android: LaunchTheme and NormalTheme show res/drawable/splash_window.xml (the logo on
+# @color/splash_background) until Flutter's first frame; keep it there when regenerating.
 flutter_native_splash:
-  color: "#ffffff"
+  color: "#FBF8FF"
+  color_dark: "#121318"
   image: assets/images/source/ic_launcher_splash.png
   android_gravity: center
   android_12:
-    color: "#ffffff"
+    color: "#FBF8FF"
+    color_dark: "#121318"
     image: assets/images/source/ic_launcher_foreground.png
 
 ffigen:

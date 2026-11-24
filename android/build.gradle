@@ -11,31 +11,8 @@ rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
-subprojects { subproject ->
-    ['com.android.application', 'com.android.library'].each { pluginId ->
-        subproject.pluginManager.withPlugin(pluginId) {
-            subproject.extensions.getByName('androidComponents').finalizeDsl { androidDsl ->
-                // AGP 9 removed the global BuildConfig flag. Preserve its
-                // previous behavior for the app and its existing plugins.
-                androidDsl.buildFeatures.buildConfig = true
-                if ((androidDsl.compileSdk ?: 0) < 36) androidDsl.compileSdk = 36
-            }
-        }
-    }
-}
 subprojects {
     project.evaluationDependsOn(':app')
-}
-subprojects { subproject ->
-    if (subproject.name == 'sentry_flutter') {
-        subproject.afterEvaluate {
-            // The existing Sentry plugin requests Kotlin 1.6, which the
-            // compiler compatible with Gradle 9 / Java 25 no longer supports.
-            subproject.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-                compilerOptions.languageVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_0)
-            }
-        }
-    }
 }
 
 tasks.register("clean", Delete) {

@@ -7,7 +7,6 @@ import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/router/adaptive_layout/shell_route_action.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/core/router/go_router/routing_config_notifier.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/stats/widget/side_bar_stats_overview.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -115,7 +114,14 @@ class MyAdaptiveLayout extends HookConsumerWidget {
                               : null,
                         ),
                       ),
-                      Expanded(child: navigationShell),
+                      // Keeps the rail visible to screen readers (#2097).
+                      //
+                      // Every page route draws a modal barrier, and its
+                      // BlockSemantics drops all the semantics painted before
+                      // it, up to the nearest container. Without this boundary
+                      // that reached the rail, so NVDA saw no sidebar at all
+                      // (flutter/flutter#135656).
+                      Expanded(child: Semantics(container: true, child: navigationShell)),
                     ],
                   ),
             bottomNavigationBar: isMobileBreakpoint
@@ -148,7 +154,7 @@ class MyAdaptiveLayout extends HookConsumerWidget {
   ];
 
   List<NavigationDestination> _navDests(List<ShellRouteAction> actions) =>
-      actions.map((e) => NavigationDestination(icon: PlatformIcon(e.icon), label: e.title)).toList();
+      actions.map((e) => NavigationDestination(icon: Icon(e.icon), label: e.title)).toList();
   List<NavigationRailDestination> _navRailDests(List<ShellRouteAction> actions) =>
-      actions.map((e) => NavigationRailDestination(icon: PlatformIcon(e.icon), label: Text(e.title))).toList();
+      actions.map((e) => NavigationRailDestination(icon: Icon(e.icon), label: Text(e.title))).toList();
 }

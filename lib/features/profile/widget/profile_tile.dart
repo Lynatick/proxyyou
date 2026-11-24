@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
@@ -14,7 +13,6 @@ import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/core/widget/adaptive_icon.dart';
 import 'package:hiddify/core/widget/adaptive_menu.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/profile_notifier.dart';
 import 'package:hiddify/features/profile/overview/profiles_notifier.dart';
@@ -39,7 +37,7 @@ class ProfileTile extends HookConsumerWidget {
 
     final selectActiveMutation = useMutation(
       initialOnFailure: (err) {
-        CustomToast.error(t.presentShortError(err)).show(context);
+        ref.read(inAppNotificationControllerProvider).showErrorToast(t.presentShortError(err));
       },
       initialOnSuccess: () {
         if (context.mounted && context.canPop()) context.pop();
@@ -182,9 +180,9 @@ class ProfileTile extends HookConsumerWidget {
     );
 
     final Widget? trailing = isMain
-        ? const PlatformIcon(Icons.arrow_drop_down_rounded)
+        ? const Icon(Icons.arrow_drop_down_rounded)
         : profile.pinned
-        ? PlatformIcon(Icons.push_pin, size: 16, color: theme.colorScheme.onSurfaceVariant)
+        ? Icon(Icons.push_pin, size: 16, color: theme.colorScheme.onSurfaceVariant)
         : null;
 
     if (trailing == null) return nameText;
@@ -228,14 +226,13 @@ class ProfileActionButton extends HookConsumerWidget {
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
+      // drive(), not CurvedAnimation: the switcher calls this builder again on every rebuild,
+      // and a CurvedAnimation registers itself on the switcher's controller and is never
+      // disposed, so every rebuild of the tile leaked two of them for good.
       transitionBuilder: (child, animation) => FadeTransition(
-        opacity: CurvedAnimation(
-          parent: animation,
-          curve: const Interval(0, 0.6, curve: Curves.easeOut),
-          reverseCurve: Curves.easeIn,
-        ),
+        opacity: animation.drive(CurveTween(curve: const Interval(0, 0.6, curve: Curves.easeOut))),
         child: ScaleTransition(
-          scale: CurvedAnimation(parent: animation, curve: Curves.easeOutBack, reverseCurve: Curves.easeIn),
+          scale: animation.drive(CurveTween(curve: Curves.easeOutBack)),
           child: child,
         ),
       ),
@@ -269,7 +266,7 @@ class ProfileActionButton extends HookConsumerWidget {
           key: ValueKey(success),
           label: success ? t.pages.profiles.msg.update.success : t.pages.profiles.msg.update.failure,
           liveRegion: true,
-          child: PlatformIcon(
+          child: Icon(
             success ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded,
             color: success ? Colors.green : Theme.of(context).colorScheme.error,
           ),
@@ -287,7 +284,7 @@ class ProfileActionButton extends HookConsumerWidget {
               onTap: () => ref
                   .read(updateProfileNotifierProvider(profile.id).notifier)
                   .updateProfile(profile as RemoteProfileEntity),
-              child: const PlatformIcon(Icons.sync_rounded),
+              child: const Icon(Icons.sync_rounded),
             ),
           ),
         );
@@ -301,7 +298,7 @@ class ProfileActionButton extends HookConsumerWidget {
           child: InkWell(
             borderRadius: ProfileTileConst.startBorderRadius(Directionality.of(context), squareBottom: squareBottom),
             onTap: toggleVisibility,
-            child: PlatformIcon(AdaptiveIcon(context).more),
+            child: Icon(AdaptiveIcon(context).more),
           ),
         ),
       );
@@ -330,9 +327,12 @@ class _UpdatingIndicatorState extends State<_UpdatingIndicator> with SingleTicke
 
   @override
   Widget build(BuildContext context) {
-    return RotationTransition(
-      turns: ReverseAnimation(_controller),
-      child: PlatformIcon(Icons.sync_rounded, color: Theme.of(context).colorScheme.onSurface),
+    // the spin repaints the icon alone, not the tile
+    return RepaintBoundary(
+      child: RotationTransition(
+        turns: ReverseAnimation(_controller),
+        child: Icon(Icons.sync_rounded, color: Theme.of(context).colorScheme.onSurface),
+      ),
     );
   }
 }
@@ -351,13 +351,13 @@ class ProfileActionsMenu extends HookConsumerWidget {
     final menuItems = [
       AdaptiveMenuItem(
         title: profile.pinned ? t.common.unpin : t.common.pin,
-        leadingIcon: PlatformIcon(profile.pinned ? Icons.push_pin : Icons.push_pin_outlined),
+        leadingIcon: Icon(profile.pinned ? Icons.push_pin : Icons.push_pin_outlined),
         onTap: () => ref.read(profilesNotifierProvider.notifier).togglePin(profile),
       ),
       if (profile case RemoteProfileEntity())
         AdaptiveMenuItem(
           title: t.common.update,
-          leadingIcon: const PlatformIcon(Icons.sync_rounded),
+          leadingIcon: const Icon(Icons.sync_rounded),
           onTap: () {
             if (ref.read(updateProfileNotifierProvider(profile.id)).isLoading) {
               return;
@@ -367,37 +367,23 @@ class ProfileActionsMenu extends HookConsumerWidget {
         ),
       AdaptiveMenuItem(
         title: t.common.share,
-        leadingIcon: PlatformIcon(AdaptiveIcon(context).share),
-        subItems: [
-          if (profile case RemoteProfileEntity(:final url, :final name)) ...[
-            AdaptiveMenuItem(
-              title: t.pages.profiles.share.urlToClipboard,
-              onTap: () async {
-                final link = LinkParser.generateSubShareLink(url, name);
-                if (link.isNotEmpty) {
-                  await Clipboard.setData(ClipboardData(text: link));
-                  if (context.mounted) {
-                    ref
-                        .read(inAppNotificationControllerProvider)
-                        .showSuccessToast(t.common.msg.export.clipboard.success);
-                  }
-                }
-              },
-            ),
-            AdaptiveMenuItem(
-              title: t.pages.profiles.share.showUrlQr,
-              onTap: () async {
-                final link = LinkParser.generateSubShareLink(url, name);
-                if (link.isNotEmpty) {
-                  await ref.read(dialogNotifierProvider.notifier).showQrCode(link, message: name);
-                }
-              },
-            ),
-          ],
-        ],
+        leadingIcon: Icon(AdaptiveIcon(context).share),
+        onTap: () async {
+          final link = switch (profile) {
+            RemoteProfileEntity(:final url, :final name) => LinkParser.generateSubShareLink(url, name),
+            _ => '',
+          };
+          await ref
+              .read(dialogNotifierProvider.notifier)
+              .showShareProfile(
+                name: profile.name,
+                link: link.isEmpty ? null : link,
+                loadConfig: () => ref.read(profilesNotifierProvider.notifier).generateConfig(profile),
+              );
+        },
       ),
       AdaptiveMenuItem(
-        leadingIcon: const PlatformIcon(Icons.edit_rounded),
+        leadingIcon: const Icon(Icons.edit_rounded),
         title: t.common.edit,
         onTap: () {
           if (Breakpoint(context).isMobile()) context.pop();
@@ -405,7 +391,7 @@ class ProfileActionsMenu extends HookConsumerWidget {
         },
       ),
       AdaptiveMenuItem(
-        leadingIcon: const PlatformIcon(Icons.delete_outline_rounded),
+        leadingIcon: const Icon(Icons.delete_outline_rounded),
         title: t.common.delete,
         onTap: () async => await ref
             .read(dialogNotifierProvider.notifier)
@@ -506,7 +492,7 @@ class ProfileLinkButtons extends HookConsumerWidget {
           child: Row(
             children: [
               if (_leadingIcon(url) case final icon?) ...[
-                PlatformIcon(icon, size: 24, color: theme.colorScheme.onSurfaceVariant),
+                Icon(icon, size: 24, color: theme.colorScheme.onSurfaceVariant),
                 const Gap(8),
               ],
               Expanded(
@@ -531,7 +517,7 @@ class ProfileLinkButtons extends HookConsumerWidget {
                 ),
               ),
               const Gap(4),
-              PlatformIcon(Icons.open_in_new_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
+              Icon(Icons.open_in_new_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
             ],
           ),
         ),

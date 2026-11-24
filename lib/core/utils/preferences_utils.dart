@@ -1,7 +1,6 @@
 import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:hooks_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PreferencesEntry<T, P> with InfraLogger {
@@ -65,6 +64,7 @@ class PreferencesEntry<T, P> with InfraLogger {
         final int value => await preferences.setInt(key, value),
         final double value => await preferences.setDouble(key, value),
         final List<String> value => await preferences.setString(key, value.join(";")),
+        null => await preferences.remove(key), // a nullable preference cleared
         _ => throw const FormatException("Invalid Type"),
       };
     } catch (e, stackTrace) {
@@ -94,8 +94,9 @@ class PreferencesEntry<T, P> with InfraLogger {
 }
 
 class PreferencesNotifier<T, P> extends StateNotifier<T> {
-  PreferencesNotifier._({required this._ref, required this.entry, this.overrideValue, this.possibleValues})
-    : super(overrideValue ?? entry.read());
+  PreferencesNotifier._({required Ref ref, required this.entry, this.overrideValue, this.possibleValues})
+    : _ref = ref,
+      super(overrideValue ?? entry.read());
 
   final Ref _ref;
   final PreferencesEntry<T, P> entry;
@@ -127,7 +128,7 @@ class PreferencesNotifier<T, P> extends StateNotifier<T> {
     ),
   );
 
-  static StateNotifierProvider<PreferencesNotifier<T, P>, T> createAutoDispose<T, P>(
+  static AutoDisposeStateNotifierProvider<PreferencesNotifier<T, P>, T> createAutoDispose<T, P>(
     String key,
     T defaultValue, {
     T Function(P value)? mapFrom,

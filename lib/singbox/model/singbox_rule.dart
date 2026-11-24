@@ -4,7 +4,7 @@ part 'singbox_rule.freezed.dart';
 part 'singbox_rule.g.dart';
 
 @freezed
-abstract class SingboxRule with _$SingboxRule {
+class SingboxRule with _$SingboxRule {
   const SingboxRule._();
 
   @JsonSerializable(fieldRename: FieldRename.kebab)

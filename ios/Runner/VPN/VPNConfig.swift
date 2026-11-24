@@ -29,13 +29,12 @@ class VPNConfig: ObservableObject {
     @Stored(key: "VPN.baseDir")
     var baseDir: String = ""
     
-//    @Stored(key: "VPN.grpcFlutterPublicKey")
-//    var grpcFlutterPublicKey: String = ""
-    
-    
     @Stored(key: "VPN.ConfigOptions")
     var configOptions: String = ""
     
     @Stored(key: "VPN.DisableMemoryLimit")
     var disableMemoryLimit: Bool = false
+
+    @Stored(key: "VPN.AlwaysOn")
+    var alwaysOn: Bool = false
 }

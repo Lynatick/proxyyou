@@ -13,8 +13,6 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/model/region.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
-import 'package:hiddify/core/widget/windows_icon_assets.dart';
 import 'package:hiddify/features/common/general_pref_tiles.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/settings/widget/preference_tile.dart';
@@ -27,9 +25,36 @@ class IntroPage extends HookConsumerWidget with PresLogger {
 
   static bool locationInfoLoaded = false;
 
+  /// The user picked the region on this screen: neither the time zone nor the language changes it after that.
+  static bool _regionChosenByUser = false;
+
+  @visibleForTesting
+  static void resetForTest() {
+    locationInfoLoaded = false;
+    _regionChosenByUser = false;
+  }
+
+  /// The region a language points to, or null for a language spoken in no listed region.
+  /// Persian keeps Afghanistan when that is already the region.
+  static Region? regionForLocale(AppLocale locale, Region current) => switch (locale) {
+    AppLocale.fa => current == Region.af ? Region.af : Region.ir,
+    AppLocale.ps => Region.af,
+    AppLocale.zhCn => Region.cn,
+    AppLocale.ru => Region.ru,
+    AppLocale.id => Region.id,
+    AppLocale.tr => Region.tr,
+    AppLocale.ptBr => Region.br,
+    _ => null,
+  };
+
+  Future<void> _setRegion(WidgetRef ref, Region region) async {
+    await ref.read(ConfigOptions.region.notifier).update(region);
+    await ref.read(ConfigOptions.directDnsAddress.notifier).reset();
+  }
+
   // for focus management
   KeyEventResult _handleKeyEvent(KeyEvent event, String key) {
-    if (KeyboardConst.select.contains(event.logicalKey) && event is KeyUpEvent) {
+    if (KeyboardConst.activate.contains(event.logicalKey) && event is KeyDownEvent) {
       UriUtils.tryLaunch(Uri.parse(IntroConst.url[key]!));
       return KeyEventResult.handled;
     }
@@ -51,11 +76,13 @@ class IntroPage extends HookConsumerWidget with PresLogger {
     // for focus management
     final focusStates = <String, ValueNotifier<bool>>{
       IntroConst.termsAndConditionsKey: useState<bool>(false),
+      IntroConst.privacyPolicyKey: useState<bool>(false),
       IntroConst.githubKey: useState<bool>(false),
       IntroConst.licenseKey: useState<bool>(false),
     };
     final focusNodes = <String, FocusNode>{
       IntroConst.termsAndConditionsKey: useFocusNode(),
+      IntroConst.privacyPolicyKey: useFocusNode(),
       IntroConst.githubKey: useFocusNode(),
       IntroConst.licenseKey: useFocusNode(),
     };
@@ -82,23 +109,24 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                           ? IntroConst.maxwidth
                           : constraints.maxWidth;
                       final size = width * 0.4;
-                      return Theme.of(context).platform == TargetPlatform.windows
-                          ? Image.asset(WindowsIconAssets.appPng, width: size, height: size)
-                          : Assets.images.logo.svg(width: size, height: size);
+                      return Assets.images.logo.svg(width: size, height: size);
                     },
                   ),
                   const Gap(16),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      t.intro.banner,
-                      style: theme.textTheme.bodyLarge,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    // wraps: in most languages the line is longer than a phone is wide, and was cut with "…"
+                    child: Text(t.intro.banner, style: theme.textTheme.bodyLarge, textAlign: TextAlign.center),
                   ),
                   const Gap(24),
-                  const LocalePrefTile(),
+                  LocalePrefTile(
+                    // the language sets the region, even one guessed from the time zone, until the user picks one
+                    onChanged: (locale) async {
+                      if (_regionChosenByUser) return;
+                      final region = regionForLocale(locale, ref.read(ConfigOptions.region));
+                      if (region != null) await _setRegion(ref, region);
+                    },
+                  ),
                   ChoicePreferenceWidget(
                     selected: ref.watch(ConfigOptions.region),
                     preferences: ref.watch(ConfigOptions.region.notifier),
@@ -107,8 +135,11 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                     showFlag: true,
                     icon: Icons.place_rounded,
                     presentChoice: (value) => value.present(t),
-                    onChanged: (val) async {
-                      await ref.read(ConfigOptions.directDnsAddress.notifier).reset();
+                    // with autoUpdate on, onChanged was never called and the direct DNS kept the old region's
+                    autoUpdate: false,
+                    onChanged: (region) async {
+                      _regionChosenByUser = true;
+                      await _setRegion(ref, region);
                     },
                   ),
                   const EnableAnalyticsPrefTile(),
@@ -130,6 +161,18 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                         ),
                       ),
                       style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  const Gap(8),
+                  Focus(
+                    focusNode: focusNodes[IntroConst.privacyPolicyKey],
+                    onKeyEvent: (node, event) => _handleKeyEvent(event, IntroConst.privacyPolicyKey),
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        await UriUtils.tryLaunch(Uri.parse(Constants.privacyPolicyUrl));
+                      },
+                      icon: const Icon(Icons.privacy_tip_outlined),
+                      label: Text(t.pages.about.privacyPolicy),
                     ),
                   ),
                   const Gap(8),
@@ -166,7 +209,7 @@ class IntroPage extends HookConsumerWidget with PresLogger {
                   Focus(
                     focusNode: focusNodes[IntroConst.licenseKey],
                     onKeyEvent: (node, event) => _handleKeyEvent(event, IntroConst.licenseKey),
-                    child: const Gap(88),
+                    child: const Gap(16),
                   ),
                 ],
               ),
@@ -174,24 +217,36 @@ class IntroPage extends HookConsumerWidget with PresLogger {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        icon: isStarting.value
-            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator())
-            : const PlatformIcon(Icons.rocket_launch),
-        label: Text(t.common.start, style: theme.textTheme.titleMedium),
-        onPressed: () async {
-          if (isStarting.value) return;
-          isStarting.value = true;
-          if (!ref.read(analyticsControllerProvider).requireValue) {
-            loggy.info("disabling analytics per user request");
-            try {
-              await ref.read(analyticsControllerProvider.notifier).disableAnalytics();
-            } catch (error, stackTrace) {
-              loggy.error("could not disable analytics", error, stackTrace);
-            }
-          }
-          await ref.read(Preferences.introCompleted.notifier).update(true);
-        },
+      // In the bottom bar, not floating over the body: on a short screen (Android 7 at 360x640 dp) a
+      // floating button covered the footer text, which the body can only scroll clear of by hand.
+      // The body is now the space above the button.
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Align(
+            alignment: AlignmentDirectional.centerEnd,
+            heightFactor: 1,
+            child: FloatingActionButton.extended(
+              icon: isStarting.value
+                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator())
+                  : const Icon(Icons.rocket_launch),
+              label: Text(t.common.start, style: theme.textTheme.titleMedium),
+              onPressed: () async {
+                if (isStarting.value) return;
+                isStarting.value = true;
+                if (!ref.read(analyticsControllerProvider).requireValue) {
+                  loggy.info("disabling analytics per user request");
+                  try {
+                    await ref.read(analyticsControllerProvider.notifier).disableAnalytics();
+                  } catch (error, stackTrace) {
+                    loggy.error("could not disable analytics", error, stackTrace);
+                  }
+                }
+                await ref.read(Preferences.introCompleted.notifier).update(true);
+              },
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -201,8 +256,8 @@ class IntroPage extends HookConsumerWidget with PresLogger {
       final countryCode = RegionDetector.detect();
       final regionLocale = _getRegionLocale(countryCode);
       loggy.debug('Timezone Region: ${regionLocale.region} Locale: ${regionLocale.locale}');
-      await ref.read(ConfigOptions.region.notifier).update(regionLocale.region);
-      await ref.watch(ConfigOptions.directDnsAddress.notifier).reset();
+      if (_regionChosenByUser) return;
+      await _setRegion(ref, regionLocale.region);
       await ref.read(localePreferencesProvider.notifier).changeLocale(regionLocale.locale);
       return;
     } catch (e) {
@@ -222,7 +277,9 @@ class IntroPage extends HookConsumerWidget with PresLogger {
         final regionLocale = _getRegionLocale(jsonData['country_code']?.toString() ?? "");
 
         loggy.debug('Region: ${regionLocale.region} Locale: ${regionLocale.locale}');
-        await ref.read(ConfigOptions.region.notifier).update(regionLocale.region);
+        // the answer can come seconds later, after the user picked a region
+        if (_regionChosenByUser) return;
+        await _setRegion(ref, regionLocale.region);
         await ref.read(localePreferencesProvider.notifier).changeLocale(regionLocale.locale);
       } else {
         loggy.warning('Request failed with status: ${response.statusCode}');

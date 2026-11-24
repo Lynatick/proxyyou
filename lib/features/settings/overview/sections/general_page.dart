@@ -1,14 +1,17 @@
+import 'dart:io';
+
 import 'package:dartx/dartx.dart';
 import 'package:flutter/material.dart';
 import 'package:hiddify/core/haptic/haptic_service.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/features/auto_start/notifier/auto_start_notifier.dart';
 import 'package:hiddify/features/common/general_pref_tiles.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/settings/widget/preference_tile.dart';
+import 'package:hiddify/hiddifycore/core_interface/core_interface_mobile.dart';
+import 'package:hiddify/singbox/model/singbox_config_enum.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:humanizer/humanizer.dart';
@@ -23,33 +26,51 @@ class GeneralPage extends HookConsumerWidget {
       appBar: AppBar(title: Text(t.pages.settings.general.title)),
       body: ListView(
         children: [
+          const LocalePrefTile(),
           const ThemeModePrefTile(),
           const EnableAnalyticsPrefTile(),
           SwitchListTile.adaptive(
+            title: Text(t.pages.settings.general.reduceAnimations),
+            subtitle: Text(t.pages.settings.general.reduceAnimationsMsg),
+            secondary: const Icon(Icons.animation_rounded),
+            value: ref.watch(Preferences.reduceAnimations),
+            onChanged: ref.read(Preferences.reduceAnimations.notifier).update,
+          ),
+          SwitchListTile.adaptive(
             title: Text(t.pages.settings.general.autoIpCheck),
             value: ref.watch(Preferences.autoCheckIp),
-            secondary: const PlatformIcon(Icons.flag_rounded),
+            secondary: const Icon(Icons.flag_rounded),
             onChanged: ref.read(Preferences.autoCheckIp.notifier).update,
           ),
           if (PlatformUtils.isAndroid) ...[
             SwitchListTile.adaptive(
               title: Text(t.pages.settings.general.dynamicNotification),
-              secondary: const PlatformIcon(Icons.speed_rounded),
+              secondary: const Icon(Icons.speed_rounded),
               value: ref.watch(Preferences.dynamicNotification),
               onChanged: ref.read(Preferences.dynamicNotification.notifier).update,
             ),
             SwitchListTile.adaptive(
               title: Text(t.pages.settings.general.hapticFeedback),
-              secondary: const PlatformIcon(Icons.vibration_rounded),
+              secondary: const Icon(Icons.vibration_rounded),
               value: ref.watch(hapticServiceProvider),
               onChanged: ref.read(hapticServiceProvider.notifier).updatePreference,
             ),
           ],
+          if (PlatformUtils.isIOS)
+            SwitchListTile.adaptive(
+              title: Text(t.pages.settings.general.alwaysOnVpn),
+              secondary: const Icon(Icons.vpn_lock_rounded),
+              value: ref.watch(Preferences.alwaysOnVpn),
+              onChanged: (value) async {
+                await ref.read(Preferences.alwaysOnVpn.notifier).update(value);
+                await CoreInterfaceMobile.methodChannel.invokeMethod("set_always_on", value);
+              },
+            ),
           if (PlatformUtils.isDesktop) ...[
             const ClosingPrefTile(),
             SwitchListTile.adaptive(
               title: Text(t.pages.settings.general.autoStart),
-              secondary: const PlatformIcon(Icons.auto_mode_rounded),
+              secondary: const Icon(Icons.auto_mode_rounded),
               value: ref.watch(autoStartNotifierProvider).asData!.value,
               onChanged: (value) async => value
                   ? await ref.read(autoStartNotifierProvider.notifier).enable()
@@ -57,31 +78,34 @@ class GeneralPage extends HookConsumerWidget {
             ),
             SwitchListTile.adaptive(
               title: Text(t.pages.settings.general.silentStart),
-              secondary: const PlatformIcon(Icons.visibility_off_rounded),
+              secondary: const Icon(Icons.visibility_off_rounded),
               value: ref.watch(Preferences.silentStart),
               onChanged: ref.read(Preferences.silentStart.notifier).update,
             ),
           ],
           if (PlatformUtils.isAndroid) const BatteryOptimizationWidget(),
-          SwitchListTile.adaptive(
-            title: Text(t.pages.settings.general.memoryLimit),
-            subtitle: Text(t.pages.settings.general.memoryLimitMsg),
-            secondary: const PlatformIcon(Icons.memory_rounded),
-            value: !ref.watch(Preferences.disableMemoryLimit),
-            onChanged: (value) async => await ref.read(Preferences.disableMemoryLimit.notifier).update(!value),
-          ),
+          // iOS ends a VPN that outgrows its memory budget: the limit is always on there
+          if (!PlatformUtils.isIOS)
+            SwitchListTile.adaptive(
+              title: Text(t.pages.settings.general.memoryLimit),
+              subtitle: Text(t.pages.settings.general.memoryLimitMsg),
+              secondary: const Icon(Icons.memory_rounded),
+              value: !ref.watch(Preferences.disableMemoryLimit),
+              onChanged: (value) async => await ref.read(Preferences.disableMemoryLimit.notifier).update(!value),
+            ),
           // Debug mode and log level moved to the Logs page. Both decide how
           // much is recorded, which is only meaningful next to the logs
           // themselves — and next to the filters that decide what is shown.
-          const ListTile(
-            title: Text('Адрес проверки подключения'),
-            subtitle: Text('https://www.youtube.com/generate_204'),
-            leading: PlatformIcon(Icons.link_rounded),
+          ValuePreferenceWidget(
+            value: ref.watch(ConfigOptions.connectionTestUrl),
+            preferences: ref.watch(ConfigOptions.connectionTestUrl.notifier),
+            title: t.pages.settings.general.connectionTestUrl,
+            icon: Icons.link_rounded,
           ),
           ListTile(
             title: Text(t.pages.settings.general.urlTestInterval),
             subtitle: Text(ref.watch(ConfigOptions.urlTestInterval).toApproximateTime(isRelativeToNow: false)),
-            leading: const PlatformIcon(Icons.timer_rounded),
+            leading: const Icon(Icons.timer_rounded),
             onTap: () async => await ref
                 .read(dialogNotifierProvider.notifier)
                 .showSettingSlider(
@@ -98,6 +122,26 @@ class GeneralPage extends HookConsumerWidget {
                   await ref.read(ConfigOptions.urlTestInterval.notifier).update(Duration(minutes: value.toInt()));
                 }),
           ),
+          // how a speed test of the proxy list runs: download or upload, how much, how many proxies
+          ListTile(
+            title: Text(t.pages.settings.general.speedTest),
+            subtitle: Text(
+              [
+                switch (ref.watch(ConfigOptions.speedTestDirection)) {
+                  SpeedTestDirection.download => t.pages.proxies.speedTest.download,
+                  SpeedTestDirection.upload => t.pages.proxies.speedTest.upload,
+                  SpeedTestDirection.both => t.pages.proxies.speedTest.both,
+                },
+                t.pages.settings.general.megabytes(n: ref.watch(ConfigOptions.uploadTestSize)),
+                if (ref.watch(ConfigOptions.uploadTestLimit) case final limit when limit > 0)
+                  t.pages.proxies.speedTest.fastest(n: limit)
+                else
+                  t.pages.proxies.speedTest.all,
+              ].join(' · '),
+            ),
+            leading: const Icon(Icons.speed_rounded),
+            onTap: () => ref.read(dialogNotifierProvider.notifier).showSpeedTest(start: false),
+          ),
           ValuePreferenceWidget(
             value: ref.watch(ConfigOptions.clashApiPort),
             preferences: ref.watch(ConfigOptions.clashApiPort.notifier),
@@ -107,13 +151,14 @@ class GeneralPage extends HookConsumerWidget {
             digitsOnly: true,
             inputToValue: int.tryParse,
           ),
-          SwitchListTile.adaptive(
-            title: Text(t.pages.settings.general.useXrayCoreWhenPossible),
-            subtitle: Text(t.pages.settings.general.useXrayCoreWhenPossibleMsg),
-            secondary: const PlatformIcon(Icons.extension_rounded),
-            value: ref.watch(ConfigOptions.useXrayCoreWhenPossible),
-            onChanged: ref.read(ConfigOptions.useXrayCoreWhenPossible.notifier).update,
-          ),
+          if (Platform.isMacOS || Platform.isIOS || Platform.isWindows)
+            SwitchListTile.adaptive(
+              title: Text(t.pages.settings.general.useSystemTlsEngine),
+              subtitle: Text(t.pages.settings.general.useSystemTlsEngineMsg),
+              secondary: const Icon(Icons.verified_user_rounded),
+              value: ref.watch(ConfigOptions.useSystemTlsEngine),
+              onChanged: ref.read(ConfigOptions.useSystemTlsEngine.notifier).update,
+            ),
         ],
       ),
     );

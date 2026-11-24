@@ -1,13 +1,86 @@
 #include "flutter_window.h"
 
+#include <flutter/method_channel.h>
+#include <flutter/plugin_registrar_windows.h>
+#include <flutter/standard_method_codec.h>
+
+#include <cmath>
 #include <optional>
+#include <string>
+#include <shobjidl.h>
 
 #include "flutter/generated_plugin_registrant.h"
+
+namespace {
+
+// 16x16 status overlay for the Windows taskbar button (thin white ring + fill).
+HICON CreateStatusOverlayIcon(UINT32 fill_argb) {
+  const int size = 16;
+  BITMAPINFO bmi = {};
+  bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  bmi.bmiHeader.biWidth = size;
+  bmi.bmiHeader.biHeight = -size;  // top-down
+  bmi.bmiHeader.biPlanes = 1;
+  bmi.bmiHeader.biBitCount = 32;
+  bmi.bmiHeader.biCompression = BI_RGB;
+
+  void* bits = nullptr;
+  HDC screen = GetDC(nullptr);
+  HBITMAP color = CreateDIBSection(screen, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+  ReleaseDC(nullptr, screen);
+  if (!color || !bits) {
+    return nullptr;
+  }
+
+  auto* pixels = static_cast<UINT32*>(bits);
+  const float r = size * 0.28f;
+  // Pinned to the top-right corner, where Windows 11 draws the overlay, so the
+  // smaller dot stays on the icon's edge and covers less of it.
+  const float cx = size - 0.5f - r;
+  const float cy = r - 0.5f;
+  for (int y = 0; y < size; ++y) {
+    for (int x = 0; x < size; ++x) {
+      const float dx = x - cx;
+      const float dy = y - cy;
+      const float d = sqrtf(dx * dx + dy * dy);
+      UINT32 px = 0x00000000u;
+      if (d <= r) {
+        // Thin white ring keeps the dot readable on light and dark taskbars.
+        px = d >= r - 1.0f ? 0xFFFFFFFFu : fill_argb;
+      }
+      pixels[y * size + x] = px;
+    }
+  }
+
+  ICONINFO info = {};
+  info.fIcon = TRUE;
+  info.hbmColor = color;
+  info.hbmMask = CreateBitmap(size, size, 1, 1, nullptr);
+  HICON icon = CreateIconIndirect(&info);
+  DeleteObject(info.hbmMask);
+  DeleteObject(color);
+  return icon;
+}
+
+constexpr UINT_PTR kEndSessionTimer = 0x4844;  // "HD"
+// Dart's exit waits up to 2 s for the connection to stop; the core stops within a few more.
+constexpr UINT kEndSessionTimeoutMs = 5000;
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
-FlutterWindow::~FlutterWindow() {}
+FlutterWindow::~FlutterWindow() {
+  if (overlay_icon_ok_) {
+    DestroyIcon(overlay_icon_ok_);
+    overlay_icon_ok_ = nullptr;
+  }
+  if (overlay_icon_error_) {
+    DestroyIcon(overlay_icon_error_);
+    overlay_icon_error_ = nullptr;
+  }
+}
 
 bool FlutterWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {
@@ -26,6 +99,11 @@ bool FlutterWindow::OnCreate() {
   }
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
+  RegisterDesktopStatusChannel();
+  session_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "com.hiddify.app/session",
+          &flutter::StandardMethodCodec::GetInstance());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     // this->Show(); window_manager hidden at launch
@@ -40,7 +118,107 @@ bool FlutterWindow::OnCreate() {
   return true;
 }
 
+void FlutterWindow::RegisterDesktopStatusChannel() {
+  auto channel = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+      flutter_controller_->engine()->messenger(), "com.hiddify.app/desktop_status",
+      &flutter::StandardMethodCodec::GetInstance());
+
+  channel->SetMethodCallHandler(
+      [this](const flutter::MethodCall<flutter::EncodableValue>& call,
+             std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+        if (call.method_name() == "setStatus" ||
+            call.method_name() == "setConnected") {
+          std::string status = "none";
+          if (const auto* args =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            if (call.method_name() == "setStatus") {
+              auto it = args->find(flutter::EncodableValue("status"));
+              if (it != args->end()) {
+                if (const auto* s = std::get_if<std::string>(&it->second)) {
+                  status = *s;
+                }
+              }
+            } else {
+              auto it = args->find(flutter::EncodableValue("connected"));
+              if (it != args->end()) {
+                if (const auto* flag = std::get_if<bool>(&it->second)) {
+                  status = *flag ? "ok" : "none";
+                }
+              }
+            }
+          }
+          SetTaskbarStatusOverlay(status);
+          result->Success();
+          return;
+        }
+        result->NotImplemented();
+      });
+
+  // Channel keeps itself alive via the engine messenger; release local unique_ptr
+  // ownership after installing the handler by leaking intentionally into engine.
+  channel.release();
+}
+
+void FlutterWindow::SetTaskbarStatusOverlay(const std::string& status) {
+  HWND hwnd = GetHandle();
+  if (!hwnd) {
+    return;
+  }
+
+  std::string normalized = status;
+  if (normalized != "ok" && normalized != "error") {
+    normalized = "none";
+  }
+  if (normalized == overlay_status_) {
+    return;
+  }
+  overlay_status_ = normalized;
+
+  ITaskbarList3* taskbar = nullptr;
+  if (FAILED(CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER,
+                              IID_PPV_ARGS(&taskbar))) ||
+      !taskbar) {
+    return;
+  }
+  taskbar->HrInit();
+
+  if (normalized == "ok") {
+    if (!overlay_icon_ok_) {
+      overlay_icon_ok_ = CreateStatusOverlayIcon(0xFF34C759u);  // green
+    }
+    if (overlay_icon_ok_) {
+      taskbar->SetOverlayIcon(hwnd, overlay_icon_ok_, L"Connected");
+    }
+  } else if (normalized == "error") {
+    if (!overlay_icon_error_) {
+      overlay_icon_error_ = CreateStatusOverlayIcon(0xFFE53935u);  // red
+    }
+    if (overlay_icon_error_) {
+      taskbar->SetOverlayIcon(hwnd, overlay_icon_error_, L"No ping");
+    }
+  } else {
+    taskbar->SetOverlayIcon(hwnd, nullptr, L"");
+  }
+  taskbar->Release();
+}
+
+void FlutterWindow::EndSession(HWND hwnd) {
+  if (ending_session_) {
+    return;
+  }
+  ending_session_ = true;
+  // Dart stops the connection and the core and removes the tray icon, then quits. Should it not
+  // finish in time, the app quits anyway: the core then stops by itself when the app is gone,
+  // restoring the system proxy.
+  if (session_channel_) {
+    session_channel_->InvokeMethod("endSession", nullptr);
+  }
+  SetTimer(hwnd, kEndSessionTimer, kEndSessionTimeoutMs, nullptr);
+}
+
 void FlutterWindow::OnDestroy() {
+  SetTaskbarStatusOverlay("none");
+  session_channel_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -52,6 +230,26 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  switch (message) {
+    // A setup run while the app is open closes it through the Restart Manager
+    // (CloseApplications=force), which sends WM_QUERYENDSESSION and WM_ENDSESSION with
+    // ENDSESSION_CLOSEAPP, as Windows does at logoff, and then waits for the app to exit. An app
+    // that stays open, hidden in the tray, holds up the setup until the Restart Manager kills it,
+    // or makes the user close it by hand (hiddify-app#2573).
+    case WM_ENDSESSION:
+      if (wparam) {
+        EndSession(hwnd);
+      }
+      return 0;
+    case WM_TIMER:
+      if (wparam == kEndSessionTimer) {
+        KillTimer(hwnd, kEndSessionTimer);
+        PostQuitMessage(0);
+        return 0;
+      }
+      break;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

@@ -76,7 +76,7 @@ object Settings {
         set(value) = preferences.edit().putBoolean(SettingsKey.DEBUG_MODE, value).apply()
 
     var disableMemoryLimit: Boolean
-        get() = preferences.getBoolean(SettingsKey.DISABLE_MEMORY_LIMIT, false)
+        get() = preferences.getBoolean(SettingsKey.DISABLE_MEMORY_LIMIT, true)
         set(value) =
             preferences.edit().putBoolean(SettingsKey.DISABLE_MEMORY_LIMIT, value).apply()
 
@@ -145,22 +145,10 @@ object Settings {
 
 
 
-    var grpcFlutterPublicKey: ByteArray
-        get() {
-            val encoded = preferences.getString(SettingsKey.GRPC_FLUTTER_PUBLIC_KEY, null)
-            return encoded?.let { Base64.decode(it, Base64.DEFAULT) } ?: ByteArray(0)
-        }
-        set(value) {
-            val encoded = Base64.encodeToString(value, Base64.DEFAULT)
-            preferences.edit().putString(SettingsKey.GRPC_FLUTTER_PUBLIC_KEY, encoded).apply()
-        }
     var grpcServiceModePort: Int
         get() = preferences.getInt(SettingsKey.GRPC_PORT, 17078)!!
         set(value) = preferences.edit().putInt(SettingsKey.GRPC_PORT, value).apply()
 
-    var startCoreAfterStartingService: Boolean
-        get() = preferences.getBoolean(SettingsKey.START_CORE_ON_STARTING_SERVICE, false)
-        set(value) = preferences.edit().putBoolean(SettingsKey.START_CORE_ON_STARTING_SERVICE, value).apply()
 
 
 }

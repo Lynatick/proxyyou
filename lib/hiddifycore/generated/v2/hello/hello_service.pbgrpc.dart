@@ -48,16 +48,10 @@ class HelloClient extends $grpc.Client {
 
   // method descriptors
 
-  static final _$sayHello =
-      $grpc.ClientMethod<$0.HelloRequest, $0.HelloResponse>(
-          '/hello.Hello/SayHello',
-          ($0.HelloRequest value) => value.writeToBuffer(),
-          $0.HelloResponse.fromBuffer);
-  static final _$sayHelloStream =
-      $grpc.ClientMethod<$0.HelloRequest, $0.HelloResponse>(
-          '/hello.Hello/SayHelloStream',
-          ($0.HelloRequest value) => value.writeToBuffer(),
-          $0.HelloResponse.fromBuffer);
+  static final _$sayHello = $grpc.ClientMethod<$0.HelloRequest, $0.HelloResponse>(
+      '/hello.Hello/SayHello', ($0.HelloRequest value) => value.writeToBuffer(), $0.HelloResponse.fromBuffer);
+  static final _$sayHelloStream = $grpc.ClientMethod<$0.HelloRequest, $0.HelloResponse>(
+      '/hello.Hello/SayHelloStream', ($0.HelloRequest value) => value.writeToBuffer(), $0.HelloResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('hello.Hello')
@@ -81,14 +75,11 @@ abstract class HelloServiceBase extends $grpc.Service {
         ($0.HelloResponse value) => value.writeToBuffer()));
   }
 
-  $async.Future<$0.HelloResponse> sayHello_Pre(
-      $grpc.ServiceCall $call, $async.Future<$0.HelloRequest> $request) async {
+  $async.Future<$0.HelloResponse> sayHello_Pre($grpc.ServiceCall $call, $async.Future<$0.HelloRequest> $request) async {
     return sayHello($call, await $request);
   }
 
-  $async.Future<$0.HelloResponse> sayHello(
-      $grpc.ServiceCall call, $0.HelloRequest request);
+  $async.Future<$0.HelloResponse> sayHello($grpc.ServiceCall call, $0.HelloRequest request);
 
-  $async.Stream<$0.HelloResponse> sayHelloStream(
-      $grpc.ServiceCall call, $async.Stream<$0.HelloRequest> request);
+  $async.Stream<$0.HelloResponse> sayHelloStream($grpc.ServiceCall call, $async.Stream<$0.HelloRequest> request);
 }

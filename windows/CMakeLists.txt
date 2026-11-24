@@ -1,10 +1,10 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
-project(proxyyou LANGUAGES CXX)
+project(hiddify LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "ProxyYou")
+set(BINARY_NAME "Hiddify")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -75,23 +75,37 @@ set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 
+# Renamed from icudtl.dat: see the DartProject construction in runner/main.cpp.
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
-  COMPONENT Runtime)
+  RENAME "icudtl.bin" COMPONENT Runtime)
 
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
-# install(FILES "../hiddify-core/windows-x64/hiddify-core.dll" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+# install(FILES "../hiddify-core/bin/hiddify-core.dll" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
 #  COMPONENT Runtime)
 
-install(FILES "../hiddify-core/windows-x64/hiddify-core.dll" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+install(FILES "../hiddify-core/bin/hiddify-core.dll" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
 COMPONENT Runtime RENAME hiddify-core.dll)
 
-install(FILES "../hiddify-core/windows-x64/libcronet.dll" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+install(FILES "../hiddify-core/bin/libcronet.dll" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
 COMPONENT Runtime RENAME libcronet.dll)
 
-install(FILES "../hiddify-core/windows-x64/HiddifyCli.exe" DESTINATION "${CMAKE_INSTALL_PREFIX}"
-COMPONENT Runtime RENAME HiddifyCli.exe)
+# The console launcher (hiddify-core's command line): HiddifyCore.exe, HiddifyCli.exe in cores before
+# it. Each is installed under its own name, because the core's DLL looks for it by that name.
+install(FILES "../hiddify-core/bin/HiddifyCore.exe" DESTINATION "${CMAKE_INSTALL_PREFIX}"
+COMPONENT Runtime OPTIONAL)
+install(FILES "../hiddify-core/bin/HiddifyCli.exe" DESTINATION "${CMAKE_INSTALL_PREFIX}"
+COMPONENT Runtime OPTIONAL)
+
+# Elevation helper (requireAdministrator manifest) used to install the VPN service.
+install(FILES "../hiddify-core/bin/HiddifyAdmin.exe" DESTINATION "${CMAKE_INSTALL_PREFIX}"
+COMPONENT Runtime RENAME HiddifyAdmin.exe)
+
+# A proxy-mode connection runs in a process of its own: HiddifyCoreEngine.exe, shown as Hiddify Core Engine.
+# Optional: without it (a core built before it existed) the app runs it in its own process.
+install(FILES "../hiddify-core/bin/HiddifyCoreEngine.exe" DESTINATION "${CMAKE_INSTALL_PREFIX}"
+COMPONENT Runtime OPTIONAL)
 
 
 if(PLUGIN_BUNDLED_LIBRARIES)
@@ -99,14 +113,6 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endif()
-
-# SQLite is provided by hiddify-core.dll. Remove an old bundled copy on rebuild.
-install(CODE "file(REMOVE \"${INSTALL_BUNDLE_LIB_DIR}/sqlite3.dll\")" COMPONENT Runtime)
-# Other Dart packages may provide libraries as native assets.
-set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
-install(DIRECTORY "${NATIVE_ASSETS_DIR}"
-  DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
-  COMPONENT Runtime)
 
 # Fully re-copy the assets directory on each build to avoid having stale files
 # from a previous install.

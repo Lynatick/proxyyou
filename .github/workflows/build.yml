@@ -1,0 +1,289 @@
+# Tests the app, builds it for every platform and, with `upload-artifact`, publishes the builds.
+# Called by ci.yml (manual run, publishes the `draft` release) and release.yml (version tag).
+#
+#             ┌─ test ─────────────────────────┐
+#             ├─ android  (build-android.yml)  │
+#   codegen ──┼─ linux    (build-linux.yml)    ├─► release ──► draft ──► virustotal-draft
+#             ├─ windows  (build-windows.yml)  │      ├─► google-play
+#             ├─ macos    (build-macos.yml)    │      └─► virustotal-release
+#             └─ ios      (build-ios.yml) ─────┴─► testflight (testflight.yml), prune-caches
+#                 (every publishing job waits for the tests and all five builds)
+#
+# - `codegen` runs build_runner and slang once; the tests and every build take its output (the
+#   `generated-code` artifact) instead of generating the code again.
+# - The builds run next to the tests. Nothing is published before the tests and every build
+#   are done, and nothing at all unless the tests pass.
+# - `release` (version tags only) publishes the GitHub release of the tag. It needs the iOS
+#   build; a failed build of another platform is left out of the release (those jobs have
+#   `continue-on-error`).
+# - `draft` always follows: it moves the `draft` tag and release to this commit, with
+#   whatever was built.
+#
+# Shared steps are in .github/actions: setup-flutter (Flutter SDK and version, make
+# install-deps and prepare), apple-signing, publish-release, next-build-number and set-build-number.
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      upload-artifact:
+        description: Sign the builds and publish them. Off, the run only checks that every platform builds.
+        type: boolean
+        default: true
+      tag-name:
+        description: The version tag to release, or `draft` for the draft release only.
+        type: string
+        default: draft
+      channel:
+        description: dev or prod (the Makefile's CHANNEL - which core and which main file).
+        type: string
+        default: dev
+
+jobs:
+  # The generated Dart code (*.g.dart, *.freezed.dart, ..., the translations) is the same on every
+  # platform, so it is made once here. The jobs below get it through setup-flutter.
+  codegen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      build-number: ${{ steps.build-number.outputs.build }}
+    steps:
+      - uses: actions/checkout@v6
+
+      # One build number for the store builds of this run (Android, iOS, macOS), found here once
+      # so the platforms cannot disagree: one more than the highest number a store took.
+      - name: Find the next build number
+        id: build-number
+        if: inputs.upload-artifact
+        uses: ./.github/actions/next-build-number
+
+      - name: Validate the iOS release configuration
+        run: python3 .github/scripts/validate_ios_release_config.py
+
+      - uses: ./.github/actions/setup-flutter
+        with:
+          platform: common
+          install-deps: false
+
+      # Everything the generators wrote: the files under lib/ and test/ that git does not track.
+      - name: Pack the generated code
+        run: |
+          set -euo pipefail
+          git ls-files --others -- lib test > "$RUNNER_TEMP/generated-files.txt"
+          echo "$(wc -l < "$RUNNER_TEMP/generated-files.txt") generated files"
+          test -s "$RUNNER_TEMP/generated-files.txt"
+          tar -czf generated-code.tar.gz -T "$RUNNER_TEMP/generated-files.txt"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: generated-code
+          path: generated-code.tar.gz
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+
+  test:
+    needs: codegen
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      CHANNEL: ${{ inputs.channel }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-flutter
+        with:
+          platform: linux-amd64
+          install-deps: false
+          generated-code: true
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Test
+        run: flutter test
+
+  # ---- Builds ----
+
+  android:
+    needs: codegen
+    uses: ./.github/workflows/build-android.yml
+    secrets: inherit
+    permissions:
+      contents: read
+    # The same inputs for every platform (`*build-inputs` below).
+    with: &build-inputs
+      release: ${{ inputs.upload-artifact }}
+      channel: ${{ inputs.channel }}
+      # Debug symbols of the versions users get, not of drafts.
+      upload-symbols: ${{ inputs.tag-name != 'draft' }}
+      build-number: ${{ needs.codegen.outputs.build-number }}
+
+  linux:
+    needs: codegen
+    uses: ./.github/workflows/build-linux.yml
+    secrets: inherit
+    permissions:
+      contents: read
+    with: *build-inputs
+
+  windows:
+    needs: codegen
+    uses: ./.github/workflows/build-windows.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      # Azure Artifact Signing (OIDC) and the build provenance attestation
+      id-token: write
+      attestations: write
+    with: *build-inputs
+
+  macos:
+    needs: codegen
+    uses: ./.github/workflows/build-macos.yml
+    secrets: inherit
+    permissions:
+      contents: read
+    with: *build-inputs
+
+  ios:
+    needs: codegen
+    uses: ./.github/workflows/build-ios.yml
+    secrets: inherit
+    permissions:
+      contents: read
+    with: *build-inputs
+
+  # ---- Publishing ----
+
+  # The GitHub release of a version tag.
+  # No `permissions` here on purpose, so the job keeps the grant of the calling workflow: when
+  # that was narrowed to actions, contents, id-token and attestations, the create-release API
+  # answered 403 "Resource not accessible by integration" on the v5.2.0 run.
+  release:
+    if: inputs.upload-artifact && inputs.tag-name != 'draft'
+    needs: [codegen, test, android, linux, windows, macos, ios]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      # The MSIX ships CI-signed; windows-store-sync.yml replaces it with the Store-signed
+      # copy once the version uploaded in Partner Center is live.
+      - uses: ./.github/actions/publish-release
+        with:
+          tag: ${{ inputs.tag-name }}
+
+  # The moving `draft` release: this commit and its builds. It runs after `release` so that the
+  # two never create releases and upload assets with the same token at the same time. A failed
+  # platform build does not block it: the draft gets whatever the other platforms built, and
+  # with no build at all the previous draft stays.
+  draft:
+    if: >-
+      !cancelled() && inputs.upload-artifact && needs.test.result == 'success' &&
+      (needs.release.result == 'success' || needs.release.result == 'skipped')
+    needs: [test, android, linux, windows, macos, ios, release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Warn about failed builds
+        if: contains(needs.*.result, 'failure')
+        run: |
+          echo "::warning::Some platform builds failed; the draft release only has the platforms that built."
+
+      - uses: ./.github/actions/publish-release
+        with:
+          tag: draft
+          replace: true
+          attach-android-bundle: true
+
+  # The Play bundle (google-play.yml). A failed GitHub release stops it: a version reaches Play only
+  # when it was published here.
+  google-play:
+    if: >-
+      !cancelled() && inputs.upload-artifact && needs.test.result == 'success' &&
+      (needs.release.result == 'success' || needs.release.result == 'skipped')
+    needs: [test, android, release]
+    uses: ./.github/workflows/google-play.yml
+    secrets: inherit
+    permissions:
+      actions: read
+      # the android-build/<code> tags
+      contents: write
+    with:
+      tag-name: ${{ inputs.tag-name }}
+      channel: ${{ inputs.channel }}
+
+  # Like the releases, it waits for every build, also those it does not upload.
+  testflight:
+    if: inputs.upload-artifact
+    needs: [codegen, test, android, linux, windows, macos, ios]
+    uses: ./.github/workflows/testflight.yml
+    secrets: inherit
+    permissions:
+      actions: read
+      # The ios-build/<version>/<build> tags
+      contents: write
+
+  # ---- Caches ----
+
+  # The jobs above cache the Flutter SDK and the pub packages (setup-flutter). Each job has
+  # restored or saved its caches by now, so a cache that nothing touched since this run started
+  # is an older one - of an earlier Flutter version or pubspec.lock - and is removed. Not after
+  # a failed or skipped job: its caches were not touched either.
+  prune-caches:
+    needs: [codegen, test, android, linux, windows, macos, ios]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+    steps:
+      - name: Remove the caches this run did not use
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          started="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT" --jq .run_started_at)"
+          echo "Run started at $started"
+          caches="$(gh cache list --limit 1000 --json id,key,ref,lastAccessedAt,sizeInBytes)"
+          echo "Kept:"
+          jq -r --arg started "$started" '.[] | select(.lastAccessedAt[0:19] >= $started[0:19])
+            | "  \(.key) (\(.ref), \(.sizeInBytes / 1048576 | floor) MB)"' <<< "$caches"
+          echo "Removed:"
+          jq -r --arg started "$started" '.[] | select(.lastAccessedAt[0:19] < $started[0:19])
+            | [.id, .key, .ref, .lastAccessedAt] | @tsv' <<< "$caches" \
+          | while IFS=$'\t' read -r id key ref accessed; do
+              gh cache delete "$id"
+              echo "  $key ($ref, last used $accessed)"
+            done
+
+  # ---- VirusTotal badges in the release notes ----
+
+  virustotal-release:
+    needs: release
+    uses: ./.github/workflows/virustotal_scan.yml
+    secrets: inherit
+    permissions:
+      contents: write
+    with:
+      release_tag: ${{ inputs.tag-name }}
+
+  virustotal-draft:
+    # `draft` runs when `release` was skipped, which would skip this job too without a condition.
+    if: ${{ !cancelled() && needs.draft.result == 'success' }}
+    needs: draft
+    uses: ./.github/workflows/virustotal_scan.yml
+    secrets: inherit
+    permissions:
+      contents: write
+    with:
+      release_tag: draft

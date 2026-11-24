@@ -7,11 +7,26 @@ option go_package = "github.com/hiddify/hiddify-core/v2/hcore";
 option java_package = "com.hiddify.core.api.v2.hcore";
 
 
+// The lifecycle is owned by the core: STOPPED -> STARTING -> WAITING -> STARTED, and STOPPING
+// from any running state. A start is accepted only from STOPPED. While the core runs, its
+// monitoring moves it between WAITING, STARTED and NO_AVAILABLE_PROXIES.
 enum CoreStates {
   STOPPED = 0;
+  // the background core is starting up completely
   STARTING = 1;
+  // the core is up and at least one proxy has a positive ping; a lost ping moves it back to
+  // WAITING
   STARTED = 2;
+  // a stop was requested: reported at once, and every queued start is dropped
   STOPPING = 3;
+  // the running core is applying a new config (HotReload); traffic keeps flowing
+  HOT_RELOADING = 4;
+  // the core is up and no proxy has a ping yet (not tested, or the ping was lost); a positive
+  // ping moves it to STARTED
+  WAITING = 5;
+  // the core is up and every proxy was tested and timed out; not an error, a positive ping
+  // moves it to STARTED
+  NO_AVAILABLE_PROXIES = 6;
 }
 
 enum MessageType {
@@ -30,6 +45,9 @@ enum MessageType {
   ERROR_PARSING_CONFIG = 12;
   ERROR_READING_CONFIG = 13;
   ERROR_EXTENSION = 14;
+  // HotReload could not apply the config (e.g. the TUN inbound changed); the running core is
+  // unchanged, restart it to apply the config
+  HOT_RELOAD_FAILED = 15;
 }
 
 message CoreInfoResponse {
@@ -87,6 +105,16 @@ message SystemInfo {
   string current_profile = 11;
 }
 
+// Connection state of an outbound or endpoint (mirrors adapter.Status).
+enum Status {
+  READY = 0;
+  CONNECTING = 1;
+  RECONNECTING = 2;
+  SEARCHING = 3;
+  FAILED = 4;
+  REGISTERING = 5;
+}
+
 message OutboundInfo {
   string tag = 1;
   string type = 2;
@@ -105,6 +133,7 @@ message OutboundInfo {
   int64 upload = 15;
   int64 download = 16;
   string detour = 17;
+  Status status = 18; // ready / connecting / registering / … (outbound or endpoint)
 }
 
 message IpInfo {
@@ -117,6 +146,7 @@ message IpInfo {
     double latitude = 7 [json_name = "latitude"];            // The latitude (optional).
     double longitude = 8 [json_name = "longitude"];          // The longitude (optional).
     string postal_code = 9 [json_name = "postal_code"];      // The postal code (optional).
+    bool from_cache = 10 [json_name = "from_cache"];         // Of a previous run, not looked up in this one yet; it may have changed.
 }
 message OutboundGroup {
   string tag = 1;
@@ -129,6 +159,7 @@ message OutboundGroup {
 }
 message OutboundGroupList{
   repeated OutboundGroup items = 1;
+  optional OutboundInfo chain_hop = 2; // main list only: the extra security / unblocker hop the traffic goes through now
 }
 
 message WarpAccount {
@@ -232,4 +263,70 @@ message StopRequest{
 
 message LANIPResponse {
   string ip = 1;
+}
+
+message IsAdminResponse {
+  // True when the core process runs as Administrator (Windows) or root (Unix).
+  bool is_admin = 1;
+}
+
+// --- admin_bgservice (Windows/Linux elevated background core) ---
+
+enum AdminPreference {
+  ADMIN_PREFERENCE_UNSET = 0;
+  ADMIN_PREFERENCE_PREFER_ADMIN = 1;
+  ADMIN_PREFERENCE_PREFER_NO_ADMIN = 2;
+}
+
+enum AdminBgServiceDecision {
+  ADMIN_BG_SERVICE_NO = 0;
+  ADMIN_BG_SERVICE_ALREADY_CONNECTED = 1;
+  ADMIN_BG_SERVICE_NEEDS_ADMIN = 2;
+  ADMIN_BG_SERVICE_OPTIONAL_PROXY_NEED_ADMIN = 3;
+}
+
+enum EnsureAdminBgServiceProgress {
+  ENSURE_ADMIN_BG_WAITING_FOR_ELEVATION = 0;
+  ENSURE_ADMIN_BG_SERVICE_STARTING = 1;
+  ENSURE_ADMIN_BG_SERVICE_CONNECTED = 2;
+  ENSURE_ADMIN_BG_FAILED_PERMISSION_DENIED = 3;
+  ENSURE_ADMIN_BG_FAILED_OTHER = 4;
+}
+
+message AdminNeededProxy {
+  string tag = 1;
+  string summary = 2;
+  string detail = 3;
+}
+
+message NeedAdminBgServiceRequest {
+  // proxy | system-proxy | vpn
+  string service_mode = 1;
+  string hiddify_settings_json = 2;
+  AdminPreference admin_preference = 3;
+  // True after an in-process start failed with a privilege error.
+  bool privilege_error_remembered = 4;
+}
+
+message NeedAdminBgServiceResponse {
+  AdminBgServiceDecision decision = 1;
+  repeated AdminNeededProxy admin_needed_proxies = 2;
+}
+
+message EnsureAdminBgServiceRequest {
+  string config_content = 1;
+  string config_name = 2;
+  string settings_json = 3;
+  map<string, bytes> resources = 4;
+  bool disable_memory_limit = 5;
+  int32 owner_pid = 6;
+  // Absolute path to this app's HiddifyCli / HiddifyCli.exe (used for elevate install).
+  string cli_path = 7;
+  string owner_user = 8;
+}
+
+message EnsureAdminBgServiceEvent {
+  EnsureAdminBgServiceProgress progress = 1;
+  string message = 2;
+  uint32 service_port = 3;
 }

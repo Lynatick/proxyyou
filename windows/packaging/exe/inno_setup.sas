@@ -11,21 +11,51 @@ DisableProgramGroupPage=yes
 OutputDir=.
 OutputBaseFilename={{OUTPUT_BASE_FILENAME}}
 Compression=lzma
-SolidCompression=yes
+; Non-solid: slightly larger, but less "packed dropper" heuristic noise on AV/VT.
+SolidCompression=no
 SetupIconFile={{SETUP_ICON_FILE}}
 WizardStyle=modern
 PrivilegesRequired={{PRIVILEGES_REQUIRED}}
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
+; Closes locked app binaries before file replace — prefer this over taskkill.exe heuristics.
 CloseApplications=force
+; VERSIONINFO for Setup.exe and the embedded uninstaller. PE files without a
+; CompanyName/ProductName resource are an "unknown dropper" signal for AV engines.
+VersionInfoCompany={{PUBLISHER_NAME}}
+VersionInfoDescription={{DISPLAY_NAME}} Setup
+VersionInfoProductName={{DISPLAY_NAME}}
+VersionInfoTextVersion={{APP_VERSION}}
+VersionInfoCopyright=Copyright (C) {{PUBLISHER_NAME}}
+AppCopyright=Copyright (C) {{PUBLISHER_NAME}}
+; Settings > Apps / Add or Remove Programs entry: plain name + the app icon
+; (Store policy 10.2.7 rejects a blank or unrelated name or publisher).
+UninstallDisplayName={{DISPLAY_NAME}}
+UninstallDisplayIcon={app}\{{EXECUTABLE_NAME}}
+; CI (windows/scripts/configure_windows_signing.ps1) registers the "hiddifysign"
+; Sign Tool and sets HIDDIFY_INNO_SIGNTOOL, so the compiler signs Setup.exe *and*
+; unins000.exe. An unsigned uninstaller dropped into Program Files is one of the
+; VirusTotal sandbox hits ("Sysmon File Executable Creation" Sigma rule).
+#if GetEnv("HIDDIFY_INNO_SIGNTOOL") == "hiddifysign"
+SignTool=hiddifysign
+SignedUninstaller=yes
+#endif
+
+; Translations Inno Setup 6.7 ships only as "unofficial" (not in compiler:Languages) are
+; kept in windows/packaging/exe/languages. fastforge writes this script under dist\<version>\,
+; so the folder is found from SETUP_ICON_FILE, the one path it passes as absolute
+; (<repo>\windows\runner\resources\app_icon.ico).
+#define HiddifyLanguagesDir AddBackslash(ExtractFileDir("{{SETUP_ICON_FILE}}")) + "..\..\packaging\exe\languages\"
 
 [Languages]
 {% for locale in LOCALES %}
 {% if locale == 'en' %}Name: "english"; MessagesFile: "compiler:Default.isl"{% endif %}
+{% if locale == 'ar' %}Name: "arabic"; MessagesFile: "compiler:Languages\\Arabic.isl"{% endif %}
+{% if locale == 'fa' %}Name: "farsi"; MessagesFile: "{#HiddifyLanguagesDir}Farsi.isl"{% endif %}
 {% if locale == 'hy' %}Name: "armenian"; MessagesFile: "compiler:Languages\\Armenian.isl"{% endif %}
 {% if locale == 'bg' %}Name: "bulgarian"; MessagesFile: "compiler:Languages\\Bulgarian.isl"{% endif %}
 {% if locale == 'ca' %}Name: "catalan"; MessagesFile: "compiler:Languages\\Catalan.isl"{% endif %}
-{% if locale == 'zh' %}Name: "chinesesimplified"; MessagesFile: "compiler:Languages\\ChineseSimplified.isl"{% endif %}
+{% if locale == 'zh' %}Name: "chinesesimplified"; MessagesFile: "{#HiddifyLanguagesDir}ChineseSimplified.isl"{% endif %}
 {% if locale == 'co' %}Name: "corsican"; MessagesFile: "compiler:Languages\\Corsican.isl"{% endif %}
 {% if locale == 'cs' %}Name: "czech"; MessagesFile: "compiler:Languages\\Czech.isl"{% endif %}
 {% if locale == 'da' %}Name: "danish"; MessagesFile: "compiler:Languages\\Danish.isl"{% endif %}
@@ -51,27 +81,105 @@ CloseApplications=force
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: {% if CREATE_DESKTOP_ICON != true %}unchecked{% else %}checkedonce{% endif %}
 Name: "launchAtStartup"; Description: "{cm:AutoStartProgram,{{DISPLAY_NAME}}}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: {% if LAUNCH_AT_STARTUP != true %}unchecked{% else %}checkedonce{% endif %}
+[InstallDelete]
+; Before 5.9.1 the core ran from core\Hiddify.exe; it is HiddifyCoreEngine.exe beside the app now.
+Type: filesandordirs; Name: "{app}\core"
+; The console launcher was HiddifyCli.exe before HiddifyCore.exe (a core that still ships it puts it back).
+Type: files; Name: "{app}\HiddifyCli.exe"
+
 [Files]
-Source: "{{SOURCE_DIR}}\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{{SOURCE_DIR}}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]
-Name: "{autoprograms}\\{{DISPLAY_NAME}}"; Filename: "{app}\\{{EXECUTABLE_NAME}}"
-Name: "{autodesktop}\\{{DISPLAY_NAME}}"; Filename: "{app}\\{{EXECUTABLE_NAME}}"; Tasks: desktopicon
-Name: "{userstartup}\\{{DISPLAY_NAME}}"; Filename: "{app}\\{{EXECUTABLE_NAME}}"; WorkingDir: "{app}"; Tasks: launchAtStartup
+Name: "{autoprograms}\{{DISPLAY_NAME}}"; Filename: "{app}\{{EXECUTABLE_NAME}}"
+Name: "{autodesktop}\{{DISPLAY_NAME}}"; Filename: "{app}\{{EXECUTABLE_NAME}}"; Tasks: desktopicon
+; --autostart: when the app's own autostart entry launched a copy first, this one exits without
+; showing that copy's window, which would undo a silent start.
+Name: "{userstartup}\{{DISPLAY_NAME}}"; Filename: "{app}\{{EXECUTABLE_NAME}}"; Parameters: "--autostart"; WorkingDir: "{app}"; Tasks: launchAtStartup
+[Registry]
+; A "Run as administrator" compatibility layer left on the app's path by an older install (or set
+; by hand) makes CreateProcess refuse the app with error 740, so the launch at the end of Setup
+; failed with "The requested operation requires elevation". The app must not run elevated anyway:
+; it installs its service through HiddifyAdmin.exe, and an elevated app sets the system proxy and
+; the autostart for the wrong user. Drop the layer for both hives.
+Root: HKCU; Subkey: "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueName: "{app}\{{EXECUTABLE_NAME}}"; ValueType: none; Flags: deletevalue dontcreatekey noerror
+Root: HKLM; Subkey: "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueName: "{app}\{{EXECUTABLE_NAME}}"; ValueType: none; Flags: deletevalue dontcreatekey noerror
+
 [Run]
-Filename: "{app}\\{{EXECUTABLE_NAME}}"; Description: "{cm:LaunchProgram,{{DISPLAY_NAME}}}"; Flags: {% if PRIVILEGES_REQUIRED == 'admin' %}runascurrentuser{% endif %} nowait postinstall skipifsilent
+; shellexec: the app starts through ShellExecuteEx, as from Explorer. Should the app still need
+; elevation (a compatibility layer, a policy), Windows prompts for it instead of CreateProcess
+; failing with error 740.
+Filename: "{app}\{{EXECUTABLE_NAME}}"; Description: "{cm:LaunchProgram,{{DISPLAY_NAME}}}"; Flags: {% if PRIVILEGES_REQUIRED == 'admin' %}runascurrentuser{% endif %} shellexec nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{userappdata}\Hiddify"
 
 [Code]
-function InitializeSetup(): Boolean;
+// Stop/remove services via the Service Control Manager API.
+// Do not shell out to net.exe / taskkill.exe / sc.exe — those command lines match
+// common Sigma rules and drive VirusTotal sandbox false positives.
+
+type
+  TServiceStatus = record
+    dwServiceType: DWORD;
+    dwCurrentState: DWORD;
+    dwControlsAccepted: DWORD;
+    dwWin32ExitCode: DWORD;
+    dwServiceSpecificExitCode: DWORD;
+    dwCheckPoint: DWORD;
+    dwWaitHint: DWORD;
+  end;
+
+const
+  SC_MANAGER_CONNECT = $0001;
+  SERVICE_QUERY_STATUS = $0004;
+  SERVICE_STOP = $0020;
+  SERVICE_CONTROL_STOP = $0001;
+  DELETE_ACCESS = $10000;
+
+function OpenSCManager(lpMachineName, lpDatabaseName: string; dwDesiredAccess: DWORD): THandle;
+  external 'OpenSCManagerW@advapi32.dll stdcall';
+function OpenService(hSCManager: THandle; lpServiceName: string; dwDesiredAccess: DWORD): THandle;
+  external 'OpenServiceW@advapi32.dll stdcall';
+function ControlService(hService: THandle; dwControl: DWORD; var lpServiceStatus: TServiceStatus): Boolean;
+  external 'ControlService@advapi32.dll stdcall';
+function DeleteService(hService: THandle): Boolean;
+  external 'DeleteService@advapi32.dll stdcall';
+function CloseServiceHandle(hSCObject: THandle): Boolean;
+  external 'CloseServiceHandle@advapi32.dll stdcall';
+
+procedure StopServiceByName(const ServiceName: string; const Remove: Boolean);
 var
-  ResultCode: Integer;
+  hSCM, hService: THandle;
+  Access: DWORD;
+  Status: TServiceStatus;
 begin
-  Exec('taskkill', '/F /IM hiddify.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
-  Exec('net', 'stop "HiddifyTunnelService"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
-  Exec('sc.exe', 'delete "HiddifyTunnelService"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+  hSCM := OpenSCManager('', '', SC_MANAGER_CONNECT);
+  if hSCM = 0 then
+    Exit;
+
+  Access := SERVICE_STOP or SERVICE_QUERY_STATUS;
+  if Remove then
+    Access := Access or DELETE_ACCESS;
+
+  hService := OpenService(hSCM, ServiceName, Access);
+  if hService <> 0 then
+  begin
+    ControlService(hService, SERVICE_CONTROL_STOP, Status);
+    if Remove then
+      DeleteService(hService);
+    CloseServiceHandle(hService);
+  end;
+
+  CloseServiceHandle(hSCM);
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  // Current elevated core service — stop only so binaries can be replaced on upgrade.
+  StopServiceByName('HiddifyAdminBG', False);
+  // Legacy name from older builds — stop and remove if still present.
+  StopServiceByName('HiddifyTunnelService', True);
   Result := True;
 end;

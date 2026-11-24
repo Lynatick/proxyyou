@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:circle_flags/circle_flags.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -6,9 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/region.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
-import 'package:hiddify/core/widget/platform_icon.dart';
 import 'package:hiddify/core/widget/shimmer_skeleton.dart';
-import 'package:hiddify/features/app_based_routing/application_routing_page.dart';
 import 'package:hiddify/features/app_based_routing/data/auto_selection_repository.dart';
 import 'package:hiddify/features/app_based_routing/model/per_app_proxy_mode.dart';
 import 'package:hiddify/features/app_based_routing/model/pkg_flag.dart';
@@ -46,7 +46,7 @@ class RoutingOptionsPage extends HookConsumerWidget {
         actions: [
           const _RegionChip(),
           PopupMenuButton(
-            icon: const PlatformIcon(Icons.more_vert_rounded),
+            icon: const Icon(Icons.more_vert_rounded),
             itemBuilder: (_) {
               final notifier = ref.read(rulesNotifierProvider.notifier);
               final options = t.pages.settings.routing.routeRule.options;
@@ -72,25 +72,18 @@ class RoutingOptionsPage extends HookConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             // native, so it applies before every rule
-            if (PlatformUtils.isAndroid) const AppBasedRoutingSection(),
-            if (PlatformUtils.isMacOS)
-              ListTile(
-                title: const Text('Проксирование программ'),
-                leading: const PlatformIcon(Icons.apps),
-                onTap: () =>
-                    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const ApplicationRoutingPage())),
-              ),
+            if (PlatformUtils.isAndroid) const _AppBasedRoutingSection(),
             const _PinnedOptions(),
           ],
         ),
-        onReorderItem: ref.read(rulesNotifierProvider.notifier).reorder,
+        onReorder: ref.read(rulesNotifierProvider.notifier).reorder,
         itemBuilder: (context, index) => RuleTile(key: Key('$index'), index: index, rule: rules[index]),
         itemCount: rules.length,
       ),
       floatingActionButton: FloatingActionButton(
         tooltip: t.pages.settings.routing.routeRule.add,
         onPressed: () => context.goNamed('rule', pathParameters: {'orderId': 'new'}),
-        child: const PlatformIcon(Icons.add_rounded),
+        child: const Icon(Icons.add_rounded),
       ),
     );
   }
@@ -123,7 +116,7 @@ class _RegionChip extends ConsumerWidget {
                 _RegionFlag(option),
                 const Gap(12),
                 Expanded(child: Text(option.presentName(t))),
-                if (option == region) const PlatformIcon(Icons.check_rounded),
+                if (option == region) const Icon(Icons.check_rounded),
               ],
             ),
           ),
@@ -148,7 +141,7 @@ class _RegionChip extends ConsumerWidget {
               t.pages.settings.routing.region,
               style: theme.textTheme.labelLarge?.copyWith(color: colorScheme.onSurface),
             ),
-            PlatformIcon(Icons.arrow_drop_down_rounded, size: 20, color: colorScheme.onSurfaceVariant),
+            Icon(Icons.arrow_drop_down_rounded, size: 20, color: colorScheme.onSurfaceVariant),
             const Gap(4),
           ],
         ),
@@ -174,7 +167,7 @@ class _RegionFlag extends StatelessWidget {
         height: size,
         // a tint of the text color, so it shows on any background
         decoration: BoxDecoration(color: colorScheme.onSurface.withValues(alpha: 0.1), borderRadius: borderRadius),
-        child: PlatformIcon(Icons.public_rounded, size: size * 2 / 3, color: colorScheme.onSurfaceVariant),
+        child: Icon(Icons.public_rounded, size: size * 2 / 3, color: colorScheme.onSurfaceVariant),
       );
     }
     return CircleFlag(
@@ -187,10 +180,8 @@ class _RegionFlag extends StatelessWidget {
 }
 
 /// App-based routing works through the Android VPN app list, so it sits above the rules and can't be moved.
-class AppBasedRoutingSection extends ConsumerWidget {
-  const AppBasedRoutingSection({this.onChooseApps});
-
-  final VoidCallback? onChooseApps;
+class _AppBasedRoutingSection extends ConsumerWidget {
+  const _AppBasedRoutingSection();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -230,7 +221,7 @@ class AppBasedRoutingSection extends ConsumerWidget {
             trailing: Switch(value: mode != null, onChanged: service.setEnabled),
           ),
           if (mode != null) ...[
-            _AppListRow(mode: mode, onChooseApps: onChooseApps),
+            _AppListRow(mode: mode),
             if (region != Region.other) ...[
               const Divider(height: 1, indent: 16, endIndent: 16),
               _AutoSelection(region: region),
@@ -275,10 +266,9 @@ class _ModeOption extends StatelessWidget {
 }
 
 class _AppListRow extends ConsumerWidget {
-  const _AppListRow({required this.mode, this.onChooseApps});
+  const _AppListRow({required this.mode});
 
   final AppProxyMode mode;
-  final VoidCallback? onChooseApps;
 
   static const _maxLogos = 10;
   static const _loadingLogo = ClipOval(child: ShimmerSkeleton(width: 24, height: 24));
@@ -288,7 +278,7 @@ class _AppListRow extends ConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
     final theme = Theme.of(context);
     final appBasedRouting = t.pages.settings.routing.appBasedRouting;
-    final flags = ref.watch(appListProvider(mode)).value;
+    final flags = ref.watch(AppListProvider(mode)).valueOrNull;
     // the text sits close to the logos and is smaller than a list title; the row is 48 dp, like auto selection
     ListTile row({required Widget leading, required Widget title}) => ListTile(
       minTileHeight: 48,
@@ -296,8 +286,8 @@ class _AppListRow extends ConsumerWidget {
       titleTextStyle: theme.textTheme.bodyMedium,
       leading: leading,
       title: title,
-      trailing: const PlatformIcon(Icons.chevron_right_rounded),
-      onTap: onChooseApps ?? () => context.goNamed('appList'),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: () => context.goNamed('appList'),
     );
 
     // placeholders until the list loads, at the loaded row's height, so nothing jumps
@@ -328,7 +318,7 @@ class _AppListRow extends ConsumerWidget {
                 shape: BoxShape.circle,
                 border: Border.all(color: color, width: 1.5),
               ),
-              child: PlatformIcon(Icons.add_rounded, size: 16, color: color),
+              child: Icon(Icons.add_rounded, size: 16, color: color),
             ),
           ],
         ),
@@ -348,7 +338,7 @@ class _AppListRow extends ConsumerWidget {
                 child: Image.memory(icon, width: 24, height: 24, cacheWidth: logoPx, cacheHeight: logoPx),
               ),
               AsyncLoading() => _loadingLogo,
-              _ => const PlatformIcon(Icons.android_rounded),
+              _ => const Icon(Icons.android_rounded),
             },
         ],
       ),
@@ -449,7 +439,7 @@ class _AutoSelection extends ConsumerWidget {
             IconButton(
               tooltip: autoSelection.performNow,
               onPressed: loading ? null : service.updateAutoSelection,
-              icon: const PlatformIcon(Icons.sync_rounded),
+              icon: const Icon(Icons.sync_rounded),
             ),
           // the bar takes the switch's place and keeps its space, so nothing moves
           Stack(
@@ -486,7 +476,7 @@ class _AutoSelectionIssue extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        PlatformIcon(icon, size: 14, color: color),
+        Icon(icon, size: 14, color: color),
         const Gap(4),
         Flexible(
           child: Text(text, style: TextStyle(color: color)),
@@ -514,6 +504,16 @@ class _PinnedOptions extends ConsumerWidget {
           choices: BalancerStrategy.values,
           present: (value) => value.present(t),
           onSelected: ref.read(ConfigOptions.balancerStrategy.notifier).update,
+          describe: (value) => value.describe(t),
+        ),
+        divider,
+        _MenuOption(
+          title: routing.defaultProxy.title,
+          selected: ref.watch(ConfigOptions.defaultProxy),
+          choices: DefaultProxy.values,
+          present: (value) => value.present(t),
+          onSelected: ref.read(ConfigOptions.defaultProxy.notifier).update,
+          describe: (value) => value.describe(t),
         ),
         divider,
         SwitchListTile.adaptive(
@@ -524,10 +524,32 @@ class _PinnedOptions extends ConsumerWidget {
         divider,
         _MenuOption(
           title: routing.ipv6Route,
+          helpTitle: routing.ipv6RouteHelpTitle,
+          help: routing.ipv6RouteHelp,
           selected: ref.watch(ConfigOptions.ipv6Mode),
           choices: IPv6Mode.values,
           present: (value) => value.present(t),
           onSelected: ref.read(ConfigOptions.ipv6Mode.notifier).update,
+          describe: (value) => value.describe(t),
+          // turning IPv6 on is the one choice that can break sites: say why first
+          confirm: (context, value) async {
+            if (value == IPv6Mode.ipv4Only || ref.read(ConfigOptions.ipv6Mode) != IPv6Mode.ipv4Only) return true;
+            final turnOn = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: Text(routing.ipv6RouteTurnOnTitle),
+                content: SingleChildScrollView(child: Text(routing.ipv6RouteHelp)),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: Text(MaterialLocalizations.of(context).cancelButtonLabel),
+                  ),
+                  FilledButton(onPressed: () => Navigator.of(context).pop(true), child: Text(routing.ipv6RouteTurnOn)),
+                ],
+              ),
+            );
+            return turnOn ?? false;
+          },
         ),
         const Divider(height: 3, thickness: 3),
       ],
@@ -543,21 +565,76 @@ class _MenuOption<T> extends HookWidget {
     required this.choices,
     required this.present,
     required this.onSelected,
+    this.describe,
+    this.subtitle,
+    this.helpTitle,
+    this.help,
+    this.confirm,
   });
 
   final String title;
+
+  /// One short line under the title, shown whenever the picked choice's description is not.
+  final String? subtitle;
+
+  /// The longer story, behind a small info button next to the title.
+  final String? helpTitle;
+  final String? help;
+
+  /// Asked before a pick is applied; false leaves the setting as it was.
+  final Future<bool> Function(BuildContext context, T value)? confirm;
   final T selected;
   final List<T> choices;
   final String Function(T value) present;
   final ValueChanged<T> onSelected;
+  final String Function(T value)? describe;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = theme.colorScheme.onSurfaceVariant;
     final menu = useMemoized(GlobalKey<PopupMenuButtonState<T>>.new);
+    // the description shows for a few seconds after a pick; a new pick restarts the count
+    final picked = useState(false);
+    useEffect(() {
+      if (!picked.value) return null;
+      final hide = Timer(const Duration(seconds: 8), () => picked.value = false);
+      return hide.cancel;
+    }, [picked.value, selected]);
     return ListTile(
-      title: Text(title),
+      title: help == null
+          ? Text(title)
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title),
+                IconButton(
+                  icon: Icon(Icons.info_outline_rounded, size: 18, color: color),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  tooltip: helpTitle,
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: helpTitle != null ? Text(helpTitle!) : null,
+                      content: SingleChildScrollView(child: Text(help!)),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: Text(MaterialLocalizations.of(context).okButtonLabel),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+      subtitle: describe != null && picked.value
+          ? Text(describe!(selected))
+          : subtitle != null
+          ? Text(subtitle!, style: theme.textTheme.bodySmall?.copyWith(color: color))
+          : null,
       // the row takes the tap, so all of it ripples
       onTap: () => menu.currentState?.showButtonMenu(),
       trailing: IgnorePointer(
@@ -565,7 +642,12 @@ class _MenuOption<T> extends HookWidget {
         child: PopupMenuButton<T>(
           key: menu,
           position: PopupMenuPosition.under,
-          onSelected: onSelected,
+          onSelected: (value) async {
+            if (confirm != null && !await confirm!(context, value)) return;
+            if (!context.mounted) return;
+            picked.value = true;
+            onSelected(value);
+          },
           itemBuilder: (_) => [
             for (final choice in choices)
               PopupMenuItem(
@@ -573,7 +655,7 @@ class _MenuOption<T> extends HookWidget {
                 child: Row(
                   children: [
                     Expanded(child: Text(present(choice))),
-                    if (choice == selected) const PlatformIcon(Icons.check_rounded),
+                    if (choice == selected) const Icon(Icons.check_rounded),
                   ],
                 ),
               ),
@@ -582,7 +664,7 @@ class _MenuOption<T> extends HookWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(present(selected), style: theme.textTheme.bodyMedium?.copyWith(color: color)),
-              PlatformIcon(Icons.arrow_drop_down_rounded, color: color),
+              Icon(Icons.arrow_drop_down_rounded, color: color),
             ],
           ),
         ),
